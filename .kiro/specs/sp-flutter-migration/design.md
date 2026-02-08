@@ -36,7 +36,7 @@ This document details the technical design for rebuilding Super Productivity as 
 │          ▼                   ▼                   ▼              │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐        │
 │  │   Storage    │   │  Sync Layer  │   │   Crypto     │        │
-│  │   (Isar)     │   │   (P2P)      │   │   (E2E)      │        │
+│  │   (Drift)    │   │   (P2P)      │   │   (E2E)      │        │
 │  └──────────────┘   └──────────────┘   └──────────────┘        │
 │                              │                                   │
 └──────────────────────────────┼───────────────────────────────────┘
@@ -61,7 +61,7 @@ This document details the technical design for rebuilding Super Productivity as 
 
 **Data Layer**
 
-- **Isar**: High-performance local database for Flutter
+- **Drift**: SQLite-based reactive database for Flutter
 - **CRDT Package**: `crdt` (Dart native) or `yrs` (Yjs Rust bindings via FFI)
 - **freezed**: Immutable data classes with code generation
 
@@ -100,6 +100,10 @@ class TaskDocument {
   final LWWRegister<DateTime> updatedAt;
   final GCounter completedCount; // for recurring tasks
 
+  // External issue tracking links
+  final LWWRegister<String?> jiraIssueKey;      // e.g., "PROJ-123"
+  final LWWRegister<String?> githubIssueNumber; // e.g., "owner/repo#42"
+
   // Merge with another document (from sync)
   TaskDocument merge(TaskDocument other);
 
@@ -109,7 +113,71 @@ class TaskDocument {
 }
 ```
 
-#### 2. Sync Service
+#### 2. Jira Integration Document (CRDT)
+
+```dart
+/// CRDT-backed Jira integration configuration
+class JiraIntegrationDocument {
+  final String id;
+  final LWWRegister<String> siteUrl;
+  final LWWRegister<String?> cloudId;
+  final LWWRegister<String?> defaultProjectKey;
+  final LWWRegister<String?> userEmail;
+  final LWWRegister<bool> isEnabled;
+  final LWWRegister<Map<String, String>> statusMapping; // TaskStatus -> Jira transition
+  final LWWRegister<DateTime> createdAt;
+  final LWWRegister<DateTime> updatedAt;
+
+  JiraIntegrationDocument merge(JiraIntegrationDocument other);
+  Map<String, dynamic> toJson();
+  factory JiraIntegrationDocument.fromJson(Map<String, dynamic> json);
+}
+```
+
+#### 3. GitHub Integration Document (CRDT)
+
+```dart
+/// CRDT-backed GitHub integration configuration
+class GitHubIntegrationDocument {
+  final String id;
+  final LWWRegister<String> owner;
+  final LWWRegister<String> repo;
+  final LWWRegister<String?> defaultLabels;
+  final LWWRegister<bool> isEnabled;
+  final LWWRegister<bool> syncWorklogs;
+  final LWWRegister<DateTime> createdAt;
+  final LWWRegister<DateTime> updatedAt;
+
+  GitHubIntegrationDocument merge(GitHubIntegrationDocument other);
+  Map<String, dynamic> toJson();
+  factory GitHubIntegrationDocument.fromJson(Map<String, dynamic> json);
+}
+```
+
+#### 4. Issue Link Document (CRDT)
+
+```dart
+/// CRDT-backed link between local task and external issue
+class IssueLinkDocument {
+  final String id;
+  final LWWRegister<String> taskId;
+  final LWWRegister<IssueLinkType> type;
+  final LWWRegister<String> externalId;        // Jira key or GitHub issue#
+  final LWWRegister<String> externalUrl;
+  final LWWRegister<String?> externalTitle;    // Cached from external
+  final LWWRegister<String?> externalStatus;   // Cached from external
+  final LWWRegister<DateTime> linkedAt;
+  final LWWRegister<DateTime?> lastSyncedAt;
+
+  IssueLinkDocument merge(IssueLinkDocument other);
+  Map<String, dynamic> toJson();
+  factory IssueLinkDocument.fromJson(Map<String, dynamic> json);
+}
+
+enum IssueLinkType { jira, github }
+```
+
+#### 5. Sync Service
 
 ```dart
 abstract class SyncService {
@@ -186,69 +254,117 @@ abstract class StorageRepository<T> {
 
 ### Data Models
 
-#### Database Schema (Isar)
+#### Database Schema (Drift)
 
 ```dart
-@collection
-class TaskEntity {
-  Id isarId = Isar.autoIncrement;
+/// Tasks table
+class Tasks extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get projectId => text().nullable()();
+  TextColumn get tagIds => text()(); // JSON array
+  TextColumn get status => text()(); // TaskStatus enum as string
+  IntColumn get timeEstimate => integer().withDefault(const Constant(0))();
+  IntColumn get timeSpent => integer().withDefault(const Constant(0))();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
 
-  @Index(unique: true)
-  late String id;
-
-  late String title;
-  String? description;
-  String? projectId;
-  late List<String> tagIds;
-
-  @Enumerated(EnumType.name)
-  late TaskStatus status;
-
-  late int timeEstimate;
-  late int timeSpent;
-  DateTime? dueDate;
-
-  late DateTime createdAt;
-  late DateTime updatedAt;
+  // External issue links
+  TextColumn get jiraIssueKey => text().nullable()();
+  TextColumn get githubIssueNumber => text().nullable()();
 
   // CRDT metadata
-  late String crdtClock; // Vector clock or HLC
-  late String crdtState; // Serialized CRDT state
+  TextColumn get crdtClock => text()(); // Vector clock or HLC
+  TextColumn get crdtState => text()(); // Serialized CRDT state
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
-@collection
-class ProjectEntity {
-  Id isarId = Isar.autoIncrement;
+/// Projects table
+class Projects extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get color => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get crdtClock => text()();
+  TextColumn get crdtState => text()();
 
-  @Index(unique: true)
-  late String id;
-
-  late String title;
-  String? description;
-  String? color;
-
-  late DateTime createdAt;
-  late DateTime updatedAt;
-  late String crdtClock;
-  late String crdtState;
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
-@collection
-class WorklogEntity {
-  Id isarId = Isar.autoIncrement;
+/// Worklogs table
+class Worklogs extends Table {
+  TextColumn get id => text()();
+  TextColumn get taskId => text().references(Tasks, #id)();
+  DateTimeColumn get startTime => dateTime()();
+  DateTimeColumn get endTime => dateTime()();
+  IntColumn get duration => integer()(); // in seconds
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  TextColumn get crdtClock => text()();
+  TextColumn get crdtState => text()();
 
-  @Index(unique: true)
-  late String id;
+  @override
+  Set<Column> get primaryKey => {id};
+}
 
-  late String taskId;
-  late DateTime startTime;
-  late DateTime endTime;
-  late int duration; // in seconds
-  String? note;
+/// Jira integration configuration
+class JiraIntegrations extends Table {
+  TextColumn get id => text()();
+  TextColumn get siteUrl => text()();           // e.g., "https://company.atlassian.net"
+  TextColumn get cloudId => text().nullable()();
+  TextColumn get defaultProjectKey => text().nullable()();
+  TextColumn get userEmail => text().nullable()();
+  BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
+  TextColumn get statusMappingJson => text()(); // JSON serialized Map<String, String>
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get crdtClock => text()();
+  TextColumn get crdtState => text()();
 
-  late DateTime createdAt;
-  late String crdtClock;
-  late String crdtState;
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// GitHub integration configuration
+class GitHubIntegrations extends Table {
+  TextColumn get id => text()();
+  TextColumn get owner => text()();             // Repository owner/org
+  TextColumn get repo => text()();              // Repository name
+  TextColumn get defaultLabels => text().nullable()();
+  BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get syncWorklogs => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get crdtClock => text()();
+  TextColumn get crdtState => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Links a local task to an external issue (Jira or GitHub)
+class IssueLinks extends Table {
+  TextColumn get id => text()();
+  TextColumn get taskId => text().references(Tasks, #id)();
+  TextColumn get type => text()();              // 'jira' or 'github'
+  TextColumn get externalId => text()();        // Jira issue key or GitHub issue#
+  TextColumn get externalUrl => text()();
+  TextColumn get externalTitle => text().nullable()();
+  TextColumn get externalStatus => text().nullable()();
+  DateTimeColumn get linkedAt => dateTime()();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+  TextColumn get crdtClock => text()();
+  TextColumn get crdtState => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 ```
 
@@ -712,7 +828,7 @@ lib/
 │   │   ├── sync_protocol.dart
 │   │   └── encryption.dart
 │   ├── storage/
-│   │   ├── isar_database.dart
+│   │   ├── database.dart
 │   │   └── repositories/
 │   └── platform/
 │       ├── platform_service.dart
@@ -730,6 +846,16 @@ lib/
 │   ├── timer/
 │   ├── worklog/
 │   ├── sync/
+│   ├── integrations/
+│   │   ├── models/
+│   │   │   ├── jira_integration_document.dart
+│   │   │   ├── github_integration_document.dart
+│   │   │   └── issue_link_document.dart
+│   │   ├── data/
+│   │   │   ├── jira_repository.dart
+│   │   │   ├── github_repository.dart
+│   │   │   └── issue_link_repository.dart
+│   │   └── providers/
 │   └── settings/
 │
 ├── shared/
@@ -738,7 +864,7 @@ lib/
 │   └── utils/
 │
 └── generated/
-    └── ... (freezed, isar, etc.)
+    └── ... (freezed, drift, etc.)
 ```
 
 ---

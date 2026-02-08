@@ -87,7 +87,7 @@ This document specifies the requirements for migrating Super Productivity from a
 
 ### Data Layer Architecture
 
-- **Local Storage**: Isar or Hive for persistent storage
+- **Local Storage**: Drift (SQLite) for persistent storage
 - **CRDT Library**: Dart-native CRDT implementation or Yjs/Automerge via FFI
 - **Data Models**: Dart classes with CRDT document wrappers
 
@@ -101,7 +101,7 @@ This document specifies the requirements for migrating Super Productivity from a
 ### Key Libraries & Dependencies
 
 - **State**: `riverpod` or `flutter_bloc` for state management
-- **Storage**: `isar` or `hive` for local database
+- **Storage**: `drift` for local database (SQLite)
 - **Networking**: `web_socket_channel`, `nsd` for discovery
 - **Crypto**: `cryptography` or `sodium_libs` for encryption
 
@@ -113,12 +113,17 @@ This document specifies the requirements for migrating Super Productivity from a
 2. **Time Tracking**: Start/stop timer, manual time entries, worklog history
 3. **Projects**: Group tasks by project, project-level settings
 4. **Tags**: Flexible tagging system, tag-based views
+5. **Integration Data Models**: CRDT-backed data models for Jira and GitHub integration
+   - Jira integration configuration (site URL, project mapping, status transitions)
+   - GitHub integration configuration (owner/repo, labels, worklog sync settings)
+   - Issue links (bidirectional mapping between local tasks and external issues)
 
 ### Advanced Features
 
 1. **CRDT Sync**: Automatic conflict-free synchronization
 2. **P2P Discovery**: Local network device discovery
 3. **Data Migration**: Import data from existing Super Productivity installation
+4. **Jira/GitHub API Sync**: Live synchronization with external issue trackers (Phase 2)
 
 ### Platform-Specific Features
 
@@ -177,7 +182,8 @@ This document specifies the requirements for migrating Super Productivity from a
 ### Scope Constraints
 
 - Initial version focuses on core task/time features
-- Advanced features (Jira sync, Pomodoro, etc.) are Phase 2+
+- **Phase 1 includes Jira/GitHub data models** (foundation for integration, no API sync yet)
+- Advanced features (Jira/GitHub API sync, Pomodoro, etc.) are Phase 2+
 - iOS/Windows/macOS are future considerations, not initial scope
 
 ### Platform Constraints
@@ -243,7 +249,7 @@ This document specifies the requirements for migrating Super Productivity from a
 
 - Pomodoro timer integration
 - Recurring tasks
-- Jira/GitHub integration
+- **Jira/GitHub API sync** (data models in Phase 1, API integration in Phase 2)
 - Calendar integration
 
 ### Platform Expansion
