@@ -1,0 +1,58 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+*.iml
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+*.code-workspace
+
+# macOS
+.DS_Store
+
+# Android
+/android/app/debug/
+/android/app/release/
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+.gradle/
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/**/gradle-wrapper.jar
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/engine/
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/ephemeral/
+/ios/Pods/
+/ios/.symlinks/
+ios/Runner.xcworkspace/
+
+# Linux
+/linux/flutter/ephemeral
+
+# Coverage
+coverage/
+
+# Nix
+result
+result-*
+
+# Direnv
+.direnv/
