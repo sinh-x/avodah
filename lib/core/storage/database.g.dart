@@ -6421,6 +6421,3406 @@ class TaskRepeatCfgsCompanion extends UpdateCompanion<TaskRepeatCfg> {
   }
 }
 
+class $JiraIntegrationsTable extends JiraIntegrations
+    with TableInfo<$JiraIntegrationsTable, JiraIntegration> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JiraIntegrationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _baseUrlMeta = const VerificationMeta(
+    'baseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
+    'base_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _apiTokenMeta = const VerificationMeta(
+    'apiToken',
+  );
+  @override
+  late final GeneratedColumn<String> apiToken = GeneratedColumn<String>(
+    'api_token',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _jiraProjectKeyMeta = const VerificationMeta(
+    'jiraProjectKey',
+  );
+  @override
+  late final GeneratedColumn<String> jiraProjectKey = GeneratedColumn<String>(
+    'jira_project_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _boardIdMeta = const VerificationMeta(
+    'boardId',
+  );
+  @override
+  late final GeneratedColumn<String> boardId = GeneratedColumn<String>(
+    'board_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _jqlFilterMeta = const VerificationMeta(
+    'jqlFilter',
+  );
+  @override
+  late final GeneratedColumn<String> jqlFilter = GeneratedColumn<String>(
+    'jql_filter',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncEnabledMeta = const VerificationMeta(
+    'syncEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> syncEnabled = GeneratedColumn<bool>(
+    'sync_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sync_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _syncSubtasksMeta = const VerificationMeta(
+    'syncSubtasks',
+  );
+  @override
+  late final GeneratedColumn<bool> syncSubtasks = GeneratedColumn<bool>(
+    'sync_subtasks',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sync_subtasks" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _syncWorklogsMeta = const VerificationMeta(
+    'syncWorklogs',
+  );
+  @override
+  late final GeneratedColumn<bool> syncWorklogs = GeneratedColumn<bool>(
+    'sync_worklogs',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sync_worklogs" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _syncIntervalMinutesMeta =
+      const VerificationMeta('syncIntervalMinutes');
+  @override
+  late final GeneratedColumn<int> syncIntervalMinutes = GeneratedColumn<int>(
+    'sync_interval_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
+  static const VerificationMeta _fieldMappingsMeta = const VerificationMeta(
+    'fieldMappings',
+  );
+  @override
+  late final GeneratedColumn<String> fieldMappings = GeneratedColumn<String>(
+    'field_mappings',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _statusMappingsMeta = const VerificationMeta(
+    'statusMappings',
+  );
+  @override
+  late final GeneratedColumn<String> statusMappings = GeneratedColumn<String>(
+    'status_mappings',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
+    'lastSyncAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastSyncAt = GeneratedColumn<int>(
+    'last_sync_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncErrorMeta = const VerificationMeta(
+    'lastSyncError',
+  );
+  @override
+  late final GeneratedColumn<String> lastSyncError = GeneratedColumn<String>(
+    'last_sync_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modifiedMeta = const VerificationMeta(
+    'modified',
+  );
+  @override
+  late final GeneratedColumn<int> modified = GeneratedColumn<int>(
+    'modified',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    baseUrl,
+    email,
+    apiToken,
+    jiraProjectKey,
+    boardId,
+    jqlFilter,
+    syncEnabled,
+    syncSubtasks,
+    syncWorklogs,
+    syncIntervalMinutes,
+    fieldMappings,
+    statusMappings,
+    lastSyncAt,
+    lastSyncError,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'jira_integrations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JiraIntegration> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
+    if (data.containsKey('base_url')) {
+      context.handle(
+        _baseUrlMeta,
+        baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_baseUrlMeta);
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('api_token')) {
+      context.handle(
+        _apiTokenMeta,
+        apiToken.isAcceptableOrUnknown(data['api_token']!, _apiTokenMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_apiTokenMeta);
+    }
+    if (data.containsKey('jira_project_key')) {
+      context.handle(
+        _jiraProjectKeyMeta,
+        jiraProjectKey.isAcceptableOrUnknown(
+          data['jira_project_key']!,
+          _jiraProjectKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_jiraProjectKeyMeta);
+    }
+    if (data.containsKey('board_id')) {
+      context.handle(
+        _boardIdMeta,
+        boardId.isAcceptableOrUnknown(data['board_id']!, _boardIdMeta),
+      );
+    }
+    if (data.containsKey('jql_filter')) {
+      context.handle(
+        _jqlFilterMeta,
+        jqlFilter.isAcceptableOrUnknown(data['jql_filter']!, _jqlFilterMeta),
+      );
+    }
+    if (data.containsKey('sync_enabled')) {
+      context.handle(
+        _syncEnabledMeta,
+        syncEnabled.isAcceptableOrUnknown(
+          data['sync_enabled']!,
+          _syncEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_subtasks')) {
+      context.handle(
+        _syncSubtasksMeta,
+        syncSubtasks.isAcceptableOrUnknown(
+          data['sync_subtasks']!,
+          _syncSubtasksMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_worklogs')) {
+      context.handle(
+        _syncWorklogsMeta,
+        syncWorklogs.isAcceptableOrUnknown(
+          data['sync_worklogs']!,
+          _syncWorklogsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_interval_minutes')) {
+      context.handle(
+        _syncIntervalMinutesMeta,
+        syncIntervalMinutes.isAcceptableOrUnknown(
+          data['sync_interval_minutes']!,
+          _syncIntervalMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('field_mappings')) {
+      context.handle(
+        _fieldMappingsMeta,
+        fieldMappings.isAcceptableOrUnknown(
+          data['field_mappings']!,
+          _fieldMappingsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status_mappings')) {
+      context.handle(
+        _statusMappingsMeta,
+        statusMappings.isAcceptableOrUnknown(
+          data['status_mappings']!,
+          _statusMappingsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+        _lastSyncAtMeta,
+        lastSyncAt.isAcceptableOrUnknown(
+          data['last_sync_at']!,
+          _lastSyncAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_error')) {
+      context.handle(
+        _lastSyncErrorMeta,
+        lastSyncError.isAcceptableOrUnknown(
+          data['last_sync_error']!,
+          _lastSyncErrorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('modified')) {
+      context.handle(
+        _modifiedMeta,
+        modified.isAcceptableOrUnknown(data['modified']!, _modifiedMeta),
+      );
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JiraIntegration map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JiraIntegration(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
+      baseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}base_url'],
+      )!,
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      )!,
+      apiToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}api_token'],
+      )!,
+      jiraProjectKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}jira_project_key'],
+      )!,
+      boardId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}board_id'],
+      ),
+      jqlFilter: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}jql_filter'],
+      ),
+      syncEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sync_enabled'],
+      )!,
+      syncSubtasks: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sync_subtasks'],
+      )!,
+      syncWorklogs: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sync_worklogs'],
+      )!,
+      syncIntervalMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sync_interval_minutes'],
+      )!,
+      fieldMappings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_mappings'],
+      )!,
+      statusMappings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status_mappings'],
+      )!,
+      lastSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_sync_at'],
+      ),
+      lastSyncError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_sync_error'],
+      ),
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      modified: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}modified'],
+      ),
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $JiraIntegrationsTable createAlias(String alias) {
+    return $JiraIntegrationsTable(attachedDatabase, alias);
+  }
+}
+
+class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
+  final String id;
+  final String? projectId;
+  final String baseUrl;
+  final String email;
+  final String apiToken;
+  final String jiraProjectKey;
+  final String? boardId;
+  final String? jqlFilter;
+  final bool syncEnabled;
+  final bool syncSubtasks;
+  final bool syncWorklogs;
+  final int syncIntervalMinutes;
+  final String fieldMappings;
+  final String statusMappings;
+  final int? lastSyncAt;
+  final String? lastSyncError;
+  final int created;
+  final int? modified;
+  final String crdtClock;
+  final String crdtState;
+  const JiraIntegration({
+    required this.id,
+    this.projectId,
+    required this.baseUrl,
+    required this.email,
+    required this.apiToken,
+    required this.jiraProjectKey,
+    this.boardId,
+    this.jqlFilter,
+    required this.syncEnabled,
+    required this.syncSubtasks,
+    required this.syncWorklogs,
+    required this.syncIntervalMinutes,
+    required this.fieldMappings,
+    required this.statusMappings,
+    this.lastSyncAt,
+    this.lastSyncError,
+    required this.created,
+    this.modified,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['base_url'] = Variable<String>(baseUrl);
+    map['email'] = Variable<String>(email);
+    map['api_token'] = Variable<String>(apiToken);
+    map['jira_project_key'] = Variable<String>(jiraProjectKey);
+    if (!nullToAbsent || boardId != null) {
+      map['board_id'] = Variable<String>(boardId);
+    }
+    if (!nullToAbsent || jqlFilter != null) {
+      map['jql_filter'] = Variable<String>(jqlFilter);
+    }
+    map['sync_enabled'] = Variable<bool>(syncEnabled);
+    map['sync_subtasks'] = Variable<bool>(syncSubtasks);
+    map['sync_worklogs'] = Variable<bool>(syncWorklogs);
+    map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes);
+    map['field_mappings'] = Variable<String>(fieldMappings);
+    map['status_mappings'] = Variable<String>(statusMappings);
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<int>(lastSyncAt);
+    }
+    if (!nullToAbsent || lastSyncError != null) {
+      map['last_sync_error'] = Variable<String>(lastSyncError);
+    }
+    map['created'] = Variable<int>(created);
+    if (!nullToAbsent || modified != null) {
+      map['modified'] = Variable<int>(modified);
+    }
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  JiraIntegrationsCompanion toCompanion(bool nullToAbsent) {
+    return JiraIntegrationsCompanion(
+      id: Value(id),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      baseUrl: Value(baseUrl),
+      email: Value(email),
+      apiToken: Value(apiToken),
+      jiraProjectKey: Value(jiraProjectKey),
+      boardId: boardId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(boardId),
+      jqlFilter: jqlFilter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jqlFilter),
+      syncEnabled: Value(syncEnabled),
+      syncSubtasks: Value(syncSubtasks),
+      syncWorklogs: Value(syncWorklogs),
+      syncIntervalMinutes: Value(syncIntervalMinutes),
+      fieldMappings: Value(fieldMappings),
+      statusMappings: Value(statusMappings),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
+      lastSyncError: lastSyncError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncError),
+      created: Value(created),
+      modified: modified == null && nullToAbsent
+          ? const Value.absent()
+          : Value(modified),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory JiraIntegration.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JiraIntegration(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      baseUrl: serializer.fromJson<String>(json['baseUrl']),
+      email: serializer.fromJson<String>(json['email']),
+      apiToken: serializer.fromJson<String>(json['apiToken']),
+      jiraProjectKey: serializer.fromJson<String>(json['jiraProjectKey']),
+      boardId: serializer.fromJson<String?>(json['boardId']),
+      jqlFilter: serializer.fromJson<String?>(json['jqlFilter']),
+      syncEnabled: serializer.fromJson<bool>(json['syncEnabled']),
+      syncSubtasks: serializer.fromJson<bool>(json['syncSubtasks']),
+      syncWorklogs: serializer.fromJson<bool>(json['syncWorklogs']),
+      syncIntervalMinutes: serializer.fromJson<int>(
+        json['syncIntervalMinutes'],
+      ),
+      fieldMappings: serializer.fromJson<String>(json['fieldMappings']),
+      statusMappings: serializer.fromJson<String>(json['statusMappings']),
+      lastSyncAt: serializer.fromJson<int?>(json['lastSyncAt']),
+      lastSyncError: serializer.fromJson<String?>(json['lastSyncError']),
+      created: serializer.fromJson<int>(json['created']),
+      modified: serializer.fromJson<int?>(json['modified']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String?>(projectId),
+      'baseUrl': serializer.toJson<String>(baseUrl),
+      'email': serializer.toJson<String>(email),
+      'apiToken': serializer.toJson<String>(apiToken),
+      'jiraProjectKey': serializer.toJson<String>(jiraProjectKey),
+      'boardId': serializer.toJson<String?>(boardId),
+      'jqlFilter': serializer.toJson<String?>(jqlFilter),
+      'syncEnabled': serializer.toJson<bool>(syncEnabled),
+      'syncSubtasks': serializer.toJson<bool>(syncSubtasks),
+      'syncWorklogs': serializer.toJson<bool>(syncWorklogs),
+      'syncIntervalMinutes': serializer.toJson<int>(syncIntervalMinutes),
+      'fieldMappings': serializer.toJson<String>(fieldMappings),
+      'statusMappings': serializer.toJson<String>(statusMappings),
+      'lastSyncAt': serializer.toJson<int?>(lastSyncAt),
+      'lastSyncError': serializer.toJson<String?>(lastSyncError),
+      'created': serializer.toJson<int>(created),
+      'modified': serializer.toJson<int?>(modified),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  JiraIntegration copyWith({
+    String? id,
+    Value<String?> projectId = const Value.absent(),
+    String? baseUrl,
+    String? email,
+    String? apiToken,
+    String? jiraProjectKey,
+    Value<String?> boardId = const Value.absent(),
+    Value<String?> jqlFilter = const Value.absent(),
+    bool? syncEnabled,
+    bool? syncSubtasks,
+    bool? syncWorklogs,
+    int? syncIntervalMinutes,
+    String? fieldMappings,
+    String? statusMappings,
+    Value<int?> lastSyncAt = const Value.absent(),
+    Value<String?> lastSyncError = const Value.absent(),
+    int? created,
+    Value<int?> modified = const Value.absent(),
+    String? crdtClock,
+    String? crdtState,
+  }) => JiraIntegration(
+    id: id ?? this.id,
+    projectId: projectId.present ? projectId.value : this.projectId,
+    baseUrl: baseUrl ?? this.baseUrl,
+    email: email ?? this.email,
+    apiToken: apiToken ?? this.apiToken,
+    jiraProjectKey: jiraProjectKey ?? this.jiraProjectKey,
+    boardId: boardId.present ? boardId.value : this.boardId,
+    jqlFilter: jqlFilter.present ? jqlFilter.value : this.jqlFilter,
+    syncEnabled: syncEnabled ?? this.syncEnabled,
+    syncSubtasks: syncSubtasks ?? this.syncSubtasks,
+    syncWorklogs: syncWorklogs ?? this.syncWorklogs,
+    syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
+    fieldMappings: fieldMappings ?? this.fieldMappings,
+    statusMappings: statusMappings ?? this.statusMappings,
+    lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+    lastSyncError: lastSyncError.present
+        ? lastSyncError.value
+        : this.lastSyncError,
+    created: created ?? this.created,
+    modified: modified.present ? modified.value : this.modified,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  JiraIntegration copyWithCompanion(JiraIntegrationsCompanion data) {
+    return JiraIntegration(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
+      email: data.email.present ? data.email.value : this.email,
+      apiToken: data.apiToken.present ? data.apiToken.value : this.apiToken,
+      jiraProjectKey: data.jiraProjectKey.present
+          ? data.jiraProjectKey.value
+          : this.jiraProjectKey,
+      boardId: data.boardId.present ? data.boardId.value : this.boardId,
+      jqlFilter: data.jqlFilter.present ? data.jqlFilter.value : this.jqlFilter,
+      syncEnabled: data.syncEnabled.present
+          ? data.syncEnabled.value
+          : this.syncEnabled,
+      syncSubtasks: data.syncSubtasks.present
+          ? data.syncSubtasks.value
+          : this.syncSubtasks,
+      syncWorklogs: data.syncWorklogs.present
+          ? data.syncWorklogs.value
+          : this.syncWorklogs,
+      syncIntervalMinutes: data.syncIntervalMinutes.present
+          ? data.syncIntervalMinutes.value
+          : this.syncIntervalMinutes,
+      fieldMappings: data.fieldMappings.present
+          ? data.fieldMappings.value
+          : this.fieldMappings,
+      statusMappings: data.statusMappings.present
+          ? data.statusMappings.value
+          : this.statusMappings,
+      lastSyncAt: data.lastSyncAt.present
+          ? data.lastSyncAt.value
+          : this.lastSyncAt,
+      lastSyncError: data.lastSyncError.present
+          ? data.lastSyncError.value
+          : this.lastSyncError,
+      created: data.created.present ? data.created.value : this.created,
+      modified: data.modified.present ? data.modified.value : this.modified,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JiraIntegration(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('email: $email, ')
+          ..write('apiToken: $apiToken, ')
+          ..write('jiraProjectKey: $jiraProjectKey, ')
+          ..write('boardId: $boardId, ')
+          ..write('jqlFilter: $jqlFilter, ')
+          ..write('syncEnabled: $syncEnabled, ')
+          ..write('syncSubtasks: $syncSubtasks, ')
+          ..write('syncWorklogs: $syncWorklogs, ')
+          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
+          ..write('fieldMappings: $fieldMappings, ')
+          ..write('statusMappings: $statusMappings, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    baseUrl,
+    email,
+    apiToken,
+    jiraProjectKey,
+    boardId,
+    jqlFilter,
+    syncEnabled,
+    syncSubtasks,
+    syncWorklogs,
+    syncIntervalMinutes,
+    fieldMappings,
+    statusMappings,
+    lastSyncAt,
+    lastSyncError,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JiraIntegration &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.baseUrl == this.baseUrl &&
+          other.email == this.email &&
+          other.apiToken == this.apiToken &&
+          other.jiraProjectKey == this.jiraProjectKey &&
+          other.boardId == this.boardId &&
+          other.jqlFilter == this.jqlFilter &&
+          other.syncEnabled == this.syncEnabled &&
+          other.syncSubtasks == this.syncSubtasks &&
+          other.syncWorklogs == this.syncWorklogs &&
+          other.syncIntervalMinutes == this.syncIntervalMinutes &&
+          other.fieldMappings == this.fieldMappings &&
+          other.statusMappings == this.statusMappings &&
+          other.lastSyncAt == this.lastSyncAt &&
+          other.lastSyncError == this.lastSyncError &&
+          other.created == this.created &&
+          other.modified == this.modified &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
+  final Value<String> id;
+  final Value<String?> projectId;
+  final Value<String> baseUrl;
+  final Value<String> email;
+  final Value<String> apiToken;
+  final Value<String> jiraProjectKey;
+  final Value<String?> boardId;
+  final Value<String?> jqlFilter;
+  final Value<bool> syncEnabled;
+  final Value<bool> syncSubtasks;
+  final Value<bool> syncWorklogs;
+  final Value<int> syncIntervalMinutes;
+  final Value<String> fieldMappings;
+  final Value<String> statusMappings;
+  final Value<int?> lastSyncAt;
+  final Value<String?> lastSyncError;
+  final Value<int> created;
+  final Value<int?> modified;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const JiraIntegrationsCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.email = const Value.absent(),
+    this.apiToken = const Value.absent(),
+    this.jiraProjectKey = const Value.absent(),
+    this.boardId = const Value.absent(),
+    this.jqlFilter = const Value.absent(),
+    this.syncEnabled = const Value.absent(),
+    this.syncSubtasks = const Value.absent(),
+    this.syncWorklogs = const Value.absent(),
+    this.syncIntervalMinutes = const Value.absent(),
+    this.fieldMappings = const Value.absent(),
+    this.statusMappings = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    this.created = const Value.absent(),
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JiraIntegrationsCompanion.insert({
+    required String id,
+    this.projectId = const Value.absent(),
+    required String baseUrl,
+    required String email,
+    required String apiToken,
+    required String jiraProjectKey,
+    this.boardId = const Value.absent(),
+    this.jqlFilter = const Value.absent(),
+    this.syncEnabled = const Value.absent(),
+    this.syncSubtasks = const Value.absent(),
+    this.syncWorklogs = const Value.absent(),
+    this.syncIntervalMinutes = const Value.absent(),
+    this.fieldMappings = const Value.absent(),
+    this.statusMappings = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    required int created,
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       baseUrl = Value(baseUrl),
+       email = Value(email),
+       apiToken = Value(apiToken),
+       jiraProjectKey = Value(jiraProjectKey),
+       created = Value(created);
+  static Insertable<JiraIntegration> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? baseUrl,
+    Expression<String>? email,
+    Expression<String>? apiToken,
+    Expression<String>? jiraProjectKey,
+    Expression<String>? boardId,
+    Expression<String>? jqlFilter,
+    Expression<bool>? syncEnabled,
+    Expression<bool>? syncSubtasks,
+    Expression<bool>? syncWorklogs,
+    Expression<int>? syncIntervalMinutes,
+    Expression<String>? fieldMappings,
+    Expression<String>? statusMappings,
+    Expression<int>? lastSyncAt,
+    Expression<String>? lastSyncError,
+    Expression<int>? created,
+    Expression<int>? modified,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (baseUrl != null) 'base_url': baseUrl,
+      if (email != null) 'email': email,
+      if (apiToken != null) 'api_token': apiToken,
+      if (jiraProjectKey != null) 'jira_project_key': jiraProjectKey,
+      if (boardId != null) 'board_id': boardId,
+      if (jqlFilter != null) 'jql_filter': jqlFilter,
+      if (syncEnabled != null) 'sync_enabled': syncEnabled,
+      if (syncSubtasks != null) 'sync_subtasks': syncSubtasks,
+      if (syncWorklogs != null) 'sync_worklogs': syncWorklogs,
+      if (syncIntervalMinutes != null)
+        'sync_interval_minutes': syncIntervalMinutes,
+      if (fieldMappings != null) 'field_mappings': fieldMappings,
+      if (statusMappings != null) 'status_mappings': statusMappings,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+      if (lastSyncError != null) 'last_sync_error': lastSyncError,
+      if (created != null) 'created': created,
+      if (modified != null) 'modified': modified,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JiraIntegrationsCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? projectId,
+    Value<String>? baseUrl,
+    Value<String>? email,
+    Value<String>? apiToken,
+    Value<String>? jiraProjectKey,
+    Value<String?>? boardId,
+    Value<String?>? jqlFilter,
+    Value<bool>? syncEnabled,
+    Value<bool>? syncSubtasks,
+    Value<bool>? syncWorklogs,
+    Value<int>? syncIntervalMinutes,
+    Value<String>? fieldMappings,
+    Value<String>? statusMappings,
+    Value<int?>? lastSyncAt,
+    Value<String?>? lastSyncError,
+    Value<int>? created,
+    Value<int?>? modified,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return JiraIntegrationsCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      baseUrl: baseUrl ?? this.baseUrl,
+      email: email ?? this.email,
+      apiToken: apiToken ?? this.apiToken,
+      jiraProjectKey: jiraProjectKey ?? this.jiraProjectKey,
+      boardId: boardId ?? this.boardId,
+      jqlFilter: jqlFilter ?? this.jqlFilter,
+      syncEnabled: syncEnabled ?? this.syncEnabled,
+      syncSubtasks: syncSubtasks ?? this.syncSubtasks,
+      syncWorklogs: syncWorklogs ?? this.syncWorklogs,
+      syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
+      fieldMappings: fieldMappings ?? this.fieldMappings,
+      statusMappings: statusMappings ?? this.statusMappings,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      lastSyncError: lastSyncError ?? this.lastSyncError,
+      created: created ?? this.created,
+      modified: modified ?? this.modified,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (baseUrl.present) {
+      map['base_url'] = Variable<String>(baseUrl.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (apiToken.present) {
+      map['api_token'] = Variable<String>(apiToken.value);
+    }
+    if (jiraProjectKey.present) {
+      map['jira_project_key'] = Variable<String>(jiraProjectKey.value);
+    }
+    if (boardId.present) {
+      map['board_id'] = Variable<String>(boardId.value);
+    }
+    if (jqlFilter.present) {
+      map['jql_filter'] = Variable<String>(jqlFilter.value);
+    }
+    if (syncEnabled.present) {
+      map['sync_enabled'] = Variable<bool>(syncEnabled.value);
+    }
+    if (syncSubtasks.present) {
+      map['sync_subtasks'] = Variable<bool>(syncSubtasks.value);
+    }
+    if (syncWorklogs.present) {
+      map['sync_worklogs'] = Variable<bool>(syncWorklogs.value);
+    }
+    if (syncIntervalMinutes.present) {
+      map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes.value);
+    }
+    if (fieldMappings.present) {
+      map['field_mappings'] = Variable<String>(fieldMappings.value);
+    }
+    if (statusMappings.present) {
+      map['status_mappings'] = Variable<String>(statusMappings.value);
+    }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<int>(lastSyncAt.value);
+    }
+    if (lastSyncError.present) {
+      map['last_sync_error'] = Variable<String>(lastSyncError.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (modified.present) {
+      map['modified'] = Variable<int>(modified.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JiraIntegrationsCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('email: $email, ')
+          ..write('apiToken: $apiToken, ')
+          ..write('jiraProjectKey: $jiraProjectKey, ')
+          ..write('boardId: $boardId, ')
+          ..write('jqlFilter: $jqlFilter, ')
+          ..write('syncEnabled: $syncEnabled, ')
+          ..write('syncSubtasks: $syncSubtasks, ')
+          ..write('syncWorklogs: $syncWorklogs, ')
+          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
+          ..write('fieldMappings: $fieldMappings, ')
+          ..write('statusMappings: $statusMappings, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GithubIntegrationsTable extends GithubIntegrations
+    with TableInfo<$GithubIntegrationsTable, GithubIntegration> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GithubIntegrationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _repoMeta = const VerificationMeta('repo');
+  @override
+  late final GeneratedColumn<String> repo = GeneratedColumn<String>(
+    'repo',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _accessTokenMeta = const VerificationMeta(
+    'accessToken',
+  );
+  @override
+  late final GeneratedColumn<String> accessToken = GeneratedColumn<String>(
+    'access_token',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelFilterMeta = const VerificationMeta(
+    'labelFilter',
+  );
+  @override
+  late final GeneratedColumn<String> labelFilter = GeneratedColumn<String>(
+    'label_filter',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncEnabledMeta = const VerificationMeta(
+    'syncEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> syncEnabled = GeneratedColumn<bool>(
+    'sync_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sync_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _syncClosedIssuesMeta = const VerificationMeta(
+    'syncClosedIssues',
+  );
+  @override
+  late final GeneratedColumn<bool> syncClosedIssues = GeneratedColumn<bool>(
+    'sync_closed_issues',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sync_closed_issues" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _syncIntervalMinutesMeta =
+      const VerificationMeta('syncIntervalMinutes');
+  @override
+  late final GeneratedColumn<int> syncIntervalMinutes = GeneratedColumn<int>(
+    'sync_interval_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
+  static const VerificationMeta _labelMappingsMeta = const VerificationMeta(
+    'labelMappings',
+  );
+  @override
+  late final GeneratedColumn<String> labelMappings = GeneratedColumn<String>(
+    'label_mappings',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _statusMappingsMeta = const VerificationMeta(
+    'statusMappings',
+  );
+  @override
+  late final GeneratedColumn<String> statusMappings = GeneratedColumn<String>(
+    'status_mappings',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _milestoneMappingsMeta = const VerificationMeta(
+    'milestoneMappings',
+  );
+  @override
+  late final GeneratedColumn<String> milestoneMappings =
+      GeneratedColumn<String>(
+        'milestone_mappings',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
+  static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
+    'lastSyncAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastSyncAt = GeneratedColumn<int>(
+    'last_sync_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncErrorMeta = const VerificationMeta(
+    'lastSyncError',
+  );
+  @override
+  late final GeneratedColumn<String> lastSyncError = GeneratedColumn<String>(
+    'last_sync_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modifiedMeta = const VerificationMeta(
+    'modified',
+  );
+  @override
+  late final GeneratedColumn<int> modified = GeneratedColumn<int>(
+    'modified',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    projectId,
+    owner,
+    repo,
+    accessToken,
+    labelFilter,
+    syncEnabled,
+    syncClosedIssues,
+    syncIntervalMinutes,
+    labelMappings,
+    statusMappings,
+    milestoneMappings,
+    lastSyncAt,
+    lastSyncError,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'github_integrations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GithubIntegration> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerMeta);
+    }
+    if (data.containsKey('repo')) {
+      context.handle(
+        _repoMeta,
+        repo.isAcceptableOrUnknown(data['repo']!, _repoMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_repoMeta);
+    }
+    if (data.containsKey('access_token')) {
+      context.handle(
+        _accessTokenMeta,
+        accessToken.isAcceptableOrUnknown(
+          data['access_token']!,
+          _accessTokenMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_accessTokenMeta);
+    }
+    if (data.containsKey('label_filter')) {
+      context.handle(
+        _labelFilterMeta,
+        labelFilter.isAcceptableOrUnknown(
+          data['label_filter']!,
+          _labelFilterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_enabled')) {
+      context.handle(
+        _syncEnabledMeta,
+        syncEnabled.isAcceptableOrUnknown(
+          data['sync_enabled']!,
+          _syncEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_closed_issues')) {
+      context.handle(
+        _syncClosedIssuesMeta,
+        syncClosedIssues.isAcceptableOrUnknown(
+          data['sync_closed_issues']!,
+          _syncClosedIssuesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_interval_minutes')) {
+      context.handle(
+        _syncIntervalMinutesMeta,
+        syncIntervalMinutes.isAcceptableOrUnknown(
+          data['sync_interval_minutes']!,
+          _syncIntervalMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('label_mappings')) {
+      context.handle(
+        _labelMappingsMeta,
+        labelMappings.isAcceptableOrUnknown(
+          data['label_mappings']!,
+          _labelMappingsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status_mappings')) {
+      context.handle(
+        _statusMappingsMeta,
+        statusMappings.isAcceptableOrUnknown(
+          data['status_mappings']!,
+          _statusMappingsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('milestone_mappings')) {
+      context.handle(
+        _milestoneMappingsMeta,
+        milestoneMappings.isAcceptableOrUnknown(
+          data['milestone_mappings']!,
+          _milestoneMappingsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+        _lastSyncAtMeta,
+        lastSyncAt.isAcceptableOrUnknown(
+          data['last_sync_at']!,
+          _lastSyncAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_error')) {
+      context.handle(
+        _lastSyncErrorMeta,
+        lastSyncError.isAcceptableOrUnknown(
+          data['last_sync_error']!,
+          _lastSyncErrorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('modified')) {
+      context.handle(
+        _modifiedMeta,
+        modified.isAcceptableOrUnknown(data['modified']!, _modifiedMeta),
+      );
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GithubIntegration map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GithubIntegration(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      )!,
+      repo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}repo'],
+      )!,
+      accessToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}access_token'],
+      )!,
+      labelFilter: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label_filter'],
+      ),
+      syncEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sync_enabled'],
+      )!,
+      syncClosedIssues: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sync_closed_issues'],
+      )!,
+      syncIntervalMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sync_interval_minutes'],
+      )!,
+      labelMappings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label_mappings'],
+      )!,
+      statusMappings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status_mappings'],
+      )!,
+      milestoneMappings: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}milestone_mappings'],
+      )!,
+      lastSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_sync_at'],
+      ),
+      lastSyncError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_sync_error'],
+      ),
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      modified: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}modified'],
+      ),
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $GithubIntegrationsTable createAlias(String alias) {
+    return $GithubIntegrationsTable(attachedDatabase, alias);
+  }
+}
+
+class GithubIntegration extends DataClass
+    implements Insertable<GithubIntegration> {
+  final String id;
+  final String? projectId;
+  final String owner;
+  final String repo;
+  final String accessToken;
+  final String? labelFilter;
+  final bool syncEnabled;
+  final bool syncClosedIssues;
+  final int syncIntervalMinutes;
+  final String labelMappings;
+  final String statusMappings;
+  final String milestoneMappings;
+  final int? lastSyncAt;
+  final String? lastSyncError;
+  final int created;
+  final int? modified;
+  final String crdtClock;
+  final String crdtState;
+  const GithubIntegration({
+    required this.id,
+    this.projectId,
+    required this.owner,
+    required this.repo,
+    required this.accessToken,
+    this.labelFilter,
+    required this.syncEnabled,
+    required this.syncClosedIssues,
+    required this.syncIntervalMinutes,
+    required this.labelMappings,
+    required this.statusMappings,
+    required this.milestoneMappings,
+    this.lastSyncAt,
+    this.lastSyncError,
+    required this.created,
+    this.modified,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['owner'] = Variable<String>(owner);
+    map['repo'] = Variable<String>(repo);
+    map['access_token'] = Variable<String>(accessToken);
+    if (!nullToAbsent || labelFilter != null) {
+      map['label_filter'] = Variable<String>(labelFilter);
+    }
+    map['sync_enabled'] = Variable<bool>(syncEnabled);
+    map['sync_closed_issues'] = Variable<bool>(syncClosedIssues);
+    map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes);
+    map['label_mappings'] = Variable<String>(labelMappings);
+    map['status_mappings'] = Variable<String>(statusMappings);
+    map['milestone_mappings'] = Variable<String>(milestoneMappings);
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<int>(lastSyncAt);
+    }
+    if (!nullToAbsent || lastSyncError != null) {
+      map['last_sync_error'] = Variable<String>(lastSyncError);
+    }
+    map['created'] = Variable<int>(created);
+    if (!nullToAbsent || modified != null) {
+      map['modified'] = Variable<int>(modified);
+    }
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  GithubIntegrationsCompanion toCompanion(bool nullToAbsent) {
+    return GithubIntegrationsCompanion(
+      id: Value(id),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      owner: Value(owner),
+      repo: Value(repo),
+      accessToken: Value(accessToken),
+      labelFilter: labelFilter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(labelFilter),
+      syncEnabled: Value(syncEnabled),
+      syncClosedIssues: Value(syncClosedIssues),
+      syncIntervalMinutes: Value(syncIntervalMinutes),
+      labelMappings: Value(labelMappings),
+      statusMappings: Value(statusMappings),
+      milestoneMappings: Value(milestoneMappings),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
+      lastSyncError: lastSyncError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncError),
+      created: Value(created),
+      modified: modified == null && nullToAbsent
+          ? const Value.absent()
+          : Value(modified),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory GithubIntegration.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GithubIntegration(
+      id: serializer.fromJson<String>(json['id']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      owner: serializer.fromJson<String>(json['owner']),
+      repo: serializer.fromJson<String>(json['repo']),
+      accessToken: serializer.fromJson<String>(json['accessToken']),
+      labelFilter: serializer.fromJson<String?>(json['labelFilter']),
+      syncEnabled: serializer.fromJson<bool>(json['syncEnabled']),
+      syncClosedIssues: serializer.fromJson<bool>(json['syncClosedIssues']),
+      syncIntervalMinutes: serializer.fromJson<int>(
+        json['syncIntervalMinutes'],
+      ),
+      labelMappings: serializer.fromJson<String>(json['labelMappings']),
+      statusMappings: serializer.fromJson<String>(json['statusMappings']),
+      milestoneMappings: serializer.fromJson<String>(json['milestoneMappings']),
+      lastSyncAt: serializer.fromJson<int?>(json['lastSyncAt']),
+      lastSyncError: serializer.fromJson<String?>(json['lastSyncError']),
+      created: serializer.fromJson<int>(json['created']),
+      modified: serializer.fromJson<int?>(json['modified']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projectId': serializer.toJson<String?>(projectId),
+      'owner': serializer.toJson<String>(owner),
+      'repo': serializer.toJson<String>(repo),
+      'accessToken': serializer.toJson<String>(accessToken),
+      'labelFilter': serializer.toJson<String?>(labelFilter),
+      'syncEnabled': serializer.toJson<bool>(syncEnabled),
+      'syncClosedIssues': serializer.toJson<bool>(syncClosedIssues),
+      'syncIntervalMinutes': serializer.toJson<int>(syncIntervalMinutes),
+      'labelMappings': serializer.toJson<String>(labelMappings),
+      'statusMappings': serializer.toJson<String>(statusMappings),
+      'milestoneMappings': serializer.toJson<String>(milestoneMappings),
+      'lastSyncAt': serializer.toJson<int?>(lastSyncAt),
+      'lastSyncError': serializer.toJson<String?>(lastSyncError),
+      'created': serializer.toJson<int>(created),
+      'modified': serializer.toJson<int?>(modified),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  GithubIntegration copyWith({
+    String? id,
+    Value<String?> projectId = const Value.absent(),
+    String? owner,
+    String? repo,
+    String? accessToken,
+    Value<String?> labelFilter = const Value.absent(),
+    bool? syncEnabled,
+    bool? syncClosedIssues,
+    int? syncIntervalMinutes,
+    String? labelMappings,
+    String? statusMappings,
+    String? milestoneMappings,
+    Value<int?> lastSyncAt = const Value.absent(),
+    Value<String?> lastSyncError = const Value.absent(),
+    int? created,
+    Value<int?> modified = const Value.absent(),
+    String? crdtClock,
+    String? crdtState,
+  }) => GithubIntegration(
+    id: id ?? this.id,
+    projectId: projectId.present ? projectId.value : this.projectId,
+    owner: owner ?? this.owner,
+    repo: repo ?? this.repo,
+    accessToken: accessToken ?? this.accessToken,
+    labelFilter: labelFilter.present ? labelFilter.value : this.labelFilter,
+    syncEnabled: syncEnabled ?? this.syncEnabled,
+    syncClosedIssues: syncClosedIssues ?? this.syncClosedIssues,
+    syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
+    labelMappings: labelMappings ?? this.labelMappings,
+    statusMappings: statusMappings ?? this.statusMappings,
+    milestoneMappings: milestoneMappings ?? this.milestoneMappings,
+    lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+    lastSyncError: lastSyncError.present
+        ? lastSyncError.value
+        : this.lastSyncError,
+    created: created ?? this.created,
+    modified: modified.present ? modified.value : this.modified,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  GithubIntegration copyWithCompanion(GithubIntegrationsCompanion data) {
+    return GithubIntegration(
+      id: data.id.present ? data.id.value : this.id,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      owner: data.owner.present ? data.owner.value : this.owner,
+      repo: data.repo.present ? data.repo.value : this.repo,
+      accessToken: data.accessToken.present
+          ? data.accessToken.value
+          : this.accessToken,
+      labelFilter: data.labelFilter.present
+          ? data.labelFilter.value
+          : this.labelFilter,
+      syncEnabled: data.syncEnabled.present
+          ? data.syncEnabled.value
+          : this.syncEnabled,
+      syncClosedIssues: data.syncClosedIssues.present
+          ? data.syncClosedIssues.value
+          : this.syncClosedIssues,
+      syncIntervalMinutes: data.syncIntervalMinutes.present
+          ? data.syncIntervalMinutes.value
+          : this.syncIntervalMinutes,
+      labelMappings: data.labelMappings.present
+          ? data.labelMappings.value
+          : this.labelMappings,
+      statusMappings: data.statusMappings.present
+          ? data.statusMappings.value
+          : this.statusMappings,
+      milestoneMappings: data.milestoneMappings.present
+          ? data.milestoneMappings.value
+          : this.milestoneMappings,
+      lastSyncAt: data.lastSyncAt.present
+          ? data.lastSyncAt.value
+          : this.lastSyncAt,
+      lastSyncError: data.lastSyncError.present
+          ? data.lastSyncError.value
+          : this.lastSyncError,
+      created: data.created.present ? data.created.value : this.created,
+      modified: data.modified.present ? data.modified.value : this.modified,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GithubIntegration(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('owner: $owner, ')
+          ..write('repo: $repo, ')
+          ..write('accessToken: $accessToken, ')
+          ..write('labelFilter: $labelFilter, ')
+          ..write('syncEnabled: $syncEnabled, ')
+          ..write('syncClosedIssues: $syncClosedIssues, ')
+          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
+          ..write('labelMappings: $labelMappings, ')
+          ..write('statusMappings: $statusMappings, ')
+          ..write('milestoneMappings: $milestoneMappings, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    projectId,
+    owner,
+    repo,
+    accessToken,
+    labelFilter,
+    syncEnabled,
+    syncClosedIssues,
+    syncIntervalMinutes,
+    labelMappings,
+    statusMappings,
+    milestoneMappings,
+    lastSyncAt,
+    lastSyncError,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GithubIntegration &&
+          other.id == this.id &&
+          other.projectId == this.projectId &&
+          other.owner == this.owner &&
+          other.repo == this.repo &&
+          other.accessToken == this.accessToken &&
+          other.labelFilter == this.labelFilter &&
+          other.syncEnabled == this.syncEnabled &&
+          other.syncClosedIssues == this.syncClosedIssues &&
+          other.syncIntervalMinutes == this.syncIntervalMinutes &&
+          other.labelMappings == this.labelMappings &&
+          other.statusMappings == this.statusMappings &&
+          other.milestoneMappings == this.milestoneMappings &&
+          other.lastSyncAt == this.lastSyncAt &&
+          other.lastSyncError == this.lastSyncError &&
+          other.created == this.created &&
+          other.modified == this.modified &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class GithubIntegrationsCompanion extends UpdateCompanion<GithubIntegration> {
+  final Value<String> id;
+  final Value<String?> projectId;
+  final Value<String> owner;
+  final Value<String> repo;
+  final Value<String> accessToken;
+  final Value<String?> labelFilter;
+  final Value<bool> syncEnabled;
+  final Value<bool> syncClosedIssues;
+  final Value<int> syncIntervalMinutes;
+  final Value<String> labelMappings;
+  final Value<String> statusMappings;
+  final Value<String> milestoneMappings;
+  final Value<int?> lastSyncAt;
+  final Value<String?> lastSyncError;
+  final Value<int> created;
+  final Value<int?> modified;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const GithubIntegrationsCompanion({
+    this.id = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.owner = const Value.absent(),
+    this.repo = const Value.absent(),
+    this.accessToken = const Value.absent(),
+    this.labelFilter = const Value.absent(),
+    this.syncEnabled = const Value.absent(),
+    this.syncClosedIssues = const Value.absent(),
+    this.syncIntervalMinutes = const Value.absent(),
+    this.labelMappings = const Value.absent(),
+    this.statusMappings = const Value.absent(),
+    this.milestoneMappings = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    this.created = const Value.absent(),
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GithubIntegrationsCompanion.insert({
+    required String id,
+    this.projectId = const Value.absent(),
+    required String owner,
+    required String repo,
+    required String accessToken,
+    this.labelFilter = const Value.absent(),
+    this.syncEnabled = const Value.absent(),
+    this.syncClosedIssues = const Value.absent(),
+    this.syncIntervalMinutes = const Value.absent(),
+    this.labelMappings = const Value.absent(),
+    this.statusMappings = const Value.absent(),
+    this.milestoneMappings = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    required int created,
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       owner = Value(owner),
+       repo = Value(repo),
+       accessToken = Value(accessToken),
+       created = Value(created);
+  static Insertable<GithubIntegration> custom({
+    Expression<String>? id,
+    Expression<String>? projectId,
+    Expression<String>? owner,
+    Expression<String>? repo,
+    Expression<String>? accessToken,
+    Expression<String>? labelFilter,
+    Expression<bool>? syncEnabled,
+    Expression<bool>? syncClosedIssues,
+    Expression<int>? syncIntervalMinutes,
+    Expression<String>? labelMappings,
+    Expression<String>? statusMappings,
+    Expression<String>? milestoneMappings,
+    Expression<int>? lastSyncAt,
+    Expression<String>? lastSyncError,
+    Expression<int>? created,
+    Expression<int>? modified,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projectId != null) 'project_id': projectId,
+      if (owner != null) 'owner': owner,
+      if (repo != null) 'repo': repo,
+      if (accessToken != null) 'access_token': accessToken,
+      if (labelFilter != null) 'label_filter': labelFilter,
+      if (syncEnabled != null) 'sync_enabled': syncEnabled,
+      if (syncClosedIssues != null) 'sync_closed_issues': syncClosedIssues,
+      if (syncIntervalMinutes != null)
+        'sync_interval_minutes': syncIntervalMinutes,
+      if (labelMappings != null) 'label_mappings': labelMappings,
+      if (statusMappings != null) 'status_mappings': statusMappings,
+      if (milestoneMappings != null) 'milestone_mappings': milestoneMappings,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+      if (lastSyncError != null) 'last_sync_error': lastSyncError,
+      if (created != null) 'created': created,
+      if (modified != null) 'modified': modified,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GithubIntegrationsCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? projectId,
+    Value<String>? owner,
+    Value<String>? repo,
+    Value<String>? accessToken,
+    Value<String?>? labelFilter,
+    Value<bool>? syncEnabled,
+    Value<bool>? syncClosedIssues,
+    Value<int>? syncIntervalMinutes,
+    Value<String>? labelMappings,
+    Value<String>? statusMappings,
+    Value<String>? milestoneMappings,
+    Value<int?>? lastSyncAt,
+    Value<String?>? lastSyncError,
+    Value<int>? created,
+    Value<int?>? modified,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return GithubIntegrationsCompanion(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      owner: owner ?? this.owner,
+      repo: repo ?? this.repo,
+      accessToken: accessToken ?? this.accessToken,
+      labelFilter: labelFilter ?? this.labelFilter,
+      syncEnabled: syncEnabled ?? this.syncEnabled,
+      syncClosedIssues: syncClosedIssues ?? this.syncClosedIssues,
+      syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
+      labelMappings: labelMappings ?? this.labelMappings,
+      statusMappings: statusMappings ?? this.statusMappings,
+      milestoneMappings: milestoneMappings ?? this.milestoneMappings,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      lastSyncError: lastSyncError ?? this.lastSyncError,
+      created: created ?? this.created,
+      modified: modified ?? this.modified,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
+    if (repo.present) {
+      map['repo'] = Variable<String>(repo.value);
+    }
+    if (accessToken.present) {
+      map['access_token'] = Variable<String>(accessToken.value);
+    }
+    if (labelFilter.present) {
+      map['label_filter'] = Variable<String>(labelFilter.value);
+    }
+    if (syncEnabled.present) {
+      map['sync_enabled'] = Variable<bool>(syncEnabled.value);
+    }
+    if (syncClosedIssues.present) {
+      map['sync_closed_issues'] = Variable<bool>(syncClosedIssues.value);
+    }
+    if (syncIntervalMinutes.present) {
+      map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes.value);
+    }
+    if (labelMappings.present) {
+      map['label_mappings'] = Variable<String>(labelMappings.value);
+    }
+    if (statusMappings.present) {
+      map['status_mappings'] = Variable<String>(statusMappings.value);
+    }
+    if (milestoneMappings.present) {
+      map['milestone_mappings'] = Variable<String>(milestoneMappings.value);
+    }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<int>(lastSyncAt.value);
+    }
+    if (lastSyncError.present) {
+      map['last_sync_error'] = Variable<String>(lastSyncError.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (modified.present) {
+      map['modified'] = Variable<int>(modified.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GithubIntegrationsCompanion(')
+          ..write('id: $id, ')
+          ..write('projectId: $projectId, ')
+          ..write('owner: $owner, ')
+          ..write('repo: $repo, ')
+          ..write('accessToken: $accessToken, ')
+          ..write('labelFilter: $labelFilter, ')
+          ..write('syncEnabled: $syncEnabled, ')
+          ..write('syncClosedIssues: $syncClosedIssues, ')
+          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
+          ..write('labelMappings: $labelMappings, ')
+          ..write('statusMappings: $statusMappings, ')
+          ..write('milestoneMappings: $milestoneMappings, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $IssueLinksTable extends IssueLinks
+    with TableInfo<$IssueLinksTable, IssueLink> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $IssueLinksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _integrationIdMeta = const VerificationMeta(
+    'integrationId',
+  );
+  @override
+  late final GeneratedColumn<String> integrationId = GeneratedColumn<String>(
+    'integration_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _issueTypeMeta = const VerificationMeta(
+    'issueType',
+  );
+  @override
+  late final GeneratedColumn<String> issueType = GeneratedColumn<String>(
+    'issue_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalIssueIdMeta = const VerificationMeta(
+    'externalIssueId',
+  );
+  @override
+  late final GeneratedColumn<String> externalIssueId = GeneratedColumn<String>(
+    'external_issue_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalIssueKeyMeta = const VerificationMeta(
+    'externalIssueKey',
+  );
+  @override
+  late final GeneratedColumn<String> externalIssueKey = GeneratedColumn<String>(
+    'external_issue_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalIssueUrlMeta = const VerificationMeta(
+    'externalIssueUrl',
+  );
+  @override
+  late final GeneratedColumn<String> externalIssueUrl = GeneratedColumn<String>(
+    'external_issue_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalTitleMeta = const VerificationMeta(
+    'externalTitle',
+  );
+  @override
+  late final GeneratedColumn<String> externalTitle = GeneratedColumn<String>(
+    'external_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalStatusMeta = const VerificationMeta(
+    'externalStatus',
+  );
+  @override
+  late final GeneratedColumn<String> externalStatus = GeneratedColumn<String>(
+    'external_status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalPriorityMeta = const VerificationMeta(
+    'externalPriority',
+  );
+  @override
+  late final GeneratedColumn<String> externalPriority = GeneratedColumn<String>(
+    'external_priority',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalAssigneeMeta = const VerificationMeta(
+    'externalAssignee',
+  );
+  @override
+  late final GeneratedColumn<String> externalAssignee = GeneratedColumn<String>(
+    'external_assignee',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalUpdatedAtMeta = const VerificationMeta(
+    'externalUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> externalUpdatedAt = GeneratedColumn<int>(
+    'external_updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
+    'lastSyncedAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastSyncedAt = GeneratedColumn<int>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _hasConflictMeta = const VerificationMeta(
+    'hasConflict',
+  );
+  @override
+  late final GeneratedColumn<bool> hasConflict = GeneratedColumn<bool>(
+    'has_conflict',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_conflict" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _conflictDataMeta = const VerificationMeta(
+    'conflictData',
+  );
+  @override
+  late final GeneratedColumn<String> conflictData = GeneratedColumn<String>(
+    'conflict_data',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pullChangesMeta = const VerificationMeta(
+    'pullChanges',
+  );
+  @override
+  late final GeneratedColumn<bool> pullChanges = GeneratedColumn<bool>(
+    'pull_changes',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pull_changes" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _pushChangesMeta = const VerificationMeta(
+    'pushChanges',
+  );
+  @override
+  late final GeneratedColumn<bool> pushChanges = GeneratedColumn<bool>(
+    'push_changes',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("push_changes" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modifiedMeta = const VerificationMeta(
+    'modified',
+  );
+  @override
+  late final GeneratedColumn<int> modified = GeneratedColumn<int>(
+    'modified',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    taskId,
+    integrationId,
+    issueType,
+    externalIssueId,
+    externalIssueKey,
+    externalIssueUrl,
+    externalTitle,
+    externalStatus,
+    externalPriority,
+    externalAssignee,
+    externalUpdatedAt,
+    lastSyncedAt,
+    hasConflict,
+    conflictData,
+    pullChanges,
+    pushChanges,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'issue_links';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<IssueLink> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('integration_id')) {
+      context.handle(
+        _integrationIdMeta,
+        integrationId.isAcceptableOrUnknown(
+          data['integration_id']!,
+          _integrationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_integrationIdMeta);
+    }
+    if (data.containsKey('issue_type')) {
+      context.handle(
+        _issueTypeMeta,
+        issueType.isAcceptableOrUnknown(data['issue_type']!, _issueTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_issueTypeMeta);
+    }
+    if (data.containsKey('external_issue_id')) {
+      context.handle(
+        _externalIssueIdMeta,
+        externalIssueId.isAcceptableOrUnknown(
+          data['external_issue_id']!,
+          _externalIssueIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_externalIssueIdMeta);
+    }
+    if (data.containsKey('external_issue_key')) {
+      context.handle(
+        _externalIssueKeyMeta,
+        externalIssueKey.isAcceptableOrUnknown(
+          data['external_issue_key']!,
+          _externalIssueKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_issue_url')) {
+      context.handle(
+        _externalIssueUrlMeta,
+        externalIssueUrl.isAcceptableOrUnknown(
+          data['external_issue_url']!,
+          _externalIssueUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_title')) {
+      context.handle(
+        _externalTitleMeta,
+        externalTitle.isAcceptableOrUnknown(
+          data['external_title']!,
+          _externalTitleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_status')) {
+      context.handle(
+        _externalStatusMeta,
+        externalStatus.isAcceptableOrUnknown(
+          data['external_status']!,
+          _externalStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_priority')) {
+      context.handle(
+        _externalPriorityMeta,
+        externalPriority.isAcceptableOrUnknown(
+          data['external_priority']!,
+          _externalPriorityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_assignee')) {
+      context.handle(
+        _externalAssigneeMeta,
+        externalAssignee.isAcceptableOrUnknown(
+          data['external_assignee']!,
+          _externalAssigneeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_updated_at')) {
+      context.handle(
+        _externalUpdatedAtMeta,
+        externalUpdatedAt.isAcceptableOrUnknown(
+          data['external_updated_at']!,
+          _externalUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_synced_at')) {
+      context.handle(
+        _lastSyncedAtMeta,
+        lastSyncedAt.isAcceptableOrUnknown(
+          data['last_synced_at']!,
+          _lastSyncedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('has_conflict')) {
+      context.handle(
+        _hasConflictMeta,
+        hasConflict.isAcceptableOrUnknown(
+          data['has_conflict']!,
+          _hasConflictMeta,
+        ),
+      );
+    }
+    if (data.containsKey('conflict_data')) {
+      context.handle(
+        _conflictDataMeta,
+        conflictData.isAcceptableOrUnknown(
+          data['conflict_data']!,
+          _conflictDataMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pull_changes')) {
+      context.handle(
+        _pullChangesMeta,
+        pullChanges.isAcceptableOrUnknown(
+          data['pull_changes']!,
+          _pullChangesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('push_changes')) {
+      context.handle(
+        _pushChangesMeta,
+        pushChanges.isAcceptableOrUnknown(
+          data['push_changes']!,
+          _pushChangesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('modified')) {
+      context.handle(
+        _modifiedMeta,
+        modified.isAcceptableOrUnknown(data['modified']!, _modifiedMeta),
+      );
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  IssueLink map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return IssueLink(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      integrationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}integration_id'],
+      )!,
+      issueType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}issue_type'],
+      )!,
+      externalIssueId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_issue_id'],
+      )!,
+      externalIssueKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_issue_key'],
+      ),
+      externalIssueUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_issue_url'],
+      ),
+      externalTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_title'],
+      ),
+      externalStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_status'],
+      ),
+      externalPriority: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_priority'],
+      ),
+      externalAssignee: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_assignee'],
+      ),
+      externalUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}external_updated_at'],
+      ),
+      lastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_synced_at'],
+      ),
+      hasConflict: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_conflict'],
+      )!,
+      conflictData: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conflict_data'],
+      ),
+      pullChanges: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pull_changes'],
+      )!,
+      pushChanges: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}push_changes'],
+      )!,
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      modified: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}modified'],
+      ),
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $IssueLinksTable createAlias(String alias) {
+    return $IssueLinksTable(attachedDatabase, alias);
+  }
+}
+
+class IssueLink extends DataClass implements Insertable<IssueLink> {
+  final String id;
+  final String taskId;
+  final String integrationId;
+  final String issueType;
+  final String externalIssueId;
+  final String? externalIssueKey;
+  final String? externalIssueUrl;
+  final String? externalTitle;
+  final String? externalStatus;
+  final String? externalPriority;
+  final String? externalAssignee;
+  final int? externalUpdatedAt;
+  final int? lastSyncedAt;
+  final bool hasConflict;
+  final String? conflictData;
+  final bool pullChanges;
+  final bool pushChanges;
+  final int created;
+  final int? modified;
+  final String crdtClock;
+  final String crdtState;
+  const IssueLink({
+    required this.id,
+    required this.taskId,
+    required this.integrationId,
+    required this.issueType,
+    required this.externalIssueId,
+    this.externalIssueKey,
+    this.externalIssueUrl,
+    this.externalTitle,
+    this.externalStatus,
+    this.externalPriority,
+    this.externalAssignee,
+    this.externalUpdatedAt,
+    this.lastSyncedAt,
+    required this.hasConflict,
+    this.conflictData,
+    required this.pullChanges,
+    required this.pushChanges,
+    required this.created,
+    this.modified,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['task_id'] = Variable<String>(taskId);
+    map['integration_id'] = Variable<String>(integrationId);
+    map['issue_type'] = Variable<String>(issueType);
+    map['external_issue_id'] = Variable<String>(externalIssueId);
+    if (!nullToAbsent || externalIssueKey != null) {
+      map['external_issue_key'] = Variable<String>(externalIssueKey);
+    }
+    if (!nullToAbsent || externalIssueUrl != null) {
+      map['external_issue_url'] = Variable<String>(externalIssueUrl);
+    }
+    if (!nullToAbsent || externalTitle != null) {
+      map['external_title'] = Variable<String>(externalTitle);
+    }
+    if (!nullToAbsent || externalStatus != null) {
+      map['external_status'] = Variable<String>(externalStatus);
+    }
+    if (!nullToAbsent || externalPriority != null) {
+      map['external_priority'] = Variable<String>(externalPriority);
+    }
+    if (!nullToAbsent || externalAssignee != null) {
+      map['external_assignee'] = Variable<String>(externalAssignee);
+    }
+    if (!nullToAbsent || externalUpdatedAt != null) {
+      map['external_updated_at'] = Variable<int>(externalUpdatedAt);
+    }
+    if (!nullToAbsent || lastSyncedAt != null) {
+      map['last_synced_at'] = Variable<int>(lastSyncedAt);
+    }
+    map['has_conflict'] = Variable<bool>(hasConflict);
+    if (!nullToAbsent || conflictData != null) {
+      map['conflict_data'] = Variable<String>(conflictData);
+    }
+    map['pull_changes'] = Variable<bool>(pullChanges);
+    map['push_changes'] = Variable<bool>(pushChanges);
+    map['created'] = Variable<int>(created);
+    if (!nullToAbsent || modified != null) {
+      map['modified'] = Variable<int>(modified);
+    }
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  IssueLinksCompanion toCompanion(bool nullToAbsent) {
+    return IssueLinksCompanion(
+      id: Value(id),
+      taskId: Value(taskId),
+      integrationId: Value(integrationId),
+      issueType: Value(issueType),
+      externalIssueId: Value(externalIssueId),
+      externalIssueKey: externalIssueKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalIssueKey),
+      externalIssueUrl: externalIssueUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalIssueUrl),
+      externalTitle: externalTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalTitle),
+      externalStatus: externalStatus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalStatus),
+      externalPriority: externalPriority == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalPriority),
+      externalAssignee: externalAssignee == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalAssignee),
+      externalUpdatedAt: externalUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalUpdatedAt),
+      lastSyncedAt: lastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncedAt),
+      hasConflict: Value(hasConflict),
+      conflictData: conflictData == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conflictData),
+      pullChanges: Value(pullChanges),
+      pushChanges: Value(pushChanges),
+      created: Value(created),
+      modified: modified == null && nullToAbsent
+          ? const Value.absent()
+          : Value(modified),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory IssueLink.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return IssueLink(
+      id: serializer.fromJson<String>(json['id']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      integrationId: serializer.fromJson<String>(json['integrationId']),
+      issueType: serializer.fromJson<String>(json['issueType']),
+      externalIssueId: serializer.fromJson<String>(json['externalIssueId']),
+      externalIssueKey: serializer.fromJson<String?>(json['externalIssueKey']),
+      externalIssueUrl: serializer.fromJson<String?>(json['externalIssueUrl']),
+      externalTitle: serializer.fromJson<String?>(json['externalTitle']),
+      externalStatus: serializer.fromJson<String?>(json['externalStatus']),
+      externalPriority: serializer.fromJson<String?>(json['externalPriority']),
+      externalAssignee: serializer.fromJson<String?>(json['externalAssignee']),
+      externalUpdatedAt: serializer.fromJson<int?>(json['externalUpdatedAt']),
+      lastSyncedAt: serializer.fromJson<int?>(json['lastSyncedAt']),
+      hasConflict: serializer.fromJson<bool>(json['hasConflict']),
+      conflictData: serializer.fromJson<String?>(json['conflictData']),
+      pullChanges: serializer.fromJson<bool>(json['pullChanges']),
+      pushChanges: serializer.fromJson<bool>(json['pushChanges']),
+      created: serializer.fromJson<int>(json['created']),
+      modified: serializer.fromJson<int?>(json['modified']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'taskId': serializer.toJson<String>(taskId),
+      'integrationId': serializer.toJson<String>(integrationId),
+      'issueType': serializer.toJson<String>(issueType),
+      'externalIssueId': serializer.toJson<String>(externalIssueId),
+      'externalIssueKey': serializer.toJson<String?>(externalIssueKey),
+      'externalIssueUrl': serializer.toJson<String?>(externalIssueUrl),
+      'externalTitle': serializer.toJson<String?>(externalTitle),
+      'externalStatus': serializer.toJson<String?>(externalStatus),
+      'externalPriority': serializer.toJson<String?>(externalPriority),
+      'externalAssignee': serializer.toJson<String?>(externalAssignee),
+      'externalUpdatedAt': serializer.toJson<int?>(externalUpdatedAt),
+      'lastSyncedAt': serializer.toJson<int?>(lastSyncedAt),
+      'hasConflict': serializer.toJson<bool>(hasConflict),
+      'conflictData': serializer.toJson<String?>(conflictData),
+      'pullChanges': serializer.toJson<bool>(pullChanges),
+      'pushChanges': serializer.toJson<bool>(pushChanges),
+      'created': serializer.toJson<int>(created),
+      'modified': serializer.toJson<int?>(modified),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  IssueLink copyWith({
+    String? id,
+    String? taskId,
+    String? integrationId,
+    String? issueType,
+    String? externalIssueId,
+    Value<String?> externalIssueKey = const Value.absent(),
+    Value<String?> externalIssueUrl = const Value.absent(),
+    Value<String?> externalTitle = const Value.absent(),
+    Value<String?> externalStatus = const Value.absent(),
+    Value<String?> externalPriority = const Value.absent(),
+    Value<String?> externalAssignee = const Value.absent(),
+    Value<int?> externalUpdatedAt = const Value.absent(),
+    Value<int?> lastSyncedAt = const Value.absent(),
+    bool? hasConflict,
+    Value<String?> conflictData = const Value.absent(),
+    bool? pullChanges,
+    bool? pushChanges,
+    int? created,
+    Value<int?> modified = const Value.absent(),
+    String? crdtClock,
+    String? crdtState,
+  }) => IssueLink(
+    id: id ?? this.id,
+    taskId: taskId ?? this.taskId,
+    integrationId: integrationId ?? this.integrationId,
+    issueType: issueType ?? this.issueType,
+    externalIssueId: externalIssueId ?? this.externalIssueId,
+    externalIssueKey: externalIssueKey.present
+        ? externalIssueKey.value
+        : this.externalIssueKey,
+    externalIssueUrl: externalIssueUrl.present
+        ? externalIssueUrl.value
+        : this.externalIssueUrl,
+    externalTitle: externalTitle.present
+        ? externalTitle.value
+        : this.externalTitle,
+    externalStatus: externalStatus.present
+        ? externalStatus.value
+        : this.externalStatus,
+    externalPriority: externalPriority.present
+        ? externalPriority.value
+        : this.externalPriority,
+    externalAssignee: externalAssignee.present
+        ? externalAssignee.value
+        : this.externalAssignee,
+    externalUpdatedAt: externalUpdatedAt.present
+        ? externalUpdatedAt.value
+        : this.externalUpdatedAt,
+    lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+    hasConflict: hasConflict ?? this.hasConflict,
+    conflictData: conflictData.present ? conflictData.value : this.conflictData,
+    pullChanges: pullChanges ?? this.pullChanges,
+    pushChanges: pushChanges ?? this.pushChanges,
+    created: created ?? this.created,
+    modified: modified.present ? modified.value : this.modified,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  IssueLink copyWithCompanion(IssueLinksCompanion data) {
+    return IssueLink(
+      id: data.id.present ? data.id.value : this.id,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      integrationId: data.integrationId.present
+          ? data.integrationId.value
+          : this.integrationId,
+      issueType: data.issueType.present ? data.issueType.value : this.issueType,
+      externalIssueId: data.externalIssueId.present
+          ? data.externalIssueId.value
+          : this.externalIssueId,
+      externalIssueKey: data.externalIssueKey.present
+          ? data.externalIssueKey.value
+          : this.externalIssueKey,
+      externalIssueUrl: data.externalIssueUrl.present
+          ? data.externalIssueUrl.value
+          : this.externalIssueUrl,
+      externalTitle: data.externalTitle.present
+          ? data.externalTitle.value
+          : this.externalTitle,
+      externalStatus: data.externalStatus.present
+          ? data.externalStatus.value
+          : this.externalStatus,
+      externalPriority: data.externalPriority.present
+          ? data.externalPriority.value
+          : this.externalPriority,
+      externalAssignee: data.externalAssignee.present
+          ? data.externalAssignee.value
+          : this.externalAssignee,
+      externalUpdatedAt: data.externalUpdatedAt.present
+          ? data.externalUpdatedAt.value
+          : this.externalUpdatedAt,
+      lastSyncedAt: data.lastSyncedAt.present
+          ? data.lastSyncedAt.value
+          : this.lastSyncedAt,
+      hasConflict: data.hasConflict.present
+          ? data.hasConflict.value
+          : this.hasConflict,
+      conflictData: data.conflictData.present
+          ? data.conflictData.value
+          : this.conflictData,
+      pullChanges: data.pullChanges.present
+          ? data.pullChanges.value
+          : this.pullChanges,
+      pushChanges: data.pushChanges.present
+          ? data.pushChanges.value
+          : this.pushChanges,
+      created: data.created.present ? data.created.value : this.created,
+      modified: data.modified.present ? data.modified.value : this.modified,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('IssueLink(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('integrationId: $integrationId, ')
+          ..write('issueType: $issueType, ')
+          ..write('externalIssueId: $externalIssueId, ')
+          ..write('externalIssueKey: $externalIssueKey, ')
+          ..write('externalIssueUrl: $externalIssueUrl, ')
+          ..write('externalTitle: $externalTitle, ')
+          ..write('externalStatus: $externalStatus, ')
+          ..write('externalPriority: $externalPriority, ')
+          ..write('externalAssignee: $externalAssignee, ')
+          ..write('externalUpdatedAt: $externalUpdatedAt, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('hasConflict: $hasConflict, ')
+          ..write('conflictData: $conflictData, ')
+          ..write('pullChanges: $pullChanges, ')
+          ..write('pushChanges: $pushChanges, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    taskId,
+    integrationId,
+    issueType,
+    externalIssueId,
+    externalIssueKey,
+    externalIssueUrl,
+    externalTitle,
+    externalStatus,
+    externalPriority,
+    externalAssignee,
+    externalUpdatedAt,
+    lastSyncedAt,
+    hasConflict,
+    conflictData,
+    pullChanges,
+    pushChanges,
+    created,
+    modified,
+    crdtClock,
+    crdtState,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is IssueLink &&
+          other.id == this.id &&
+          other.taskId == this.taskId &&
+          other.integrationId == this.integrationId &&
+          other.issueType == this.issueType &&
+          other.externalIssueId == this.externalIssueId &&
+          other.externalIssueKey == this.externalIssueKey &&
+          other.externalIssueUrl == this.externalIssueUrl &&
+          other.externalTitle == this.externalTitle &&
+          other.externalStatus == this.externalStatus &&
+          other.externalPriority == this.externalPriority &&
+          other.externalAssignee == this.externalAssignee &&
+          other.externalUpdatedAt == this.externalUpdatedAt &&
+          other.lastSyncedAt == this.lastSyncedAt &&
+          other.hasConflict == this.hasConflict &&
+          other.conflictData == this.conflictData &&
+          other.pullChanges == this.pullChanges &&
+          other.pushChanges == this.pushChanges &&
+          other.created == this.created &&
+          other.modified == this.modified &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class IssueLinksCompanion extends UpdateCompanion<IssueLink> {
+  final Value<String> id;
+  final Value<String> taskId;
+  final Value<String> integrationId;
+  final Value<String> issueType;
+  final Value<String> externalIssueId;
+  final Value<String?> externalIssueKey;
+  final Value<String?> externalIssueUrl;
+  final Value<String?> externalTitle;
+  final Value<String?> externalStatus;
+  final Value<String?> externalPriority;
+  final Value<String?> externalAssignee;
+  final Value<int?> externalUpdatedAt;
+  final Value<int?> lastSyncedAt;
+  final Value<bool> hasConflict;
+  final Value<String?> conflictData;
+  final Value<bool> pullChanges;
+  final Value<bool> pushChanges;
+  final Value<int> created;
+  final Value<int?> modified;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const IssueLinksCompanion({
+    this.id = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.integrationId = const Value.absent(),
+    this.issueType = const Value.absent(),
+    this.externalIssueId = const Value.absent(),
+    this.externalIssueKey = const Value.absent(),
+    this.externalIssueUrl = const Value.absent(),
+    this.externalTitle = const Value.absent(),
+    this.externalStatus = const Value.absent(),
+    this.externalPriority = const Value.absent(),
+    this.externalAssignee = const Value.absent(),
+    this.externalUpdatedAt = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    this.hasConflict = const Value.absent(),
+    this.conflictData = const Value.absent(),
+    this.pullChanges = const Value.absent(),
+    this.pushChanges = const Value.absent(),
+    this.created = const Value.absent(),
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  IssueLinksCompanion.insert({
+    required String id,
+    required String taskId,
+    required String integrationId,
+    required String issueType,
+    required String externalIssueId,
+    this.externalIssueKey = const Value.absent(),
+    this.externalIssueUrl = const Value.absent(),
+    this.externalTitle = const Value.absent(),
+    this.externalStatus = const Value.absent(),
+    this.externalPriority = const Value.absent(),
+    this.externalAssignee = const Value.absent(),
+    this.externalUpdatedAt = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    this.hasConflict = const Value.absent(),
+    this.conflictData = const Value.absent(),
+    this.pullChanges = const Value.absent(),
+    this.pushChanges = const Value.absent(),
+    required int created,
+    this.modified = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       taskId = Value(taskId),
+       integrationId = Value(integrationId),
+       issueType = Value(issueType),
+       externalIssueId = Value(externalIssueId),
+       created = Value(created);
+  static Insertable<IssueLink> custom({
+    Expression<String>? id,
+    Expression<String>? taskId,
+    Expression<String>? integrationId,
+    Expression<String>? issueType,
+    Expression<String>? externalIssueId,
+    Expression<String>? externalIssueKey,
+    Expression<String>? externalIssueUrl,
+    Expression<String>? externalTitle,
+    Expression<String>? externalStatus,
+    Expression<String>? externalPriority,
+    Expression<String>? externalAssignee,
+    Expression<int>? externalUpdatedAt,
+    Expression<int>? lastSyncedAt,
+    Expression<bool>? hasConflict,
+    Expression<String>? conflictData,
+    Expression<bool>? pullChanges,
+    Expression<bool>? pushChanges,
+    Expression<int>? created,
+    Expression<int>? modified,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (taskId != null) 'task_id': taskId,
+      if (integrationId != null) 'integration_id': integrationId,
+      if (issueType != null) 'issue_type': issueType,
+      if (externalIssueId != null) 'external_issue_id': externalIssueId,
+      if (externalIssueKey != null) 'external_issue_key': externalIssueKey,
+      if (externalIssueUrl != null) 'external_issue_url': externalIssueUrl,
+      if (externalTitle != null) 'external_title': externalTitle,
+      if (externalStatus != null) 'external_status': externalStatus,
+      if (externalPriority != null) 'external_priority': externalPriority,
+      if (externalAssignee != null) 'external_assignee': externalAssignee,
+      if (externalUpdatedAt != null) 'external_updated_at': externalUpdatedAt,
+      if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+      if (hasConflict != null) 'has_conflict': hasConflict,
+      if (conflictData != null) 'conflict_data': conflictData,
+      if (pullChanges != null) 'pull_changes': pullChanges,
+      if (pushChanges != null) 'push_changes': pushChanges,
+      if (created != null) 'created': created,
+      if (modified != null) 'modified': modified,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  IssueLinksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? taskId,
+    Value<String>? integrationId,
+    Value<String>? issueType,
+    Value<String>? externalIssueId,
+    Value<String?>? externalIssueKey,
+    Value<String?>? externalIssueUrl,
+    Value<String?>? externalTitle,
+    Value<String?>? externalStatus,
+    Value<String?>? externalPriority,
+    Value<String?>? externalAssignee,
+    Value<int?>? externalUpdatedAt,
+    Value<int?>? lastSyncedAt,
+    Value<bool>? hasConflict,
+    Value<String?>? conflictData,
+    Value<bool>? pullChanges,
+    Value<bool>? pushChanges,
+    Value<int>? created,
+    Value<int?>? modified,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return IssueLinksCompanion(
+      id: id ?? this.id,
+      taskId: taskId ?? this.taskId,
+      integrationId: integrationId ?? this.integrationId,
+      issueType: issueType ?? this.issueType,
+      externalIssueId: externalIssueId ?? this.externalIssueId,
+      externalIssueKey: externalIssueKey ?? this.externalIssueKey,
+      externalIssueUrl: externalIssueUrl ?? this.externalIssueUrl,
+      externalTitle: externalTitle ?? this.externalTitle,
+      externalStatus: externalStatus ?? this.externalStatus,
+      externalPriority: externalPriority ?? this.externalPriority,
+      externalAssignee: externalAssignee ?? this.externalAssignee,
+      externalUpdatedAt: externalUpdatedAt ?? this.externalUpdatedAt,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      hasConflict: hasConflict ?? this.hasConflict,
+      conflictData: conflictData ?? this.conflictData,
+      pullChanges: pullChanges ?? this.pullChanges,
+      pushChanges: pushChanges ?? this.pushChanges,
+      created: created ?? this.created,
+      modified: modified ?? this.modified,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (integrationId.present) {
+      map['integration_id'] = Variable<String>(integrationId.value);
+    }
+    if (issueType.present) {
+      map['issue_type'] = Variable<String>(issueType.value);
+    }
+    if (externalIssueId.present) {
+      map['external_issue_id'] = Variable<String>(externalIssueId.value);
+    }
+    if (externalIssueKey.present) {
+      map['external_issue_key'] = Variable<String>(externalIssueKey.value);
+    }
+    if (externalIssueUrl.present) {
+      map['external_issue_url'] = Variable<String>(externalIssueUrl.value);
+    }
+    if (externalTitle.present) {
+      map['external_title'] = Variable<String>(externalTitle.value);
+    }
+    if (externalStatus.present) {
+      map['external_status'] = Variable<String>(externalStatus.value);
+    }
+    if (externalPriority.present) {
+      map['external_priority'] = Variable<String>(externalPriority.value);
+    }
+    if (externalAssignee.present) {
+      map['external_assignee'] = Variable<String>(externalAssignee.value);
+    }
+    if (externalUpdatedAt.present) {
+      map['external_updated_at'] = Variable<int>(externalUpdatedAt.value);
+    }
+    if (lastSyncedAt.present) {
+      map['last_synced_at'] = Variable<int>(lastSyncedAt.value);
+    }
+    if (hasConflict.present) {
+      map['has_conflict'] = Variable<bool>(hasConflict.value);
+    }
+    if (conflictData.present) {
+      map['conflict_data'] = Variable<String>(conflictData.value);
+    }
+    if (pullChanges.present) {
+      map['pull_changes'] = Variable<bool>(pullChanges.value);
+    }
+    if (pushChanges.present) {
+      map['push_changes'] = Variable<bool>(pushChanges.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (modified.present) {
+      map['modified'] = Variable<int>(modified.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('IssueLinksCompanion(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('integrationId: $integrationId, ')
+          ..write('issueType: $issueType, ')
+          ..write('externalIssueId: $externalIssueId, ')
+          ..write('externalIssueKey: $externalIssueKey, ')
+          ..write('externalIssueUrl: $externalIssueUrl, ')
+          ..write('externalTitle: $externalTitle, ')
+          ..write('externalStatus: $externalStatus, ')
+          ..write('externalPriority: $externalPriority, ')
+          ..write('externalAssignee: $externalAssignee, ')
+          ..write('externalUpdatedAt: $externalUpdatedAt, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('hasConflict: $hasConflict, ')
+          ..write('conflictData: $conflictData, ')
+          ..write('pullChanges: $pullChanges, ')
+          ..write('pushChanges: $pushChanges, ')
+          ..write('created: $created, ')
+          ..write('modified: $modified, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6431,6 +9831,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WorklogEntriesTable worklogEntries = $WorklogEntriesTable(this);
   late final $NotesTable notes = $NotesTable(this);
   late final $TaskRepeatCfgsTable taskRepeatCfgs = $TaskRepeatCfgsTable(this);
+  late final $JiraIntegrationsTable jiraIntegrations = $JiraIntegrationsTable(
+    this,
+  );
+  late final $GithubIntegrationsTable githubIntegrations =
+      $GithubIntegrationsTable(this);
+  late final $IssueLinksTable issueLinks = $IssueLinksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6443,6 +9849,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     worklogEntries,
     notes,
     taskRepeatCfgs,
+    jiraIntegrations,
+    githubIntegrations,
+    issueLinks,
   ];
 }
 
@@ -9358,6 +12767,1524 @@ typedef $$TaskRepeatCfgsTableProcessedTableManager =
       TaskRepeatCfg,
       PrefetchHooks Function()
     >;
+typedef $$JiraIntegrationsTableCreateCompanionBuilder =
+    JiraIntegrationsCompanion Function({
+      required String id,
+      Value<String?> projectId,
+      required String baseUrl,
+      required String email,
+      required String apiToken,
+      required String jiraProjectKey,
+      Value<String?> boardId,
+      Value<String?> jqlFilter,
+      Value<bool> syncEnabled,
+      Value<bool> syncSubtasks,
+      Value<bool> syncWorklogs,
+      Value<int> syncIntervalMinutes,
+      Value<String> fieldMappings,
+      Value<String> statusMappings,
+      Value<int?> lastSyncAt,
+      Value<String?> lastSyncError,
+      required int created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$JiraIntegrationsTableUpdateCompanionBuilder =
+    JiraIntegrationsCompanion Function({
+      Value<String> id,
+      Value<String?> projectId,
+      Value<String> baseUrl,
+      Value<String> email,
+      Value<String> apiToken,
+      Value<String> jiraProjectKey,
+      Value<String?> boardId,
+      Value<String?> jqlFilter,
+      Value<bool> syncEnabled,
+      Value<bool> syncSubtasks,
+      Value<bool> syncWorklogs,
+      Value<int> syncIntervalMinutes,
+      Value<String> fieldMappings,
+      Value<String> statusMappings,
+      Value<int?> lastSyncAt,
+      Value<String?> lastSyncError,
+      Value<int> created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$JiraIntegrationsTableFilterComposer
+    extends Composer<_$AppDatabase, $JiraIntegrationsTable> {
+  $$JiraIntegrationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get apiToken => $composableBuilder(
+    column: $table.apiToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jiraProjectKey => $composableBuilder(
+    column: $table.jiraProjectKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get boardId => $composableBuilder(
+    column: $table.boardId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jqlFilter => $composableBuilder(
+    column: $table.jqlFilter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get syncSubtasks => $composableBuilder(
+    column: $table.syncSubtasks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get syncWorklogs => $composableBuilder(
+    column: $table.syncWorklogs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldMappings => $composableBuilder(
+    column: $table.fieldMappings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JiraIntegrationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $JiraIntegrationsTable> {
+  $$JiraIntegrationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get apiToken => $composableBuilder(
+    column: $table.apiToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get jiraProjectKey => $composableBuilder(
+    column: $table.jiraProjectKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get boardId => $composableBuilder(
+    column: $table.boardId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get jqlFilter => $composableBuilder(
+    column: $table.jqlFilter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get syncSubtasks => $composableBuilder(
+    column: $table.syncSubtasks,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get syncWorklogs => $composableBuilder(
+    column: $table.syncWorklogs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fieldMappings => $composableBuilder(
+    column: $table.fieldMappings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JiraIntegrationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JiraIntegrationsTable> {
+  $$JiraIntegrationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get baseUrl =>
+      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get apiToken =>
+      $composableBuilder(column: $table.apiToken, builder: (column) => column);
+
+  GeneratedColumn<String> get jiraProjectKey => $composableBuilder(
+    column: $table.jiraProjectKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get boardId =>
+      $composableBuilder(column: $table.boardId, builder: (column) => column);
+
+  GeneratedColumn<String> get jqlFilter =>
+      $composableBuilder(column: $table.jqlFilter, builder: (column) => column);
+
+  GeneratedColumn<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get syncSubtasks => $composableBuilder(
+    column: $table.syncSubtasks,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get syncWorklogs => $composableBuilder(
+    column: $table.syncWorklogs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fieldMappings => $composableBuilder(
+    column: $table.fieldMappings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<int> get modified =>
+      $composableBuilder(column: $table.modified, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$JiraIntegrationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JiraIntegrationsTable,
+          JiraIntegration,
+          $$JiraIntegrationsTableFilterComposer,
+          $$JiraIntegrationsTableOrderingComposer,
+          $$JiraIntegrationsTableAnnotationComposer,
+          $$JiraIntegrationsTableCreateCompanionBuilder,
+          $$JiraIntegrationsTableUpdateCompanionBuilder,
+          (
+            JiraIntegration,
+            BaseReferences<
+              _$AppDatabase,
+              $JiraIntegrationsTable,
+              JiraIntegration
+            >,
+          ),
+          JiraIntegration,
+          PrefetchHooks Function()
+        > {
+  $$JiraIntegrationsTableTableManager(
+    _$AppDatabase db,
+    $JiraIntegrationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JiraIntegrationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JiraIntegrationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JiraIntegrationsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
+                Value<String> baseUrl = const Value.absent(),
+                Value<String> email = const Value.absent(),
+                Value<String> apiToken = const Value.absent(),
+                Value<String> jiraProjectKey = const Value.absent(),
+                Value<String?> boardId = const Value.absent(),
+                Value<String?> jqlFilter = const Value.absent(),
+                Value<bool> syncEnabled = const Value.absent(),
+                Value<bool> syncSubtasks = const Value.absent(),
+                Value<bool> syncWorklogs = const Value.absent(),
+                Value<int> syncIntervalMinutes = const Value.absent(),
+                Value<String> fieldMappings = const Value.absent(),
+                Value<String> statusMappings = const Value.absent(),
+                Value<int?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JiraIntegrationsCompanion(
+                id: id,
+                projectId: projectId,
+                baseUrl: baseUrl,
+                email: email,
+                apiToken: apiToken,
+                jiraProjectKey: jiraProjectKey,
+                boardId: boardId,
+                jqlFilter: jqlFilter,
+                syncEnabled: syncEnabled,
+                syncSubtasks: syncSubtasks,
+                syncWorklogs: syncWorklogs,
+                syncIntervalMinutes: syncIntervalMinutes,
+                fieldMappings: fieldMappings,
+                statusMappings: statusMappings,
+                lastSyncAt: lastSyncAt,
+                lastSyncError: lastSyncError,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String?> projectId = const Value.absent(),
+                required String baseUrl,
+                required String email,
+                required String apiToken,
+                required String jiraProjectKey,
+                Value<String?> boardId = const Value.absent(),
+                Value<String?> jqlFilter = const Value.absent(),
+                Value<bool> syncEnabled = const Value.absent(),
+                Value<bool> syncSubtasks = const Value.absent(),
+                Value<bool> syncWorklogs = const Value.absent(),
+                Value<int> syncIntervalMinutes = const Value.absent(),
+                Value<String> fieldMappings = const Value.absent(),
+                Value<String> statusMappings = const Value.absent(),
+                Value<int?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                required int created,
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JiraIntegrationsCompanion.insert(
+                id: id,
+                projectId: projectId,
+                baseUrl: baseUrl,
+                email: email,
+                apiToken: apiToken,
+                jiraProjectKey: jiraProjectKey,
+                boardId: boardId,
+                jqlFilter: jqlFilter,
+                syncEnabled: syncEnabled,
+                syncSubtasks: syncSubtasks,
+                syncWorklogs: syncWorklogs,
+                syncIntervalMinutes: syncIntervalMinutes,
+                fieldMappings: fieldMappings,
+                statusMappings: statusMappings,
+                lastSyncAt: lastSyncAt,
+                lastSyncError: lastSyncError,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JiraIntegrationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JiraIntegrationsTable,
+      JiraIntegration,
+      $$JiraIntegrationsTableFilterComposer,
+      $$JiraIntegrationsTableOrderingComposer,
+      $$JiraIntegrationsTableAnnotationComposer,
+      $$JiraIntegrationsTableCreateCompanionBuilder,
+      $$JiraIntegrationsTableUpdateCompanionBuilder,
+      (
+        JiraIntegration,
+        BaseReferences<_$AppDatabase, $JiraIntegrationsTable, JiraIntegration>,
+      ),
+      JiraIntegration,
+      PrefetchHooks Function()
+    >;
+typedef $$GithubIntegrationsTableCreateCompanionBuilder =
+    GithubIntegrationsCompanion Function({
+      required String id,
+      Value<String?> projectId,
+      required String owner,
+      required String repo,
+      required String accessToken,
+      Value<String?> labelFilter,
+      Value<bool> syncEnabled,
+      Value<bool> syncClosedIssues,
+      Value<int> syncIntervalMinutes,
+      Value<String> labelMappings,
+      Value<String> statusMappings,
+      Value<String> milestoneMappings,
+      Value<int?> lastSyncAt,
+      Value<String?> lastSyncError,
+      required int created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$GithubIntegrationsTableUpdateCompanionBuilder =
+    GithubIntegrationsCompanion Function({
+      Value<String> id,
+      Value<String?> projectId,
+      Value<String> owner,
+      Value<String> repo,
+      Value<String> accessToken,
+      Value<String?> labelFilter,
+      Value<bool> syncEnabled,
+      Value<bool> syncClosedIssues,
+      Value<int> syncIntervalMinutes,
+      Value<String> labelMappings,
+      Value<String> statusMappings,
+      Value<String> milestoneMappings,
+      Value<int?> lastSyncAt,
+      Value<String?> lastSyncError,
+      Value<int> created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$GithubIntegrationsTableFilterComposer
+    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
+  $$GithubIntegrationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get repo => $composableBuilder(
+    column: $table.repo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get labelFilter => $composableBuilder(
+    column: $table.labelFilter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get syncClosedIssues => $composableBuilder(
+    column: $table.syncClosedIssues,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get labelMappings => $composableBuilder(
+    column: $table.labelMappings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get milestoneMappings => $composableBuilder(
+    column: $table.milestoneMappings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GithubIntegrationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
+  $$GithubIntegrationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get repo => $composableBuilder(
+    column: $table.repo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get labelFilter => $composableBuilder(
+    column: $table.labelFilter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get syncClosedIssues => $composableBuilder(
+    column: $table.syncClosedIssues,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get labelMappings => $composableBuilder(
+    column: $table.labelMappings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get milestoneMappings => $composableBuilder(
+    column: $table.milestoneMappings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GithubIntegrationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
+  $$GithubIntegrationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
+
+  GeneratedColumn<String> get repo =>
+      $composableBuilder(column: $table.repo, builder: (column) => column);
+
+  GeneratedColumn<String> get accessToken => $composableBuilder(
+    column: $table.accessToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get labelFilter => $composableBuilder(
+    column: $table.labelFilter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get syncEnabled => $composableBuilder(
+    column: $table.syncEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get syncClosedIssues => $composableBuilder(
+    column: $table.syncClosedIssues,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get syncIntervalMinutes => $composableBuilder(
+    column: $table.syncIntervalMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get labelMappings => $composableBuilder(
+    column: $table.labelMappings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get statusMappings => $composableBuilder(
+    column: $table.statusMappings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get milestoneMappings => $composableBuilder(
+    column: $table.milestoneMappings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<int> get modified =>
+      $composableBuilder(column: $table.modified, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$GithubIntegrationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GithubIntegrationsTable,
+          GithubIntegration,
+          $$GithubIntegrationsTableFilterComposer,
+          $$GithubIntegrationsTableOrderingComposer,
+          $$GithubIntegrationsTableAnnotationComposer,
+          $$GithubIntegrationsTableCreateCompanionBuilder,
+          $$GithubIntegrationsTableUpdateCompanionBuilder,
+          (
+            GithubIntegration,
+            BaseReferences<
+              _$AppDatabase,
+              $GithubIntegrationsTable,
+              GithubIntegration
+            >,
+          ),
+          GithubIntegration,
+          PrefetchHooks Function()
+        > {
+  $$GithubIntegrationsTableTableManager(
+    _$AppDatabase db,
+    $GithubIntegrationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GithubIntegrationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GithubIntegrationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GithubIntegrationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
+                Value<String> owner = const Value.absent(),
+                Value<String> repo = const Value.absent(),
+                Value<String> accessToken = const Value.absent(),
+                Value<String?> labelFilter = const Value.absent(),
+                Value<bool> syncEnabled = const Value.absent(),
+                Value<bool> syncClosedIssues = const Value.absent(),
+                Value<int> syncIntervalMinutes = const Value.absent(),
+                Value<String> labelMappings = const Value.absent(),
+                Value<String> statusMappings = const Value.absent(),
+                Value<String> milestoneMappings = const Value.absent(),
+                Value<int?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GithubIntegrationsCompanion(
+                id: id,
+                projectId: projectId,
+                owner: owner,
+                repo: repo,
+                accessToken: accessToken,
+                labelFilter: labelFilter,
+                syncEnabled: syncEnabled,
+                syncClosedIssues: syncClosedIssues,
+                syncIntervalMinutes: syncIntervalMinutes,
+                labelMappings: labelMappings,
+                statusMappings: statusMappings,
+                milestoneMappings: milestoneMappings,
+                lastSyncAt: lastSyncAt,
+                lastSyncError: lastSyncError,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String?> projectId = const Value.absent(),
+                required String owner,
+                required String repo,
+                required String accessToken,
+                Value<String?> labelFilter = const Value.absent(),
+                Value<bool> syncEnabled = const Value.absent(),
+                Value<bool> syncClosedIssues = const Value.absent(),
+                Value<int> syncIntervalMinutes = const Value.absent(),
+                Value<String> labelMappings = const Value.absent(),
+                Value<String> statusMappings = const Value.absent(),
+                Value<String> milestoneMappings = const Value.absent(),
+                Value<int?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                required int created,
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GithubIntegrationsCompanion.insert(
+                id: id,
+                projectId: projectId,
+                owner: owner,
+                repo: repo,
+                accessToken: accessToken,
+                labelFilter: labelFilter,
+                syncEnabled: syncEnabled,
+                syncClosedIssues: syncClosedIssues,
+                syncIntervalMinutes: syncIntervalMinutes,
+                labelMappings: labelMappings,
+                statusMappings: statusMappings,
+                milestoneMappings: milestoneMappings,
+                lastSyncAt: lastSyncAt,
+                lastSyncError: lastSyncError,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GithubIntegrationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GithubIntegrationsTable,
+      GithubIntegration,
+      $$GithubIntegrationsTableFilterComposer,
+      $$GithubIntegrationsTableOrderingComposer,
+      $$GithubIntegrationsTableAnnotationComposer,
+      $$GithubIntegrationsTableCreateCompanionBuilder,
+      $$GithubIntegrationsTableUpdateCompanionBuilder,
+      (
+        GithubIntegration,
+        BaseReferences<
+          _$AppDatabase,
+          $GithubIntegrationsTable,
+          GithubIntegration
+        >,
+      ),
+      GithubIntegration,
+      PrefetchHooks Function()
+    >;
+typedef $$IssueLinksTableCreateCompanionBuilder =
+    IssueLinksCompanion Function({
+      required String id,
+      required String taskId,
+      required String integrationId,
+      required String issueType,
+      required String externalIssueId,
+      Value<String?> externalIssueKey,
+      Value<String?> externalIssueUrl,
+      Value<String?> externalTitle,
+      Value<String?> externalStatus,
+      Value<String?> externalPriority,
+      Value<String?> externalAssignee,
+      Value<int?> externalUpdatedAt,
+      Value<int?> lastSyncedAt,
+      Value<bool> hasConflict,
+      Value<String?> conflictData,
+      Value<bool> pullChanges,
+      Value<bool> pushChanges,
+      required int created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$IssueLinksTableUpdateCompanionBuilder =
+    IssueLinksCompanion Function({
+      Value<String> id,
+      Value<String> taskId,
+      Value<String> integrationId,
+      Value<String> issueType,
+      Value<String> externalIssueId,
+      Value<String?> externalIssueKey,
+      Value<String?> externalIssueUrl,
+      Value<String?> externalTitle,
+      Value<String?> externalStatus,
+      Value<String?> externalPriority,
+      Value<String?> externalAssignee,
+      Value<int?> externalUpdatedAt,
+      Value<int?> lastSyncedAt,
+      Value<bool> hasConflict,
+      Value<String?> conflictData,
+      Value<bool> pullChanges,
+      Value<bool> pushChanges,
+      Value<int> created,
+      Value<int?> modified,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$IssueLinksTableFilterComposer
+    extends Composer<_$AppDatabase, $IssueLinksTable> {
+  $$IssueLinksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get integrationId => $composableBuilder(
+    column: $table.integrationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get issueType => $composableBuilder(
+    column: $table.issueType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalIssueId => $composableBuilder(
+    column: $table.externalIssueId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalIssueKey => $composableBuilder(
+    column: $table.externalIssueKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalIssueUrl => $composableBuilder(
+    column: $table.externalIssueUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalTitle => $composableBuilder(
+    column: $table.externalTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalStatus => $composableBuilder(
+    column: $table.externalStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalPriority => $composableBuilder(
+    column: $table.externalPriority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalAssignee => $composableBuilder(
+    column: $table.externalAssignee,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get externalUpdatedAt => $composableBuilder(
+    column: $table.externalUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasConflict => $composableBuilder(
+    column: $table.hasConflict,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conflictData => $composableBuilder(
+    column: $table.conflictData,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pullChanges => $composableBuilder(
+    column: $table.pullChanges,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pushChanges => $composableBuilder(
+    column: $table.pushChanges,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$IssueLinksTableOrderingComposer
+    extends Composer<_$AppDatabase, $IssueLinksTable> {
+  $$IssueLinksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get integrationId => $composableBuilder(
+    column: $table.integrationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get issueType => $composableBuilder(
+    column: $table.issueType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalIssueId => $composableBuilder(
+    column: $table.externalIssueId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalIssueKey => $composableBuilder(
+    column: $table.externalIssueKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalIssueUrl => $composableBuilder(
+    column: $table.externalIssueUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalTitle => $composableBuilder(
+    column: $table.externalTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalStatus => $composableBuilder(
+    column: $table.externalStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalPriority => $composableBuilder(
+    column: $table.externalPriority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalAssignee => $composableBuilder(
+    column: $table.externalAssignee,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get externalUpdatedAt => $composableBuilder(
+    column: $table.externalUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasConflict => $composableBuilder(
+    column: $table.hasConflict,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conflictData => $composableBuilder(
+    column: $table.conflictData,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pullChanges => $composableBuilder(
+    column: $table.pullChanges,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pushChanges => $composableBuilder(
+    column: $table.pushChanges,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get modified => $composableBuilder(
+    column: $table.modified,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$IssueLinksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $IssueLinksTable> {
+  $$IssueLinksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get integrationId => $composableBuilder(
+    column: $table.integrationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get issueType =>
+      $composableBuilder(column: $table.issueType, builder: (column) => column);
+
+  GeneratedColumn<String> get externalIssueId => $composableBuilder(
+    column: $table.externalIssueId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalIssueKey => $composableBuilder(
+    column: $table.externalIssueKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalIssueUrl => $composableBuilder(
+    column: $table.externalIssueUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalTitle => $composableBuilder(
+    column: $table.externalTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalStatus => $composableBuilder(
+    column: $table.externalStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalPriority => $composableBuilder(
+    column: $table.externalPriority,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalAssignee => $composableBuilder(
+    column: $table.externalAssignee,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get externalUpdatedAt => $composableBuilder(
+    column: $table.externalUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get hasConflict => $composableBuilder(
+    column: $table.hasConflict,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get conflictData => $composableBuilder(
+    column: $table.conflictData,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pullChanges => $composableBuilder(
+    column: $table.pullChanges,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pushChanges => $composableBuilder(
+    column: $table.pushChanges,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<int> get modified =>
+      $composableBuilder(column: $table.modified, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$IssueLinksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $IssueLinksTable,
+          IssueLink,
+          $$IssueLinksTableFilterComposer,
+          $$IssueLinksTableOrderingComposer,
+          $$IssueLinksTableAnnotationComposer,
+          $$IssueLinksTableCreateCompanionBuilder,
+          $$IssueLinksTableUpdateCompanionBuilder,
+          (
+            IssueLink,
+            BaseReferences<_$AppDatabase, $IssueLinksTable, IssueLink>,
+          ),
+          IssueLink,
+          PrefetchHooks Function()
+        > {
+  $$IssueLinksTableTableManager(_$AppDatabase db, $IssueLinksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$IssueLinksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$IssueLinksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$IssueLinksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<String> integrationId = const Value.absent(),
+                Value<String> issueType = const Value.absent(),
+                Value<String> externalIssueId = const Value.absent(),
+                Value<String?> externalIssueKey = const Value.absent(),
+                Value<String?> externalIssueUrl = const Value.absent(),
+                Value<String?> externalTitle = const Value.absent(),
+                Value<String?> externalStatus = const Value.absent(),
+                Value<String?> externalPriority = const Value.absent(),
+                Value<String?> externalAssignee = const Value.absent(),
+                Value<int?> externalUpdatedAt = const Value.absent(),
+                Value<int?> lastSyncedAt = const Value.absent(),
+                Value<bool> hasConflict = const Value.absent(),
+                Value<String?> conflictData = const Value.absent(),
+                Value<bool> pullChanges = const Value.absent(),
+                Value<bool> pushChanges = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => IssueLinksCompanion(
+                id: id,
+                taskId: taskId,
+                integrationId: integrationId,
+                issueType: issueType,
+                externalIssueId: externalIssueId,
+                externalIssueKey: externalIssueKey,
+                externalIssueUrl: externalIssueUrl,
+                externalTitle: externalTitle,
+                externalStatus: externalStatus,
+                externalPriority: externalPriority,
+                externalAssignee: externalAssignee,
+                externalUpdatedAt: externalUpdatedAt,
+                lastSyncedAt: lastSyncedAt,
+                hasConflict: hasConflict,
+                conflictData: conflictData,
+                pullChanges: pullChanges,
+                pushChanges: pushChanges,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String taskId,
+                required String integrationId,
+                required String issueType,
+                required String externalIssueId,
+                Value<String?> externalIssueKey = const Value.absent(),
+                Value<String?> externalIssueUrl = const Value.absent(),
+                Value<String?> externalTitle = const Value.absent(),
+                Value<String?> externalStatus = const Value.absent(),
+                Value<String?> externalPriority = const Value.absent(),
+                Value<String?> externalAssignee = const Value.absent(),
+                Value<int?> externalUpdatedAt = const Value.absent(),
+                Value<int?> lastSyncedAt = const Value.absent(),
+                Value<bool> hasConflict = const Value.absent(),
+                Value<String?> conflictData = const Value.absent(),
+                Value<bool> pullChanges = const Value.absent(),
+                Value<bool> pushChanges = const Value.absent(),
+                required int created,
+                Value<int?> modified = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => IssueLinksCompanion.insert(
+                id: id,
+                taskId: taskId,
+                integrationId: integrationId,
+                issueType: issueType,
+                externalIssueId: externalIssueId,
+                externalIssueKey: externalIssueKey,
+                externalIssueUrl: externalIssueUrl,
+                externalTitle: externalTitle,
+                externalStatus: externalStatus,
+                externalPriority: externalPriority,
+                externalAssignee: externalAssignee,
+                externalUpdatedAt: externalUpdatedAt,
+                lastSyncedAt: lastSyncedAt,
+                hasConflict: hasConflict,
+                conflictData: conflictData,
+                pullChanges: pullChanges,
+                pushChanges: pushChanges,
+                created: created,
+                modified: modified,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$IssueLinksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $IssueLinksTable,
+      IssueLink,
+      $$IssueLinksTableFilterComposer,
+      $$IssueLinksTableOrderingComposer,
+      $$IssueLinksTableAnnotationComposer,
+      $$IssueLinksTableCreateCompanionBuilder,
+      $$IssueLinksTableUpdateCompanionBuilder,
+      (IssueLink, BaseReferences<_$AppDatabase, $IssueLinksTable, IssueLink>),
+      IssueLink,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9375,4 +14302,10 @@ class $AppDatabaseManager {
       $$NotesTableTableManager(_db, _db.notes);
   $$TaskRepeatCfgsTableTableManager get taskRepeatCfgs =>
       $$TaskRepeatCfgsTableTableManager(_db, _db.taskRepeatCfgs);
+  $$JiraIntegrationsTableTableManager get jiraIntegrations =>
+      $$JiraIntegrationsTableTableManager(_db, _db.jiraIntegrations);
+  $$GithubIntegrationsTableTableManager get githubIntegrations =>
+      $$GithubIntegrationsTableTableManager(_db, _db.githubIntegrations);
+  $$IssueLinksTableTableManager get issueLinks =>
+      $$IssueLinksTableTableManager(_db, _db.issueLinks);
 }

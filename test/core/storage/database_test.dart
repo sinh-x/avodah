@@ -24,6 +24,9 @@ void main() {
       final worklogs = await db.select(db.worklogEntries).get();
       final notes = await db.select(db.notes).get();
       final repeatCfgs = await db.select(db.taskRepeatCfgs).get();
+      final jiraIntegrations = await db.select(db.jiraIntegrations).get();
+      final githubIntegrations = await db.select(db.githubIntegrations).get();
+      final issueLinks = await db.select(db.issueLinks).get();
 
       expect(tasks, isEmpty);
       expect(subtasks, isEmpty);
@@ -32,6 +35,9 @@ void main() {
       expect(worklogs, isEmpty);
       expect(notes, isEmpty);
       expect(repeatCfgs, isEmpty);
+      expect(jiraIntegrations, isEmpty);
+      expect(githubIntegrations, isEmpty);
+      expect(issueLinks, isEmpty);
     });
   });
 
@@ -215,6 +221,131 @@ void main() {
       expect(emissions.length, greaterThanOrEqualTo(2));
       expect(emissions.first, isEmpty); // Initial empty
       expect(emissions.last.length, 1); // After insert
+    });
+  });
+
+  group('JiraIntegrations table', () {
+    test('inserts and retrieves jira integration', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.into(db.jiraIntegrations).insert(JiraIntegrationsCompanion.insert(
+        id: 'jira-1',
+        baseUrl: 'https://company.atlassian.net',
+        email: 'user@company.com',
+        apiToken: 'encrypted-token',
+        jiraProjectKey: 'PROJ',
+        created: now,
+      ));
+
+      final integrations = await db.select(db.jiraIntegrations).get();
+      expect(integrations.length, 1);
+      expect(integrations.first.baseUrl, 'https://company.atlassian.net');
+      expect(integrations.first.jiraProjectKey, 'PROJ');
+      expect(integrations.first.syncEnabled, true);
+    });
+
+    test('updates sync settings', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.into(db.jiraIntegrations).insert(JiraIntegrationsCompanion.insert(
+        id: 'jira-1',
+        baseUrl: 'https://company.atlassian.net',
+        email: 'user@company.com',
+        apiToken: 'token',
+        jiraProjectKey: 'PROJ',
+        created: now,
+      ));
+
+      await (db.update(db.jiraIntegrations)..where((j) => j.id.equals('jira-1')))
+          .write(const JiraIntegrationsCompanion(
+            syncEnabled: Value(false),
+            syncIntervalMinutes: Value(30),
+          ));
+
+      final integration = await (db.select(db.jiraIntegrations)
+            ..where((j) => j.id.equals('jira-1')))
+          .getSingle();
+
+      expect(integration.syncEnabled, false);
+      expect(integration.syncIntervalMinutes, 30);
+    });
+  });
+
+  group('GithubIntegrations table', () {
+    test('inserts and retrieves github integration', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.into(db.githubIntegrations).insert(GithubIntegrationsCompanion.insert(
+        id: 'github-1',
+        owner: 'myorg',
+        repo: 'myrepo',
+        accessToken: 'ghp_token',
+        created: now,
+      ));
+
+      final integrations = await db.select(db.githubIntegrations).get();
+      expect(integrations.length, 1);
+      expect(integrations.first.owner, 'myorg');
+      expect(integrations.first.repo, 'myrepo');
+      expect(integrations.first.syncEnabled, true);
+    });
+  });
+
+  group('IssueLinks table', () {
+    test('links task to external issue', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
+        id: 'link-1',
+        taskId: 'task-1',
+        integrationId: 'jira-1',
+        issueType: 'jira',
+        externalIssueId: '12345',
+        created: now,
+        externalIssueKey: const Value('PROJ-123'),
+        externalTitle: const Value('Fix login bug'),
+        externalStatus: const Value('In Progress'),
+      ));
+
+      final links = await (db.select(db.issueLinks)
+            ..where((l) => l.taskId.equals('task-1')))
+          .get();
+
+      expect(links.length, 1);
+      expect(links.first.externalIssueKey, 'PROJ-123');
+      expect(links.first.externalTitle, 'Fix login bug');
+      expect(links.first.issueType, 'jira');
+    });
+
+    test('queries links by integration', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      // Add Jira link
+      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
+        id: 'link-1',
+        taskId: 'task-1',
+        integrationId: 'jira-1',
+        issueType: 'jira',
+        externalIssueId: 'PROJ-123',
+        created: now,
+      ));
+
+      // Add GitHub link
+      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
+        id: 'link-2',
+        taskId: 'task-2',
+        integrationId: 'github-1',
+        issueType: 'github',
+        externalIssueId: '42',
+        created: now,
+      ));
+
+      final jiraLinks = await (db.select(db.issueLinks)
+            ..where((l) => l.issueType.equals('jira')))
+          .get();
+
+      expect(jiraLinks.length, 1);
+      expect(jiraLinks.first.taskId, 'task-1');
     });
   });
 }

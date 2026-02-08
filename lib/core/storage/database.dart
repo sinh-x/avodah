@@ -12,6 +12,9 @@ import 'tables/tags.dart';
 import 'tables/worklogs.dart';
 import 'tables/notes.dart';
 import 'tables/task_repeat_cfgs.dart';
+import 'tables/jira_integrations.dart';
+import 'tables/github_integrations.dart';
+import 'tables/issue_links.dart';
 
 part 'database.g.dart';
 
@@ -23,6 +26,9 @@ part 'database.g.dart';
   WorklogEntries,
   Notes,
   TaskRepeatCfgs,
+  JiraIntegrations,
+  GithubIntegrations,
+  IssueLinks,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -31,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -40,11 +46,12 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Future migrations go here
-        // Example:
-        // if (from < 2) {
-        //   await m.addColumn(tasks, tasks.newColumn);
-        // }
+        if (from < 2) {
+          // Add integration tables
+          await m.createTable(jiraIntegrations);
+          await m.createTable(githubIntegrations);
+          await m.createTable(issueLinks);
+        }
       },
     );
   }
