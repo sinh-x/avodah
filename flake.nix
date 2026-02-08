@@ -27,6 +27,7 @@
         xorg.libXrandr
         libGL
         libxkbcommon
+        sqlite  # For Drift database tests
       ];
 
       mkPackage = pkgs:

@@ -38,6 +38,9 @@ dev_dependencies:
   # Linting
   flutter_lints: ^6.0.0
 
+  # SQLite for testing (bundles sqlite3)
+  sqlite3: ^2.7.3
+
   # Code Generation
   build_runner: ^2.4.13
   freezed: ^2.5.7
