@@ -37,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -51,6 +51,10 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(jiraIntegrations);
           await m.createTable(githubIntegrations);
           await m.createTable(issueLinks);
+        }
+        if (from < 3) {
+          // Add notes field to tasks
+          await m.addColumn(tasks, tasks.notes);
         }
       },
     );
