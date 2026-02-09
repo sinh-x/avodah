@@ -131,7 +131,7 @@ This document breaks down the Flutter migration into actionable tasks. The proje
   - **Dependencies**: 2.2, 1.4
   - **Status**: Complete (commit `a235193`)
 
-- [ ] **2.5** Implement Worklog and JiraIntegration documents
+- [x] **2.5** Implement Worklog and JiraIntegration documents
   - **Description**: CRDT-backed time tracking entries and Jira config
   - **Deliverables**:
     - `lib/features/worklog/models/worklog_document.dart`
@@ -142,6 +142,7 @@ This document breaks down the Flutter migration into actionable tasks. The proje
     - Unit tests
   - **Requirements**: Core Feature Requirements
   - **Dependencies**: 2.2, 1.4
+  - **Status**: Complete (commit `4b64044`)
 
 ### Phase 3: Core Features (Offline)
 
