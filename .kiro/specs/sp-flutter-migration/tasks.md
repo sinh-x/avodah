@@ -119,7 +119,7 @@ This document breaks down the Flutter migration into actionable tasks. The proje
   - **Dependencies**: 2.2, 1.4
   - **Status**: Complete (commit `f7578aa`)
 
-- [ ] **2.4** Implement Project, Tag, and Subtask documents
+- [x] **2.4** Implement Project, Tag, and Subtask documents
   - **Description**: CRDT-backed project, tag, and subtask models
   - **Deliverables**:
     - `lib/features/projects/models/project_document.dart`
@@ -129,6 +129,7 @@ This document breaks down the Flutter migration into actionable tasks. The proje
     - Unit tests
   - **Requirements**: Core Feature Requirements
   - **Dependencies**: 2.2, 1.4
+  - **Status**: Complete (commit `a235193`)
 
 - [ ] **2.5** Implement Worklog and JiraIntegration documents
   - **Description**: CRDT-backed time tracking entries and Jira config
