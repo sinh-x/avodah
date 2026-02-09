@@ -16,3 +16,4 @@ export 'hlc.dart';
 export 'lww_register.dart';
 export 'lww_set.dart';
 export 'g_counter.dart';
+export 'crdt_document.dart';
