@@ -154,30 +154,7 @@ class GitHubIntegrationDocument {
 }
 ```
 
-#### 4. Issue Link Document (CRDT)
-
-```dart
-/// CRDT-backed link between local task and external issue
-class IssueLinkDocument {
-  final String id;
-  final LWWRegister<String> taskId;
-  final LWWRegister<IssueLinkType> type;
-  final LWWRegister<String> externalId;        // Jira key or GitHub issue#
-  final LWWRegister<String> externalUrl;
-  final LWWRegister<String?> externalTitle;    // Cached from external
-  final LWWRegister<String?> externalStatus;   // Cached from external
-  final LWWRegister<DateTime> linkedAt;
-  final LWWRegister<DateTime?> lastSyncedAt;
-
-  IssueLinkDocument merge(IssueLinkDocument other);
-  Map<String, dynamic> toJson();
-  factory IssueLinkDocument.fromJson(Map<String, dynamic> json);
-}
-
-enum IssueLinkType { jira, github }
-```
-
-#### 5. Sync Service
+#### 4. Sync Service
 
 ```dart
 abstract class SyncService {
@@ -349,24 +326,10 @@ class GitHubIntegrations extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Links a local task to an external issue (Jira or GitHub)
-class IssueLinks extends Table {
-  TextColumn get id => text()();
-  TextColumn get taskId => text().references(Tasks, #id)();
-  TextColumn get type => text()();              // 'jira' or 'github'
-  TextColumn get externalId => text()();        // Jira issue key or GitHub issue#
-  TextColumn get externalUrl => text()();
-  TextColumn get externalTitle => text().nullable()();
-  TextColumn get externalStatus => text().nullable()();
-  DateTimeColumn get linkedAt => dateTime()();
-  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
-  TextColumn get crdtClock => text()();
-  TextColumn get crdtState => text()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
 ```
+
+> **Note**: Issue linking uses embedded fields on Task (issueId, issueType, etc.)
+> rather than a separate table. One task can link to at most one external issue.
 
 #### State Models
 
@@ -849,12 +812,10 @@ lib/
 │   ├── integrations/
 │   │   ├── models/
 │   │   │   ├── jira_integration_document.dart
-│   │   │   ├── github_integration_document.dart
-│   │   │   └── issue_link_document.dart
+│   │   │   └── github_integration_document.dart
 │   │   ├── data/
 │   │   │   ├── jira_repository.dart
-│   │   │   ├── github_repository.dart
-│   │   │   └── issue_link_repository.dart
+│   │   │   └── github_repository.dart
 │   │   └── providers/
 │   └── settings/
 │

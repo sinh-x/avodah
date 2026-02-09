@@ -14,7 +14,6 @@ import 'tables/notes.dart';
 import 'tables/task_repeat_cfgs.dart';
 import 'tables/jira_integrations.dart';
 import 'tables/github_integrations.dart';
-import 'tables/issue_links.dart';
 
 part 'database.g.dart';
 
@@ -28,7 +27,6 @@ part 'database.g.dart';
   TaskRepeatCfgs,
   JiraIntegrations,
   GithubIntegrations,
-  IssueLinks,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -37,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -50,11 +48,14 @@ class AppDatabase extends _$AppDatabase {
           // Add integration tables
           await m.createTable(jiraIntegrations);
           await m.createTable(githubIntegrations);
-          await m.createTable(issueLinks);
         }
         if (from < 3) {
           // Add description field to tasks
           await m.addColumn(tasks, tasks.description);
+        }
+        if (from < 4) {
+          // Remove IssueLinks table (1 task = 1 issue, embedded fields sufficient)
+          await m.deleteTable('issue_links');
         }
       },
     );

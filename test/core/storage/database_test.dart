@@ -26,7 +26,6 @@ void main() {
       final repeatCfgs = await db.select(db.taskRepeatCfgs).get();
       final jiraIntegrations = await db.select(db.jiraIntegrations).get();
       final githubIntegrations = await db.select(db.githubIntegrations).get();
-      final issueLinks = await db.select(db.issueLinks).get();
 
       expect(tasks, isEmpty);
       expect(subtasks, isEmpty);
@@ -37,7 +36,6 @@ void main() {
       expect(repeatCfgs, isEmpty);
       expect(jiraIntegrations, isEmpty);
       expect(githubIntegrations, isEmpty);
-      expect(issueLinks, isEmpty);
     });
   });
 
@@ -291,61 +289,4 @@ void main() {
     });
   });
 
-  group('IssueLinks table', () {
-    test('links task to external issue', () async {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
-        id: 'link-1',
-        taskId: 'task-1',
-        integrationId: 'jira-1',
-        issueType: 'jira',
-        externalIssueId: '12345',
-        created: now,
-        externalIssueKey: const Value('PROJ-123'),
-        externalTitle: const Value('Fix login bug'),
-        externalStatus: const Value('In Progress'),
-      ));
-
-      final links = await (db.select(db.issueLinks)
-            ..where((l) => l.taskId.equals('task-1')))
-          .get();
-
-      expect(links.length, 1);
-      expect(links.first.externalIssueKey, 'PROJ-123');
-      expect(links.first.externalTitle, 'Fix login bug');
-      expect(links.first.issueType, 'jira');
-    });
-
-    test('queries links by integration', () async {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      // Add Jira link
-      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
-        id: 'link-1',
-        taskId: 'task-1',
-        integrationId: 'jira-1',
-        issueType: 'jira',
-        externalIssueId: 'PROJ-123',
-        created: now,
-      ));
-
-      // Add GitHub link
-      await db.into(db.issueLinks).insert(IssueLinksCompanion.insert(
-        id: 'link-2',
-        taskId: 'task-2',
-        integrationId: 'github-1',
-        issueType: 'github',
-        externalIssueId: '42',
-        created: now,
-      ));
-
-      final jiraLinks = await (db.select(db.issueLinks)
-            ..where((l) => l.issueType.equals('jira')))
-          .get();
-
-      expect(jiraLinks.length, 1);
-      expect(jiraLinks.first.taskId, 'task-1');
-    });
-  });
 }

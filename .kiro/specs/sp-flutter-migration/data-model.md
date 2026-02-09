@@ -23,6 +23,7 @@ The central entity for task management. Tasks can have subtasks (parent-child re
 | `id` | String | Unique identifier (UUID) |
 | `projectId` | String? | Parent project ID |
 | `title` | String | Task title/name |
+| `description` | String? | Task description (supports markdown) |
 | `isDone` | Boolean | Completion status |
 | `created` | Integer | Creation timestamp (Unix ms) |
 
