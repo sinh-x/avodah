@@ -4,6 +4,21 @@
 
 This document details the technical design for rebuilding Super Productivity as a Flutter-based, local-first, P2P application. The architecture follows Anytype's principles: data lives locally, syncs peer-to-peer using CRDTs, and works fully offline without any server dependency.
 
+### Current Scope (MVP)
+
+**Platform**: Linux (NixOS) only for initial development
+
+**Core Entities**:
+- Task, Subtask, Project, Tag, WorklogEntry
+- JiraIntegration (external credentials file)
+
+**Deferred**:
+- GitHubIntegration, other integrations
+- TaskRepeatCfg (recurring tasks)
+- Note (project notes)
+- Platform secure storage (Android Keystore, iOS Keychain)
+- Android/iOS builds
+
 ## Architecture
 
 ### High-Level Architecture
@@ -92,17 +107,15 @@ class TaskDocument {
   final LWWRegister<String?> description;
   final LWWRegister<String?> projectId;
   final LWWSet<String> tagIds;
-  final LWWRegister<TaskStatus> status;
-  final LWWRegister<int> timeEstimate; // in seconds
-  final LWWRegister<int> timeSpent;    // in seconds
+  final LWWRegister<bool> isDone;
+  final LWWRegister<int> timeEstimate; // in milliseconds
   final LWWRegister<DateTime?> dueDate;
   final LWWRegister<DateTime> createdAt;
-  final LWWRegister<DateTime> updatedAt;
-  final GCounter completedCount; // for recurring tasks
 
-  // External issue tracking links
-  final LWWRegister<String?> jiraIssueKey;      // e.g., "PROJ-123"
-  final LWWRegister<String?> githubIssueNumber; // e.g., "owner/repo#42"
+  // Jira issue link (embedded, 1 task = 1 issue max)
+  final LWWRegister<String?> issueId;           // e.g., "PROJ-123"
+  final LWWRegister<String?> issueType;         // e.g., "JIRA"
+  final LWWRegister<String?> issueProviderId;   // Integration config ID
 
   // Merge with another document (from sync)
   TaskDocument merge(TaskDocument other);
@@ -113,48 +126,58 @@ class TaskDocument {
 }
 ```
 
+> **Note**: `timeSpent` is derived from WorklogEntry records at query time. No duplication in Task.
+
 #### 2. Jira Integration Document (CRDT)
 
 ```dart
 /// CRDT-backed Jira integration configuration
+/// Credentials are read from external file at runtime (not stored in app)
 class JiraIntegrationDocument {
   final String id;
-  final LWWRegister<String> siteUrl;
-  final LWWRegister<String?> cloudId;
-  final LWWRegister<String?> defaultProjectKey;
-  final LWWRegister<String?> userEmail;
-  final LWWRegister<bool> isEnabled;
-  final LWWRegister<Map<String, String>> statusMapping; // TaskStatus -> Jira transition
+  final LWWRegister<String?> projectId;           // Links to Avodah Project
+  final LWWRegister<String> baseUrl;              // e.g., "https://company.atlassian.net"
+  final LWWRegister<String> jiraProjectKey;       // e.g., "PROJ"
+  final LWWRegister<String?> boardId;             // For sprint tracking
+  final LWWRegister<String> credentialsFilePath;  // Path to JSON credentials file
+
+  // Sync settings
+  final LWWRegister<bool> syncEnabled;
+  final LWWRegister<bool> syncSubtasks;
+  final LWWRegister<bool> syncWorklogs;
+  final LWWRegister<int> syncIntervalMinutes;
+  final LWWRegister<String?> jqlFilter;
+
+  // Sync status (operational)
+  final LWWRegister<DateTime?> lastSyncAt;
+  final LWWRegister<String?> lastSyncError;
+
   final LWWRegister<DateTime> createdAt;
-  final LWWRegister<DateTime> updatedAt;
+  final LWWRegister<DateTime?> modifiedAt;
 
   JiraIntegrationDocument merge(JiraIntegrationDocument other);
   Map<String, dynamic> toJson();
   factory JiraIntegrationDocument.fromJson(Map<String, dynamic> json);
+
+  /// Read credentials from external file at runtime
+  Future<JiraCredentials> loadCredentials();
+}
+
+/// Credentials loaded from external file (never stored in SQLite)
+class JiraCredentials {
+  final String email;
+  final String apiToken;
 }
 ```
 
-#### 3. GitHub Integration Document (CRDT)
+> **Credentials File Format** (`~/.config/avodah/jira-creds.json`):
+> ```json
+> { "email": "user@company.com", "apiToken": "ATATT3xFfGF0..." }
+> ```
+>
+> User manages this file via sops-nix, agenix, or plain file with chmod 600.
 
-```dart
-/// CRDT-backed GitHub integration configuration
-class GitHubIntegrationDocument {
-  final String id;
-  final LWWRegister<String> owner;
-  final LWWRegister<String> repo;
-  final LWWRegister<String?> defaultLabels;
-  final LWWRegister<bool> isEnabled;
-  final LWWRegister<bool> syncWorklogs;
-  final LWWRegister<DateTime> createdAt;
-  final LWWRegister<DateTime> updatedAt;
-
-  GitHubIntegrationDocument merge(GitHubIntegrationDocument other);
-  Map<String, dynamic> toJson();
-  factory GitHubIntegrationDocument.fromJson(Map<String, dynamic> json);
-}
-```
-
-#### 4. Sync Service
+#### 3. Sync Service
 
 ```dart
 abstract class SyncService {
@@ -292,44 +315,45 @@ class Worklogs extends Table {
 }
 
 /// Jira integration configuration
+/// Credentials stored externally (credentialsFilePath points to JSON file)
 class JiraIntegrations extends Table {
   TextColumn get id => text()();
-  TextColumn get siteUrl => text()();           // e.g., "https://company.atlassian.net"
-  TextColumn get cloudId => text().nullable()();
-  TextColumn get defaultProjectKey => text().nullable()();
-  TextColumn get userEmail => text().nullable()();
-  BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
-  TextColumn get statusMappingJson => text()(); // JSON serialized Map<String, String>
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
-  TextColumn get crdtClock => text()();
-  TextColumn get crdtState => text()();
+  TextColumn get projectId => text().nullable()();     // Links to Avodah Project
+  TextColumn get baseUrl => text()();                  // e.g., "https://company.atlassian.net"
+  TextColumn get jiraProjectKey => text()();          // e.g., "PROJ"
+  TextColumn get boardId => text().nullable()();      // For sprint tracking
+  TextColumn get credentialsFilePath => text()();     // Path to JSON credentials file
 
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-/// GitHub integration configuration
-class GitHubIntegrations extends Table {
-  TextColumn get id => text()();
-  TextColumn get owner => text()();             // Repository owner/org
-  TextColumn get repo => text()();              // Repository name
-  TextColumn get defaultLabels => text().nullable()();
-  BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
+  // Sync settings
+  TextColumn get jqlFilter => text().nullable()();
+  BoolColumn get syncEnabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get syncSubtasks => boolean().withDefault(const Constant(true))();
   BoolColumn get syncWorklogs => boolean().withDefault(const Constant(false))();
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get syncIntervalMinutes => integer().withDefault(const Constant(15))();
+
+  // Sync status
+  IntColumn get lastSyncAt => integer().nullable()();  // Unix ms
+  TextColumn get lastSyncError => text().nullable()();
+
+  // Timestamps
+  IntColumn get created => integer()();               // Unix ms
+  IntColumn get modified => integer().nullable()();   // Unix ms
+
+  // CRDT
   TextColumn get crdtClock => text()();
   TextColumn get crdtState => text()();
 
   @override
   Set<Column> get primaryKey => {id};
 }
+
+// GitHubIntegrations - DEFERRED (see data-model.md)
 
 ```
 
 > **Note**: Issue linking uses embedded fields on Task (issueId, issueType, etc.)
 > rather than a separate table. One task can link to at most one external issue.
+> Credentials are read from external file at runtime, never stored in SQLite.
 
 #### State Models
 
@@ -840,6 +864,6 @@ lib/
 
 **Review Status**: Draft
 
-**Last Updated**: 2025-02-06
+**Last Updated**: 2026-02-09
 
 **Reviewers**: Self-review (personal project)

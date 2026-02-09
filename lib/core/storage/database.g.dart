@@ -2229,18 +2229,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
-  static const VerificationMeta _noteIdsMeta = const VerificationMeta(
-    'noteIds',
-  );
-  @override
-  late final GeneratedColumn<String> noteIds = GeneratedColumn<String>(
-    'note_ids',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('[]'),
-  );
   static const VerificationMeta _themeMeta = const VerificationMeta('theme');
   @override
   late final GeneratedColumn<String> theme = GeneratedColumn<String>(
@@ -2272,18 +2260,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _issueIntegrationCfgsMeta =
-      const VerificationMeta('issueIntegrationCfgs');
-  @override
-  late final GeneratedColumn<String> issueIntegrationCfgs =
-      GeneratedColumn<String>(
-        'issue_integration_cfgs',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        defaultValue: const Constant('{}'),
-      );
   static const VerificationMeta _createdMeta = const VerificationMeta(
     'created',
   );
@@ -2339,11 +2315,9 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     isEnableBacklog,
     taskIds,
     backlogTaskIds,
-    noteIds,
     theme,
     advancedCfg,
     icon,
-    issueIntegrationCfgs,
     created,
     modified,
     crdtClock,
@@ -2413,12 +2387,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
-    if (data.containsKey('note_ids')) {
-      context.handle(
-        _noteIdsMeta,
-        noteIds.isAcceptableOrUnknown(data['note_ids']!, _noteIdsMeta),
-      );
-    }
     if (data.containsKey('theme')) {
       context.handle(
         _themeMeta,
@@ -2438,15 +2406,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
       context.handle(
         _iconMeta,
         icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
-      );
-    }
-    if (data.containsKey('issue_integration_cfgs')) {
-      context.handle(
-        _issueIntegrationCfgsMeta,
-        issueIntegrationCfgs.isAcceptableOrUnknown(
-          data['issue_integration_cfgs']!,
-          _issueIntegrationCfgsMeta,
-        ),
       );
     }
     if (data.containsKey('created')) {
@@ -2512,10 +2471,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}backlog_task_ids'],
       )!,
-      noteIds: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}note_ids'],
-      )!,
       theme: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}theme'],
@@ -2528,10 +2483,6 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}icon'],
       ),
-      issueIntegrationCfgs: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}issue_integration_cfgs'],
-      )!,
       created: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created'],
@@ -2565,11 +2516,9 @@ class Project extends DataClass implements Insertable<Project> {
   final bool isEnableBacklog;
   final String taskIds;
   final String backlogTaskIds;
-  final String noteIds;
   final String theme;
   final String advancedCfg;
   final String? icon;
-  final String issueIntegrationCfgs;
   final int created;
   final int? modified;
   final String crdtClock;
@@ -2582,11 +2531,9 @@ class Project extends DataClass implements Insertable<Project> {
     required this.isEnableBacklog,
     required this.taskIds,
     required this.backlogTaskIds,
-    required this.noteIds,
     required this.theme,
     required this.advancedCfg,
     this.icon,
-    required this.issueIntegrationCfgs,
     required this.created,
     this.modified,
     required this.crdtClock,
@@ -2602,13 +2549,11 @@ class Project extends DataClass implements Insertable<Project> {
     map['is_enable_backlog'] = Variable<bool>(isEnableBacklog);
     map['task_ids'] = Variable<String>(taskIds);
     map['backlog_task_ids'] = Variable<String>(backlogTaskIds);
-    map['note_ids'] = Variable<String>(noteIds);
     map['theme'] = Variable<String>(theme);
     map['advanced_cfg'] = Variable<String>(advancedCfg);
     if (!nullToAbsent || icon != null) {
       map['icon'] = Variable<String>(icon);
     }
-    map['issue_integration_cfgs'] = Variable<String>(issueIntegrationCfgs);
     map['created'] = Variable<int>(created);
     if (!nullToAbsent || modified != null) {
       map['modified'] = Variable<int>(modified);
@@ -2627,11 +2572,9 @@ class Project extends DataClass implements Insertable<Project> {
       isEnableBacklog: Value(isEnableBacklog),
       taskIds: Value(taskIds),
       backlogTaskIds: Value(backlogTaskIds),
-      noteIds: Value(noteIds),
       theme: Value(theme),
       advancedCfg: Value(advancedCfg),
       icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
-      issueIntegrationCfgs: Value(issueIntegrationCfgs),
       created: Value(created),
       modified: modified == null && nullToAbsent
           ? const Value.absent()
@@ -2654,13 +2597,9 @@ class Project extends DataClass implements Insertable<Project> {
       isEnableBacklog: serializer.fromJson<bool>(json['isEnableBacklog']),
       taskIds: serializer.fromJson<String>(json['taskIds']),
       backlogTaskIds: serializer.fromJson<String>(json['backlogTaskIds']),
-      noteIds: serializer.fromJson<String>(json['noteIds']),
       theme: serializer.fromJson<String>(json['theme']),
       advancedCfg: serializer.fromJson<String>(json['advancedCfg']),
       icon: serializer.fromJson<String?>(json['icon']),
-      issueIntegrationCfgs: serializer.fromJson<String>(
-        json['issueIntegrationCfgs'],
-      ),
       created: serializer.fromJson<int>(json['created']),
       modified: serializer.fromJson<int?>(json['modified']),
       crdtClock: serializer.fromJson<String>(json['crdtClock']),
@@ -2678,11 +2617,9 @@ class Project extends DataClass implements Insertable<Project> {
       'isEnableBacklog': serializer.toJson<bool>(isEnableBacklog),
       'taskIds': serializer.toJson<String>(taskIds),
       'backlogTaskIds': serializer.toJson<String>(backlogTaskIds),
-      'noteIds': serializer.toJson<String>(noteIds),
       'theme': serializer.toJson<String>(theme),
       'advancedCfg': serializer.toJson<String>(advancedCfg),
       'icon': serializer.toJson<String?>(icon),
-      'issueIntegrationCfgs': serializer.toJson<String>(issueIntegrationCfgs),
       'created': serializer.toJson<int>(created),
       'modified': serializer.toJson<int?>(modified),
       'crdtClock': serializer.toJson<String>(crdtClock),
@@ -2698,11 +2635,9 @@ class Project extends DataClass implements Insertable<Project> {
     bool? isEnableBacklog,
     String? taskIds,
     String? backlogTaskIds,
-    String? noteIds,
     String? theme,
     String? advancedCfg,
     Value<String?> icon = const Value.absent(),
-    String? issueIntegrationCfgs,
     int? created,
     Value<int?> modified = const Value.absent(),
     String? crdtClock,
@@ -2715,11 +2650,9 @@ class Project extends DataClass implements Insertable<Project> {
     isEnableBacklog: isEnableBacklog ?? this.isEnableBacklog,
     taskIds: taskIds ?? this.taskIds,
     backlogTaskIds: backlogTaskIds ?? this.backlogTaskIds,
-    noteIds: noteIds ?? this.noteIds,
     theme: theme ?? this.theme,
     advancedCfg: advancedCfg ?? this.advancedCfg,
     icon: icon.present ? icon.value : this.icon,
-    issueIntegrationCfgs: issueIntegrationCfgs ?? this.issueIntegrationCfgs,
     created: created ?? this.created,
     modified: modified.present ? modified.value : this.modified,
     crdtClock: crdtClock ?? this.crdtClock,
@@ -2742,15 +2675,11 @@ class Project extends DataClass implements Insertable<Project> {
       backlogTaskIds: data.backlogTaskIds.present
           ? data.backlogTaskIds.value
           : this.backlogTaskIds,
-      noteIds: data.noteIds.present ? data.noteIds.value : this.noteIds,
       theme: data.theme.present ? data.theme.value : this.theme,
       advancedCfg: data.advancedCfg.present
           ? data.advancedCfg.value
           : this.advancedCfg,
       icon: data.icon.present ? data.icon.value : this.icon,
-      issueIntegrationCfgs: data.issueIntegrationCfgs.present
-          ? data.issueIntegrationCfgs.value
-          : this.issueIntegrationCfgs,
       created: data.created.present ? data.created.value : this.created,
       modified: data.modified.present ? data.modified.value : this.modified,
       crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
@@ -2768,11 +2697,9 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('isEnableBacklog: $isEnableBacklog, ')
           ..write('taskIds: $taskIds, ')
           ..write('backlogTaskIds: $backlogTaskIds, ')
-          ..write('noteIds: $noteIds, ')
           ..write('theme: $theme, ')
           ..write('advancedCfg: $advancedCfg, ')
           ..write('icon: $icon, ')
-          ..write('issueIntegrationCfgs: $issueIntegrationCfgs, ')
           ..write('created: $created, ')
           ..write('modified: $modified, ')
           ..write('crdtClock: $crdtClock, ')
@@ -2790,11 +2717,9 @@ class Project extends DataClass implements Insertable<Project> {
     isEnableBacklog,
     taskIds,
     backlogTaskIds,
-    noteIds,
     theme,
     advancedCfg,
     icon,
-    issueIntegrationCfgs,
     created,
     modified,
     crdtClock,
@@ -2811,11 +2736,9 @@ class Project extends DataClass implements Insertable<Project> {
           other.isEnableBacklog == this.isEnableBacklog &&
           other.taskIds == this.taskIds &&
           other.backlogTaskIds == this.backlogTaskIds &&
-          other.noteIds == this.noteIds &&
           other.theme == this.theme &&
           other.advancedCfg == this.advancedCfg &&
           other.icon == this.icon &&
-          other.issueIntegrationCfgs == this.issueIntegrationCfgs &&
           other.created == this.created &&
           other.modified == this.modified &&
           other.crdtClock == this.crdtClock &&
@@ -2830,11 +2753,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<bool> isEnableBacklog;
   final Value<String> taskIds;
   final Value<String> backlogTaskIds;
-  final Value<String> noteIds;
   final Value<String> theme;
   final Value<String> advancedCfg;
   final Value<String?> icon;
-  final Value<String> issueIntegrationCfgs;
   final Value<int> created;
   final Value<int?> modified;
   final Value<String> crdtClock;
@@ -2848,11 +2769,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.isEnableBacklog = const Value.absent(),
     this.taskIds = const Value.absent(),
     this.backlogTaskIds = const Value.absent(),
-    this.noteIds = const Value.absent(),
     this.theme = const Value.absent(),
     this.advancedCfg = const Value.absent(),
     this.icon = const Value.absent(),
-    this.issueIntegrationCfgs = const Value.absent(),
     this.created = const Value.absent(),
     this.modified = const Value.absent(),
     this.crdtClock = const Value.absent(),
@@ -2867,11 +2786,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.isEnableBacklog = const Value.absent(),
     this.taskIds = const Value.absent(),
     this.backlogTaskIds = const Value.absent(),
-    this.noteIds = const Value.absent(),
     this.theme = const Value.absent(),
     this.advancedCfg = const Value.absent(),
     this.icon = const Value.absent(),
-    this.issueIntegrationCfgs = const Value.absent(),
     required int created,
     this.modified = const Value.absent(),
     this.crdtClock = const Value.absent(),
@@ -2888,11 +2805,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<bool>? isEnableBacklog,
     Expression<String>? taskIds,
     Expression<String>? backlogTaskIds,
-    Expression<String>? noteIds,
     Expression<String>? theme,
     Expression<String>? advancedCfg,
     Expression<String>? icon,
-    Expression<String>? issueIntegrationCfgs,
     Expression<int>? created,
     Expression<int>? modified,
     Expression<String>? crdtClock,
@@ -2907,12 +2822,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (isEnableBacklog != null) 'is_enable_backlog': isEnableBacklog,
       if (taskIds != null) 'task_ids': taskIds,
       if (backlogTaskIds != null) 'backlog_task_ids': backlogTaskIds,
-      if (noteIds != null) 'note_ids': noteIds,
       if (theme != null) 'theme': theme,
       if (advancedCfg != null) 'advanced_cfg': advancedCfg,
       if (icon != null) 'icon': icon,
-      if (issueIntegrationCfgs != null)
-        'issue_integration_cfgs': issueIntegrationCfgs,
       if (created != null) 'created': created,
       if (modified != null) 'modified': modified,
       if (crdtClock != null) 'crdt_clock': crdtClock,
@@ -2929,11 +2841,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<bool>? isEnableBacklog,
     Value<String>? taskIds,
     Value<String>? backlogTaskIds,
-    Value<String>? noteIds,
     Value<String>? theme,
     Value<String>? advancedCfg,
     Value<String?>? icon,
-    Value<String>? issueIntegrationCfgs,
     Value<int>? created,
     Value<int?>? modified,
     Value<String>? crdtClock,
@@ -2948,11 +2858,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       isEnableBacklog: isEnableBacklog ?? this.isEnableBacklog,
       taskIds: taskIds ?? this.taskIds,
       backlogTaskIds: backlogTaskIds ?? this.backlogTaskIds,
-      noteIds: noteIds ?? this.noteIds,
       theme: theme ?? this.theme,
       advancedCfg: advancedCfg ?? this.advancedCfg,
       icon: icon ?? this.icon,
-      issueIntegrationCfgs: issueIntegrationCfgs ?? this.issueIntegrationCfgs,
       created: created ?? this.created,
       modified: modified ?? this.modified,
       crdtClock: crdtClock ?? this.crdtClock,
@@ -2985,9 +2893,6 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (backlogTaskIds.present) {
       map['backlog_task_ids'] = Variable<String>(backlogTaskIds.value);
     }
-    if (noteIds.present) {
-      map['note_ids'] = Variable<String>(noteIds.value);
-    }
     if (theme.present) {
       map['theme'] = Variable<String>(theme.value);
     }
@@ -2996,11 +2901,6 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     }
     if (icon.present) {
       map['icon'] = Variable<String>(icon.value);
-    }
-    if (issueIntegrationCfgs.present) {
-      map['issue_integration_cfgs'] = Variable<String>(
-        issueIntegrationCfgs.value,
-      );
     }
     if (created.present) {
       map['created'] = Variable<int>(created.value);
@@ -3030,11 +2930,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('isEnableBacklog: $isEnableBacklog, ')
           ..write('taskIds: $taskIds, ')
           ..write('backlogTaskIds: $backlogTaskIds, ')
-          ..write('noteIds: $noteIds, ')
           ..write('theme: $theme, ')
           ..write('advancedCfg: $advancedCfg, ')
           ..write('icon: $icon, ')
-          ..write('issueIntegrationCfgs: $issueIntegrationCfgs, ')
           ..write('created: $created, ')
           ..write('modified: $modified, ')
           ..write('crdtClock: $crdtClock, ')
@@ -4342,2139 +4240,6 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
   }
 }
 
-class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $NotesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _projectIdMeta = const VerificationMeta(
-    'projectId',
-  );
-  @override
-  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
-    'project_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _contentMeta = const VerificationMeta(
-    'content',
-  );
-  @override
-  late final GeneratedColumn<String> content = GeneratedColumn<String>(
-    'content',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _imgUrlMeta = const VerificationMeta('imgUrl');
-  @override
-  late final GeneratedColumn<String> imgUrl = GeneratedColumn<String>(
-    'img_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _backgroundColorMeta = const VerificationMeta(
-    'backgroundColor',
-  );
-  @override
-  late final GeneratedColumn<String> backgroundColor = GeneratedColumn<String>(
-    'background_color',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _isPinnedToTodayMeta = const VerificationMeta(
-    'isPinnedToToday',
-  );
-  @override
-  late final GeneratedColumn<bool> isPinnedToToday = GeneratedColumn<bool>(
-    'is_pinned_to_today',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_pinned_to_today" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _isLockMeta = const VerificationMeta('isLock');
-  @override
-  late final GeneratedColumn<bool> isLock = GeneratedColumn<bool>(
-    'is_lock',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_lock" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _createdMeta = const VerificationMeta(
-    'created',
-  );
-  @override
-  late final GeneratedColumn<int> created = GeneratedColumn<int>(
-    'created',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _modifiedMeta = const VerificationMeta(
-    'modified',
-  );
-  @override
-  late final GeneratedColumn<int> modified = GeneratedColumn<int>(
-    'modified',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
-    'crdtClock',
-  );
-  @override
-  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
-    'crdt_clock',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
-  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
-    'crdtState',
-  );
-  @override
-  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
-    'crdt_state',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    projectId,
-    content,
-    imgUrl,
-    backgroundColor,
-    isPinnedToToday,
-    isLock,
-    created,
-    modified,
-    crdtClock,
-    crdtState,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'notes';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<Note> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('project_id')) {
-      context.handle(
-        _projectIdMeta,
-        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
-      );
-    }
-    if (data.containsKey('content')) {
-      context.handle(
-        _contentMeta,
-        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_contentMeta);
-    }
-    if (data.containsKey('img_url')) {
-      context.handle(
-        _imgUrlMeta,
-        imgUrl.isAcceptableOrUnknown(data['img_url']!, _imgUrlMeta),
-      );
-    }
-    if (data.containsKey('background_color')) {
-      context.handle(
-        _backgroundColorMeta,
-        backgroundColor.isAcceptableOrUnknown(
-          data['background_color']!,
-          _backgroundColorMeta,
-        ),
-      );
-    }
-    if (data.containsKey('is_pinned_to_today')) {
-      context.handle(
-        _isPinnedToTodayMeta,
-        isPinnedToToday.isAcceptableOrUnknown(
-          data['is_pinned_to_today']!,
-          _isPinnedToTodayMeta,
-        ),
-      );
-    }
-    if (data.containsKey('is_lock')) {
-      context.handle(
-        _isLockMeta,
-        isLock.isAcceptableOrUnknown(data['is_lock']!, _isLockMeta),
-      );
-    }
-    if (data.containsKey('created')) {
-      context.handle(
-        _createdMeta,
-        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdMeta);
-    }
-    if (data.containsKey('modified')) {
-      context.handle(
-        _modifiedMeta,
-        modified.isAcceptableOrUnknown(data['modified']!, _modifiedMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_modifiedMeta);
-    }
-    if (data.containsKey('crdt_clock')) {
-      context.handle(
-        _crdtClockMeta,
-        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
-      );
-    }
-    if (data.containsKey('crdt_state')) {
-      context.handle(
-        _crdtStateMeta,
-        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Note map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Note(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      projectId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}project_id'],
-      ),
-      content: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}content'],
-      )!,
-      imgUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}img_url'],
-      ),
-      backgroundColor: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}background_color'],
-      ),
-      isPinnedToToday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_pinned_to_today'],
-      )!,
-      isLock: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_lock'],
-      )!,
-      created: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created'],
-      )!,
-      modified: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}modified'],
-      )!,
-      crdtClock: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_clock'],
-      )!,
-      crdtState: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_state'],
-      )!,
-    );
-  }
-
-  @override
-  $NotesTable createAlias(String alias) {
-    return $NotesTable(attachedDatabase, alias);
-  }
-}
-
-class Note extends DataClass implements Insertable<Note> {
-  final String id;
-  final String? projectId;
-  final String content;
-  final String? imgUrl;
-  final String? backgroundColor;
-  final bool isPinnedToToday;
-  final bool isLock;
-  final int created;
-  final int modified;
-  final String crdtClock;
-  final String crdtState;
-  const Note({
-    required this.id,
-    this.projectId,
-    required this.content,
-    this.imgUrl,
-    this.backgroundColor,
-    required this.isPinnedToToday,
-    required this.isLock,
-    required this.created,
-    required this.modified,
-    required this.crdtClock,
-    required this.crdtState,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    if (!nullToAbsent || projectId != null) {
-      map['project_id'] = Variable<String>(projectId);
-    }
-    map['content'] = Variable<String>(content);
-    if (!nullToAbsent || imgUrl != null) {
-      map['img_url'] = Variable<String>(imgUrl);
-    }
-    if (!nullToAbsent || backgroundColor != null) {
-      map['background_color'] = Variable<String>(backgroundColor);
-    }
-    map['is_pinned_to_today'] = Variable<bool>(isPinnedToToday);
-    map['is_lock'] = Variable<bool>(isLock);
-    map['created'] = Variable<int>(created);
-    map['modified'] = Variable<int>(modified);
-    map['crdt_clock'] = Variable<String>(crdtClock);
-    map['crdt_state'] = Variable<String>(crdtState);
-    return map;
-  }
-
-  NotesCompanion toCompanion(bool nullToAbsent) {
-    return NotesCompanion(
-      id: Value(id),
-      projectId: projectId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(projectId),
-      content: Value(content),
-      imgUrl: imgUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(imgUrl),
-      backgroundColor: backgroundColor == null && nullToAbsent
-          ? const Value.absent()
-          : Value(backgroundColor),
-      isPinnedToToday: Value(isPinnedToToday),
-      isLock: Value(isLock),
-      created: Value(created),
-      modified: Value(modified),
-      crdtClock: Value(crdtClock),
-      crdtState: Value(crdtState),
-    );
-  }
-
-  factory Note.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Note(
-      id: serializer.fromJson<String>(json['id']),
-      projectId: serializer.fromJson<String?>(json['projectId']),
-      content: serializer.fromJson<String>(json['content']),
-      imgUrl: serializer.fromJson<String?>(json['imgUrl']),
-      backgroundColor: serializer.fromJson<String?>(json['backgroundColor']),
-      isPinnedToToday: serializer.fromJson<bool>(json['isPinnedToToday']),
-      isLock: serializer.fromJson<bool>(json['isLock']),
-      created: serializer.fromJson<int>(json['created']),
-      modified: serializer.fromJson<int>(json['modified']),
-      crdtClock: serializer.fromJson<String>(json['crdtClock']),
-      crdtState: serializer.fromJson<String>(json['crdtState']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'projectId': serializer.toJson<String?>(projectId),
-      'content': serializer.toJson<String>(content),
-      'imgUrl': serializer.toJson<String?>(imgUrl),
-      'backgroundColor': serializer.toJson<String?>(backgroundColor),
-      'isPinnedToToday': serializer.toJson<bool>(isPinnedToToday),
-      'isLock': serializer.toJson<bool>(isLock),
-      'created': serializer.toJson<int>(created),
-      'modified': serializer.toJson<int>(modified),
-      'crdtClock': serializer.toJson<String>(crdtClock),
-      'crdtState': serializer.toJson<String>(crdtState),
-    };
-  }
-
-  Note copyWith({
-    String? id,
-    Value<String?> projectId = const Value.absent(),
-    String? content,
-    Value<String?> imgUrl = const Value.absent(),
-    Value<String?> backgroundColor = const Value.absent(),
-    bool? isPinnedToToday,
-    bool? isLock,
-    int? created,
-    int? modified,
-    String? crdtClock,
-    String? crdtState,
-  }) => Note(
-    id: id ?? this.id,
-    projectId: projectId.present ? projectId.value : this.projectId,
-    content: content ?? this.content,
-    imgUrl: imgUrl.present ? imgUrl.value : this.imgUrl,
-    backgroundColor: backgroundColor.present
-        ? backgroundColor.value
-        : this.backgroundColor,
-    isPinnedToToday: isPinnedToToday ?? this.isPinnedToToday,
-    isLock: isLock ?? this.isLock,
-    created: created ?? this.created,
-    modified: modified ?? this.modified,
-    crdtClock: crdtClock ?? this.crdtClock,
-    crdtState: crdtState ?? this.crdtState,
-  );
-  Note copyWithCompanion(NotesCompanion data) {
-    return Note(
-      id: data.id.present ? data.id.value : this.id,
-      projectId: data.projectId.present ? data.projectId.value : this.projectId,
-      content: data.content.present ? data.content.value : this.content,
-      imgUrl: data.imgUrl.present ? data.imgUrl.value : this.imgUrl,
-      backgroundColor: data.backgroundColor.present
-          ? data.backgroundColor.value
-          : this.backgroundColor,
-      isPinnedToToday: data.isPinnedToToday.present
-          ? data.isPinnedToToday.value
-          : this.isPinnedToToday,
-      isLock: data.isLock.present ? data.isLock.value : this.isLock,
-      created: data.created.present ? data.created.value : this.created,
-      modified: data.modified.present ? data.modified.value : this.modified,
-      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
-      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('Note(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('content: $content, ')
-          ..write('imgUrl: $imgUrl, ')
-          ..write('backgroundColor: $backgroundColor, ')
-          ..write('isPinnedToToday: $isPinnedToToday, ')
-          ..write('isLock: $isLock, ')
-          ..write('created: $created, ')
-          ..write('modified: $modified, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    projectId,
-    content,
-    imgUrl,
-    backgroundColor,
-    isPinnedToToday,
-    isLock,
-    created,
-    modified,
-    crdtClock,
-    crdtState,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is Note &&
-          other.id == this.id &&
-          other.projectId == this.projectId &&
-          other.content == this.content &&
-          other.imgUrl == this.imgUrl &&
-          other.backgroundColor == this.backgroundColor &&
-          other.isPinnedToToday == this.isPinnedToToday &&
-          other.isLock == this.isLock &&
-          other.created == this.created &&
-          other.modified == this.modified &&
-          other.crdtClock == this.crdtClock &&
-          other.crdtState == this.crdtState);
-}
-
-class NotesCompanion extends UpdateCompanion<Note> {
-  final Value<String> id;
-  final Value<String?> projectId;
-  final Value<String> content;
-  final Value<String?> imgUrl;
-  final Value<String?> backgroundColor;
-  final Value<bool> isPinnedToToday;
-  final Value<bool> isLock;
-  final Value<int> created;
-  final Value<int> modified;
-  final Value<String> crdtClock;
-  final Value<String> crdtState;
-  final Value<int> rowid;
-  const NotesCompanion({
-    this.id = const Value.absent(),
-    this.projectId = const Value.absent(),
-    this.content = const Value.absent(),
-    this.imgUrl = const Value.absent(),
-    this.backgroundColor = const Value.absent(),
-    this.isPinnedToToday = const Value.absent(),
-    this.isLock = const Value.absent(),
-    this.created = const Value.absent(),
-    this.modified = const Value.absent(),
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  NotesCompanion.insert({
-    required String id,
-    this.projectId = const Value.absent(),
-    required String content,
-    this.imgUrl = const Value.absent(),
-    this.backgroundColor = const Value.absent(),
-    this.isPinnedToToday = const Value.absent(),
-    this.isLock = const Value.absent(),
-    required int created,
-    required int modified,
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       content = Value(content),
-       created = Value(created),
-       modified = Value(modified);
-  static Insertable<Note> custom({
-    Expression<String>? id,
-    Expression<String>? projectId,
-    Expression<String>? content,
-    Expression<String>? imgUrl,
-    Expression<String>? backgroundColor,
-    Expression<bool>? isPinnedToToday,
-    Expression<bool>? isLock,
-    Expression<int>? created,
-    Expression<int>? modified,
-    Expression<String>? crdtClock,
-    Expression<String>? crdtState,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (projectId != null) 'project_id': projectId,
-      if (content != null) 'content': content,
-      if (imgUrl != null) 'img_url': imgUrl,
-      if (backgroundColor != null) 'background_color': backgroundColor,
-      if (isPinnedToToday != null) 'is_pinned_to_today': isPinnedToToday,
-      if (isLock != null) 'is_lock': isLock,
-      if (created != null) 'created': created,
-      if (modified != null) 'modified': modified,
-      if (crdtClock != null) 'crdt_clock': crdtClock,
-      if (crdtState != null) 'crdt_state': crdtState,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  NotesCompanion copyWith({
-    Value<String>? id,
-    Value<String?>? projectId,
-    Value<String>? content,
-    Value<String?>? imgUrl,
-    Value<String?>? backgroundColor,
-    Value<bool>? isPinnedToToday,
-    Value<bool>? isLock,
-    Value<int>? created,
-    Value<int>? modified,
-    Value<String>? crdtClock,
-    Value<String>? crdtState,
-    Value<int>? rowid,
-  }) {
-    return NotesCompanion(
-      id: id ?? this.id,
-      projectId: projectId ?? this.projectId,
-      content: content ?? this.content,
-      imgUrl: imgUrl ?? this.imgUrl,
-      backgroundColor: backgroundColor ?? this.backgroundColor,
-      isPinnedToToday: isPinnedToToday ?? this.isPinnedToToday,
-      isLock: isLock ?? this.isLock,
-      created: created ?? this.created,
-      modified: modified ?? this.modified,
-      crdtClock: crdtClock ?? this.crdtClock,
-      crdtState: crdtState ?? this.crdtState,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (projectId.present) {
-      map['project_id'] = Variable<String>(projectId.value);
-    }
-    if (content.present) {
-      map['content'] = Variable<String>(content.value);
-    }
-    if (imgUrl.present) {
-      map['img_url'] = Variable<String>(imgUrl.value);
-    }
-    if (backgroundColor.present) {
-      map['background_color'] = Variable<String>(backgroundColor.value);
-    }
-    if (isPinnedToToday.present) {
-      map['is_pinned_to_today'] = Variable<bool>(isPinnedToToday.value);
-    }
-    if (isLock.present) {
-      map['is_lock'] = Variable<bool>(isLock.value);
-    }
-    if (created.present) {
-      map['created'] = Variable<int>(created.value);
-    }
-    if (modified.present) {
-      map['modified'] = Variable<int>(modified.value);
-    }
-    if (crdtClock.present) {
-      map['crdt_clock'] = Variable<String>(crdtClock.value);
-    }
-    if (crdtState.present) {
-      map['crdt_state'] = Variable<String>(crdtState.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('NotesCompanion(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('content: $content, ')
-          ..write('imgUrl: $imgUrl, ')
-          ..write('backgroundColor: $backgroundColor, ')
-          ..write('isPinnedToToday: $isPinnedToToday, ')
-          ..write('isLock: $isLock, ')
-          ..write('created: $created, ')
-          ..write('modified: $modified, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $TaskRepeatCfgsTable extends TaskRepeatCfgs
-    with TableInfo<$TaskRepeatCfgsTable, TaskRepeatCfg> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TaskRepeatCfgsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _projectIdMeta = const VerificationMeta(
-    'projectId',
-  );
-  @override
-  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
-    'project_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _titleMeta = const VerificationMeta('title');
-  @override
-  late final GeneratedColumn<String> title = GeneratedColumn<String>(
-    'title',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _tagIdsMeta = const VerificationMeta('tagIds');
-  @override
-  late final GeneratedColumn<String> tagIds = GeneratedColumn<String>(
-    'tag_ids',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('[]'),
-  );
-  static const VerificationMeta _orderMeta = const VerificationMeta('order');
-  @override
-  late final GeneratedColumn<int> order = GeneratedColumn<int>(
-    'order',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _defaultEstimateMeta = const VerificationMeta(
-    'defaultEstimate',
-  );
-  @override
-  late final GeneratedColumn<int> defaultEstimate = GeneratedColumn<int>(
-    'default_estimate',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _startTimeMeta = const VerificationMeta(
-    'startTime',
-  );
-  @override
-  late final GeneratedColumn<String> startTime = GeneratedColumn<String>(
-    'start_time',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _remindAtMeta = const VerificationMeta(
-    'remindAt',
-  );
-  @override
-  late final GeneratedColumn<String> remindAt = GeneratedColumn<String>(
-    'remind_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _isPausedMeta = const VerificationMeta(
-    'isPaused',
-  );
-  @override
-  late final GeneratedColumn<bool> isPaused = GeneratedColumn<bool>(
-    'is_paused',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_paused" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _quickSettingMeta = const VerificationMeta(
-    'quickSetting',
-  );
-  @override
-  late final GeneratedColumn<String> quickSetting = GeneratedColumn<String>(
-    'quick_setting',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _repeatCycleMeta = const VerificationMeta(
-    'repeatCycle',
-  );
-  @override
-  late final GeneratedColumn<String> repeatCycle = GeneratedColumn<String>(
-    'repeat_cycle',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _startDateMeta = const VerificationMeta(
-    'startDate',
-  );
-  @override
-  late final GeneratedColumn<String> startDate = GeneratedColumn<String>(
-    'start_date',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _repeatEveryMeta = const VerificationMeta(
-    'repeatEvery',
-  );
-  @override
-  late final GeneratedColumn<int> repeatEvery = GeneratedColumn<int>(
-    'repeat_every',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(1),
-  );
-  static const VerificationMeta _mondayMeta = const VerificationMeta('monday');
-  @override
-  late final GeneratedColumn<bool> monday = GeneratedColumn<bool>(
-    'monday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("monday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _tuesdayMeta = const VerificationMeta(
-    'tuesday',
-  );
-  @override
-  late final GeneratedColumn<bool> tuesday = GeneratedColumn<bool>(
-    'tuesday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("tuesday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _wednesdayMeta = const VerificationMeta(
-    'wednesday',
-  );
-  @override
-  late final GeneratedColumn<bool> wednesday = GeneratedColumn<bool>(
-    'wednesday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("wednesday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _thursdayMeta = const VerificationMeta(
-    'thursday',
-  );
-  @override
-  late final GeneratedColumn<bool> thursday = GeneratedColumn<bool>(
-    'thursday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("thursday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _fridayMeta = const VerificationMeta('friday');
-  @override
-  late final GeneratedColumn<bool> friday = GeneratedColumn<bool>(
-    'friday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("friday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _saturdayMeta = const VerificationMeta(
-    'saturday',
-  );
-  @override
-  late final GeneratedColumn<bool> saturday = GeneratedColumn<bool>(
-    'saturday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("saturday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _sundayMeta = const VerificationMeta('sunday');
-  @override
-  late final GeneratedColumn<bool> sunday = GeneratedColumn<bool>(
-    'sunday',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("sunday" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
-  @override
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _subTaskTemplatesMeta = const VerificationMeta(
-    'subTaskTemplates',
-  );
-  @override
-  late final GeneratedColumn<String> subTaskTemplates = GeneratedColumn<String>(
-    'sub_task_templates',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('[]'),
-  );
-  static const VerificationMeta _lastTaskCreationMeta = const VerificationMeta(
-    'lastTaskCreation',
-  );
-  @override
-  late final GeneratedColumn<int> lastTaskCreation = GeneratedColumn<int>(
-    'last_task_creation',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _lastTaskCreationDayMeta =
-      const VerificationMeta('lastTaskCreationDay');
-  @override
-  late final GeneratedColumn<String> lastTaskCreationDay =
-      GeneratedColumn<String>(
-        'last_task_creation_day',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      );
-  static const VerificationMeta _deletedInstanceDatesMeta =
-      const VerificationMeta('deletedInstanceDates');
-  @override
-  late final GeneratedColumn<String> deletedInstanceDates =
-      GeneratedColumn<String>(
-        'deleted_instance_dates',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        defaultValue: const Constant('[]'),
-      );
-  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
-    'crdtClock',
-  );
-  @override
-  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
-    'crdt_clock',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
-  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
-    'crdtState',
-  );
-  @override
-  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
-    'crdt_state',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    projectId,
-    title,
-    tagIds,
-    order,
-    defaultEstimate,
-    startTime,
-    remindAt,
-    isPaused,
-    quickSetting,
-    repeatCycle,
-    startDate,
-    repeatEvery,
-    monday,
-    tuesday,
-    wednesday,
-    thursday,
-    friday,
-    saturday,
-    sunday,
-    notes,
-    subTaskTemplates,
-    lastTaskCreation,
-    lastTaskCreationDay,
-    deletedInstanceDates,
-    crdtClock,
-    crdtState,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'task_repeat_cfgs';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<TaskRepeatCfg> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('project_id')) {
-      context.handle(
-        _projectIdMeta,
-        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
-      );
-    }
-    if (data.containsKey('title')) {
-      context.handle(
-        _titleMeta,
-        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
-      );
-    }
-    if (data.containsKey('tag_ids')) {
-      context.handle(
-        _tagIdsMeta,
-        tagIds.isAcceptableOrUnknown(data['tag_ids']!, _tagIdsMeta),
-      );
-    }
-    if (data.containsKey('order')) {
-      context.handle(
-        _orderMeta,
-        order.isAcceptableOrUnknown(data['order']!, _orderMeta),
-      );
-    }
-    if (data.containsKey('default_estimate')) {
-      context.handle(
-        _defaultEstimateMeta,
-        defaultEstimate.isAcceptableOrUnknown(
-          data['default_estimate']!,
-          _defaultEstimateMeta,
-        ),
-      );
-    }
-    if (data.containsKey('start_time')) {
-      context.handle(
-        _startTimeMeta,
-        startTime.isAcceptableOrUnknown(data['start_time']!, _startTimeMeta),
-      );
-    }
-    if (data.containsKey('remind_at')) {
-      context.handle(
-        _remindAtMeta,
-        remindAt.isAcceptableOrUnknown(data['remind_at']!, _remindAtMeta),
-      );
-    }
-    if (data.containsKey('is_paused')) {
-      context.handle(
-        _isPausedMeta,
-        isPaused.isAcceptableOrUnknown(data['is_paused']!, _isPausedMeta),
-      );
-    }
-    if (data.containsKey('quick_setting')) {
-      context.handle(
-        _quickSettingMeta,
-        quickSetting.isAcceptableOrUnknown(
-          data['quick_setting']!,
-          _quickSettingMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_quickSettingMeta);
-    }
-    if (data.containsKey('repeat_cycle')) {
-      context.handle(
-        _repeatCycleMeta,
-        repeatCycle.isAcceptableOrUnknown(
-          data['repeat_cycle']!,
-          _repeatCycleMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_repeatCycleMeta);
-    }
-    if (data.containsKey('start_date')) {
-      context.handle(
-        _startDateMeta,
-        startDate.isAcceptableOrUnknown(data['start_date']!, _startDateMeta),
-      );
-    }
-    if (data.containsKey('repeat_every')) {
-      context.handle(
-        _repeatEveryMeta,
-        repeatEvery.isAcceptableOrUnknown(
-          data['repeat_every']!,
-          _repeatEveryMeta,
-        ),
-      );
-    }
-    if (data.containsKey('monday')) {
-      context.handle(
-        _mondayMeta,
-        monday.isAcceptableOrUnknown(data['monday']!, _mondayMeta),
-      );
-    }
-    if (data.containsKey('tuesday')) {
-      context.handle(
-        _tuesdayMeta,
-        tuesday.isAcceptableOrUnknown(data['tuesday']!, _tuesdayMeta),
-      );
-    }
-    if (data.containsKey('wednesday')) {
-      context.handle(
-        _wednesdayMeta,
-        wednesday.isAcceptableOrUnknown(data['wednesday']!, _wednesdayMeta),
-      );
-    }
-    if (data.containsKey('thursday')) {
-      context.handle(
-        _thursdayMeta,
-        thursday.isAcceptableOrUnknown(data['thursday']!, _thursdayMeta),
-      );
-    }
-    if (data.containsKey('friday')) {
-      context.handle(
-        _fridayMeta,
-        friday.isAcceptableOrUnknown(data['friday']!, _fridayMeta),
-      );
-    }
-    if (data.containsKey('saturday')) {
-      context.handle(
-        _saturdayMeta,
-        saturday.isAcceptableOrUnknown(data['saturday']!, _saturdayMeta),
-      );
-    }
-    if (data.containsKey('sunday')) {
-      context.handle(
-        _sundayMeta,
-        sunday.isAcceptableOrUnknown(data['sunday']!, _sundayMeta),
-      );
-    }
-    if (data.containsKey('notes')) {
-      context.handle(
-        _notesMeta,
-        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
-      );
-    }
-    if (data.containsKey('sub_task_templates')) {
-      context.handle(
-        _subTaskTemplatesMeta,
-        subTaskTemplates.isAcceptableOrUnknown(
-          data['sub_task_templates']!,
-          _subTaskTemplatesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('last_task_creation')) {
-      context.handle(
-        _lastTaskCreationMeta,
-        lastTaskCreation.isAcceptableOrUnknown(
-          data['last_task_creation']!,
-          _lastTaskCreationMeta,
-        ),
-      );
-    }
-    if (data.containsKey('last_task_creation_day')) {
-      context.handle(
-        _lastTaskCreationDayMeta,
-        lastTaskCreationDay.isAcceptableOrUnknown(
-          data['last_task_creation_day']!,
-          _lastTaskCreationDayMeta,
-        ),
-      );
-    }
-    if (data.containsKey('deleted_instance_dates')) {
-      context.handle(
-        _deletedInstanceDatesMeta,
-        deletedInstanceDates.isAcceptableOrUnknown(
-          data['deleted_instance_dates']!,
-          _deletedInstanceDatesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('crdt_clock')) {
-      context.handle(
-        _crdtClockMeta,
-        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
-      );
-    }
-    if (data.containsKey('crdt_state')) {
-      context.handle(
-        _crdtStateMeta,
-        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  TaskRepeatCfg map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TaskRepeatCfg(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      projectId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}project_id'],
-      ),
-      title: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}title'],
-      ),
-      tagIds: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tag_ids'],
-      )!,
-      order: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}order'],
-      )!,
-      defaultEstimate: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}default_estimate'],
-      ),
-      startTime: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}start_time'],
-      ),
-      remindAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}remind_at'],
-      ),
-      isPaused: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_paused'],
-      )!,
-      quickSetting: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}quick_setting'],
-      )!,
-      repeatCycle: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}repeat_cycle'],
-      )!,
-      startDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}start_date'],
-      ),
-      repeatEvery: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}repeat_every'],
-      )!,
-      monday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}monday'],
-      )!,
-      tuesday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}tuesday'],
-      )!,
-      wednesday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}wednesday'],
-      )!,
-      thursday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}thursday'],
-      )!,
-      friday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}friday'],
-      )!,
-      saturday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}saturday'],
-      )!,
-      sunday: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}sunday'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      ),
-      subTaskTemplates: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}sub_task_templates'],
-      )!,
-      lastTaskCreation: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}last_task_creation'],
-      ),
-      lastTaskCreationDay: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}last_task_creation_day'],
-      ),
-      deletedInstanceDates: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}deleted_instance_dates'],
-      )!,
-      crdtClock: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_clock'],
-      )!,
-      crdtState: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_state'],
-      )!,
-    );
-  }
-
-  @override
-  $TaskRepeatCfgsTable createAlias(String alias) {
-    return $TaskRepeatCfgsTable(attachedDatabase, alias);
-  }
-}
-
-class TaskRepeatCfg extends DataClass implements Insertable<TaskRepeatCfg> {
-  final String id;
-  final String? projectId;
-  final String? title;
-  final String tagIds;
-  final int order;
-  final int? defaultEstimate;
-  final String? startTime;
-  final String? remindAt;
-  final bool isPaused;
-  final String quickSetting;
-  final String repeatCycle;
-  final String? startDate;
-  final int repeatEvery;
-  final bool monday;
-  final bool tuesday;
-  final bool wednesday;
-  final bool thursday;
-  final bool friday;
-  final bool saturday;
-  final bool sunday;
-  final String? notes;
-  final String subTaskTemplates;
-  final int? lastTaskCreation;
-  final String? lastTaskCreationDay;
-  final String deletedInstanceDates;
-  final String crdtClock;
-  final String crdtState;
-  const TaskRepeatCfg({
-    required this.id,
-    this.projectId,
-    this.title,
-    required this.tagIds,
-    required this.order,
-    this.defaultEstimate,
-    this.startTime,
-    this.remindAt,
-    required this.isPaused,
-    required this.quickSetting,
-    required this.repeatCycle,
-    this.startDate,
-    required this.repeatEvery,
-    required this.monday,
-    required this.tuesday,
-    required this.wednesday,
-    required this.thursday,
-    required this.friday,
-    required this.saturday,
-    required this.sunday,
-    this.notes,
-    required this.subTaskTemplates,
-    this.lastTaskCreation,
-    this.lastTaskCreationDay,
-    required this.deletedInstanceDates,
-    required this.crdtClock,
-    required this.crdtState,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    if (!nullToAbsent || projectId != null) {
-      map['project_id'] = Variable<String>(projectId);
-    }
-    if (!nullToAbsent || title != null) {
-      map['title'] = Variable<String>(title);
-    }
-    map['tag_ids'] = Variable<String>(tagIds);
-    map['order'] = Variable<int>(order);
-    if (!nullToAbsent || defaultEstimate != null) {
-      map['default_estimate'] = Variable<int>(defaultEstimate);
-    }
-    if (!nullToAbsent || startTime != null) {
-      map['start_time'] = Variable<String>(startTime);
-    }
-    if (!nullToAbsent || remindAt != null) {
-      map['remind_at'] = Variable<String>(remindAt);
-    }
-    map['is_paused'] = Variable<bool>(isPaused);
-    map['quick_setting'] = Variable<String>(quickSetting);
-    map['repeat_cycle'] = Variable<String>(repeatCycle);
-    if (!nullToAbsent || startDate != null) {
-      map['start_date'] = Variable<String>(startDate);
-    }
-    map['repeat_every'] = Variable<int>(repeatEvery);
-    map['monday'] = Variable<bool>(monday);
-    map['tuesday'] = Variable<bool>(tuesday);
-    map['wednesday'] = Variable<bool>(wednesday);
-    map['thursday'] = Variable<bool>(thursday);
-    map['friday'] = Variable<bool>(friday);
-    map['saturday'] = Variable<bool>(saturday);
-    map['sunday'] = Variable<bool>(sunday);
-    if (!nullToAbsent || notes != null) {
-      map['notes'] = Variable<String>(notes);
-    }
-    map['sub_task_templates'] = Variable<String>(subTaskTemplates);
-    if (!nullToAbsent || lastTaskCreation != null) {
-      map['last_task_creation'] = Variable<int>(lastTaskCreation);
-    }
-    if (!nullToAbsent || lastTaskCreationDay != null) {
-      map['last_task_creation_day'] = Variable<String>(lastTaskCreationDay);
-    }
-    map['deleted_instance_dates'] = Variable<String>(deletedInstanceDates);
-    map['crdt_clock'] = Variable<String>(crdtClock);
-    map['crdt_state'] = Variable<String>(crdtState);
-    return map;
-  }
-
-  TaskRepeatCfgsCompanion toCompanion(bool nullToAbsent) {
-    return TaskRepeatCfgsCompanion(
-      id: Value(id),
-      projectId: projectId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(projectId),
-      title: title == null && nullToAbsent
-          ? const Value.absent()
-          : Value(title),
-      tagIds: Value(tagIds),
-      order: Value(order),
-      defaultEstimate: defaultEstimate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(defaultEstimate),
-      startTime: startTime == null && nullToAbsent
-          ? const Value.absent()
-          : Value(startTime),
-      remindAt: remindAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(remindAt),
-      isPaused: Value(isPaused),
-      quickSetting: Value(quickSetting),
-      repeatCycle: Value(repeatCycle),
-      startDate: startDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(startDate),
-      repeatEvery: Value(repeatEvery),
-      monday: Value(monday),
-      tuesday: Value(tuesday),
-      wednesday: Value(wednesday),
-      thursday: Value(thursday),
-      friday: Value(friday),
-      saturday: Value(saturday),
-      sunday: Value(sunday),
-      notes: notes == null && nullToAbsent
-          ? const Value.absent()
-          : Value(notes),
-      subTaskTemplates: Value(subTaskTemplates),
-      lastTaskCreation: lastTaskCreation == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastTaskCreation),
-      lastTaskCreationDay: lastTaskCreationDay == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastTaskCreationDay),
-      deletedInstanceDates: Value(deletedInstanceDates),
-      crdtClock: Value(crdtClock),
-      crdtState: Value(crdtState),
-    );
-  }
-
-  factory TaskRepeatCfg.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TaskRepeatCfg(
-      id: serializer.fromJson<String>(json['id']),
-      projectId: serializer.fromJson<String?>(json['projectId']),
-      title: serializer.fromJson<String?>(json['title']),
-      tagIds: serializer.fromJson<String>(json['tagIds']),
-      order: serializer.fromJson<int>(json['order']),
-      defaultEstimate: serializer.fromJson<int?>(json['defaultEstimate']),
-      startTime: serializer.fromJson<String?>(json['startTime']),
-      remindAt: serializer.fromJson<String?>(json['remindAt']),
-      isPaused: serializer.fromJson<bool>(json['isPaused']),
-      quickSetting: serializer.fromJson<String>(json['quickSetting']),
-      repeatCycle: serializer.fromJson<String>(json['repeatCycle']),
-      startDate: serializer.fromJson<String?>(json['startDate']),
-      repeatEvery: serializer.fromJson<int>(json['repeatEvery']),
-      monday: serializer.fromJson<bool>(json['monday']),
-      tuesday: serializer.fromJson<bool>(json['tuesday']),
-      wednesday: serializer.fromJson<bool>(json['wednesday']),
-      thursday: serializer.fromJson<bool>(json['thursday']),
-      friday: serializer.fromJson<bool>(json['friday']),
-      saturday: serializer.fromJson<bool>(json['saturday']),
-      sunday: serializer.fromJson<bool>(json['sunday']),
-      notes: serializer.fromJson<String?>(json['notes']),
-      subTaskTemplates: serializer.fromJson<String>(json['subTaskTemplates']),
-      lastTaskCreation: serializer.fromJson<int?>(json['lastTaskCreation']),
-      lastTaskCreationDay: serializer.fromJson<String?>(
-        json['lastTaskCreationDay'],
-      ),
-      deletedInstanceDates: serializer.fromJson<String>(
-        json['deletedInstanceDates'],
-      ),
-      crdtClock: serializer.fromJson<String>(json['crdtClock']),
-      crdtState: serializer.fromJson<String>(json['crdtState']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'projectId': serializer.toJson<String?>(projectId),
-      'title': serializer.toJson<String?>(title),
-      'tagIds': serializer.toJson<String>(tagIds),
-      'order': serializer.toJson<int>(order),
-      'defaultEstimate': serializer.toJson<int?>(defaultEstimate),
-      'startTime': serializer.toJson<String?>(startTime),
-      'remindAt': serializer.toJson<String?>(remindAt),
-      'isPaused': serializer.toJson<bool>(isPaused),
-      'quickSetting': serializer.toJson<String>(quickSetting),
-      'repeatCycle': serializer.toJson<String>(repeatCycle),
-      'startDate': serializer.toJson<String?>(startDate),
-      'repeatEvery': serializer.toJson<int>(repeatEvery),
-      'monday': serializer.toJson<bool>(monday),
-      'tuesday': serializer.toJson<bool>(tuesday),
-      'wednesday': serializer.toJson<bool>(wednesday),
-      'thursday': serializer.toJson<bool>(thursday),
-      'friday': serializer.toJson<bool>(friday),
-      'saturday': serializer.toJson<bool>(saturday),
-      'sunday': serializer.toJson<bool>(sunday),
-      'notes': serializer.toJson<String?>(notes),
-      'subTaskTemplates': serializer.toJson<String>(subTaskTemplates),
-      'lastTaskCreation': serializer.toJson<int?>(lastTaskCreation),
-      'lastTaskCreationDay': serializer.toJson<String?>(lastTaskCreationDay),
-      'deletedInstanceDates': serializer.toJson<String>(deletedInstanceDates),
-      'crdtClock': serializer.toJson<String>(crdtClock),
-      'crdtState': serializer.toJson<String>(crdtState),
-    };
-  }
-
-  TaskRepeatCfg copyWith({
-    String? id,
-    Value<String?> projectId = const Value.absent(),
-    Value<String?> title = const Value.absent(),
-    String? tagIds,
-    int? order,
-    Value<int?> defaultEstimate = const Value.absent(),
-    Value<String?> startTime = const Value.absent(),
-    Value<String?> remindAt = const Value.absent(),
-    bool? isPaused,
-    String? quickSetting,
-    String? repeatCycle,
-    Value<String?> startDate = const Value.absent(),
-    int? repeatEvery,
-    bool? monday,
-    bool? tuesday,
-    bool? wednesday,
-    bool? thursday,
-    bool? friday,
-    bool? saturday,
-    bool? sunday,
-    Value<String?> notes = const Value.absent(),
-    String? subTaskTemplates,
-    Value<int?> lastTaskCreation = const Value.absent(),
-    Value<String?> lastTaskCreationDay = const Value.absent(),
-    String? deletedInstanceDates,
-    String? crdtClock,
-    String? crdtState,
-  }) => TaskRepeatCfg(
-    id: id ?? this.id,
-    projectId: projectId.present ? projectId.value : this.projectId,
-    title: title.present ? title.value : this.title,
-    tagIds: tagIds ?? this.tagIds,
-    order: order ?? this.order,
-    defaultEstimate: defaultEstimate.present
-        ? defaultEstimate.value
-        : this.defaultEstimate,
-    startTime: startTime.present ? startTime.value : this.startTime,
-    remindAt: remindAt.present ? remindAt.value : this.remindAt,
-    isPaused: isPaused ?? this.isPaused,
-    quickSetting: quickSetting ?? this.quickSetting,
-    repeatCycle: repeatCycle ?? this.repeatCycle,
-    startDate: startDate.present ? startDate.value : this.startDate,
-    repeatEvery: repeatEvery ?? this.repeatEvery,
-    monday: monday ?? this.monday,
-    tuesday: tuesday ?? this.tuesday,
-    wednesday: wednesday ?? this.wednesday,
-    thursday: thursday ?? this.thursday,
-    friday: friday ?? this.friday,
-    saturday: saturday ?? this.saturday,
-    sunday: sunday ?? this.sunday,
-    notes: notes.present ? notes.value : this.notes,
-    subTaskTemplates: subTaskTemplates ?? this.subTaskTemplates,
-    lastTaskCreation: lastTaskCreation.present
-        ? lastTaskCreation.value
-        : this.lastTaskCreation,
-    lastTaskCreationDay: lastTaskCreationDay.present
-        ? lastTaskCreationDay.value
-        : this.lastTaskCreationDay,
-    deletedInstanceDates: deletedInstanceDates ?? this.deletedInstanceDates,
-    crdtClock: crdtClock ?? this.crdtClock,
-    crdtState: crdtState ?? this.crdtState,
-  );
-  TaskRepeatCfg copyWithCompanion(TaskRepeatCfgsCompanion data) {
-    return TaskRepeatCfg(
-      id: data.id.present ? data.id.value : this.id,
-      projectId: data.projectId.present ? data.projectId.value : this.projectId,
-      title: data.title.present ? data.title.value : this.title,
-      tagIds: data.tagIds.present ? data.tagIds.value : this.tagIds,
-      order: data.order.present ? data.order.value : this.order,
-      defaultEstimate: data.defaultEstimate.present
-          ? data.defaultEstimate.value
-          : this.defaultEstimate,
-      startTime: data.startTime.present ? data.startTime.value : this.startTime,
-      remindAt: data.remindAt.present ? data.remindAt.value : this.remindAt,
-      isPaused: data.isPaused.present ? data.isPaused.value : this.isPaused,
-      quickSetting: data.quickSetting.present
-          ? data.quickSetting.value
-          : this.quickSetting,
-      repeatCycle: data.repeatCycle.present
-          ? data.repeatCycle.value
-          : this.repeatCycle,
-      startDate: data.startDate.present ? data.startDate.value : this.startDate,
-      repeatEvery: data.repeatEvery.present
-          ? data.repeatEvery.value
-          : this.repeatEvery,
-      monday: data.monday.present ? data.monday.value : this.monday,
-      tuesday: data.tuesday.present ? data.tuesday.value : this.tuesday,
-      wednesday: data.wednesday.present ? data.wednesday.value : this.wednesday,
-      thursday: data.thursday.present ? data.thursday.value : this.thursday,
-      friday: data.friday.present ? data.friday.value : this.friday,
-      saturday: data.saturday.present ? data.saturday.value : this.saturday,
-      sunday: data.sunday.present ? data.sunday.value : this.sunday,
-      notes: data.notes.present ? data.notes.value : this.notes,
-      subTaskTemplates: data.subTaskTemplates.present
-          ? data.subTaskTemplates.value
-          : this.subTaskTemplates,
-      lastTaskCreation: data.lastTaskCreation.present
-          ? data.lastTaskCreation.value
-          : this.lastTaskCreation,
-      lastTaskCreationDay: data.lastTaskCreationDay.present
-          ? data.lastTaskCreationDay.value
-          : this.lastTaskCreationDay,
-      deletedInstanceDates: data.deletedInstanceDates.present
-          ? data.deletedInstanceDates.value
-          : this.deletedInstanceDates,
-      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
-      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TaskRepeatCfg(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('title: $title, ')
-          ..write('tagIds: $tagIds, ')
-          ..write('order: $order, ')
-          ..write('defaultEstimate: $defaultEstimate, ')
-          ..write('startTime: $startTime, ')
-          ..write('remindAt: $remindAt, ')
-          ..write('isPaused: $isPaused, ')
-          ..write('quickSetting: $quickSetting, ')
-          ..write('repeatCycle: $repeatCycle, ')
-          ..write('startDate: $startDate, ')
-          ..write('repeatEvery: $repeatEvery, ')
-          ..write('monday: $monday, ')
-          ..write('tuesday: $tuesday, ')
-          ..write('wednesday: $wednesday, ')
-          ..write('thursday: $thursday, ')
-          ..write('friday: $friday, ')
-          ..write('saturday: $saturday, ')
-          ..write('sunday: $sunday, ')
-          ..write('notes: $notes, ')
-          ..write('subTaskTemplates: $subTaskTemplates, ')
-          ..write('lastTaskCreation: $lastTaskCreation, ')
-          ..write('lastTaskCreationDay: $lastTaskCreationDay, ')
-          ..write('deletedInstanceDates: $deletedInstanceDates, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hashAll([
-    id,
-    projectId,
-    title,
-    tagIds,
-    order,
-    defaultEstimate,
-    startTime,
-    remindAt,
-    isPaused,
-    quickSetting,
-    repeatCycle,
-    startDate,
-    repeatEvery,
-    monday,
-    tuesday,
-    wednesday,
-    thursday,
-    friday,
-    saturday,
-    sunday,
-    notes,
-    subTaskTemplates,
-    lastTaskCreation,
-    lastTaskCreationDay,
-    deletedInstanceDates,
-    crdtClock,
-    crdtState,
-  ]);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is TaskRepeatCfg &&
-          other.id == this.id &&
-          other.projectId == this.projectId &&
-          other.title == this.title &&
-          other.tagIds == this.tagIds &&
-          other.order == this.order &&
-          other.defaultEstimate == this.defaultEstimate &&
-          other.startTime == this.startTime &&
-          other.remindAt == this.remindAt &&
-          other.isPaused == this.isPaused &&
-          other.quickSetting == this.quickSetting &&
-          other.repeatCycle == this.repeatCycle &&
-          other.startDate == this.startDate &&
-          other.repeatEvery == this.repeatEvery &&
-          other.monday == this.monday &&
-          other.tuesday == this.tuesday &&
-          other.wednesday == this.wednesday &&
-          other.thursday == this.thursday &&
-          other.friday == this.friday &&
-          other.saturday == this.saturday &&
-          other.sunday == this.sunday &&
-          other.notes == this.notes &&
-          other.subTaskTemplates == this.subTaskTemplates &&
-          other.lastTaskCreation == this.lastTaskCreation &&
-          other.lastTaskCreationDay == this.lastTaskCreationDay &&
-          other.deletedInstanceDates == this.deletedInstanceDates &&
-          other.crdtClock == this.crdtClock &&
-          other.crdtState == this.crdtState);
-}
-
-class TaskRepeatCfgsCompanion extends UpdateCompanion<TaskRepeatCfg> {
-  final Value<String> id;
-  final Value<String?> projectId;
-  final Value<String?> title;
-  final Value<String> tagIds;
-  final Value<int> order;
-  final Value<int?> defaultEstimate;
-  final Value<String?> startTime;
-  final Value<String?> remindAt;
-  final Value<bool> isPaused;
-  final Value<String> quickSetting;
-  final Value<String> repeatCycle;
-  final Value<String?> startDate;
-  final Value<int> repeatEvery;
-  final Value<bool> monday;
-  final Value<bool> tuesday;
-  final Value<bool> wednesday;
-  final Value<bool> thursday;
-  final Value<bool> friday;
-  final Value<bool> saturday;
-  final Value<bool> sunday;
-  final Value<String?> notes;
-  final Value<String> subTaskTemplates;
-  final Value<int?> lastTaskCreation;
-  final Value<String?> lastTaskCreationDay;
-  final Value<String> deletedInstanceDates;
-  final Value<String> crdtClock;
-  final Value<String> crdtState;
-  final Value<int> rowid;
-  const TaskRepeatCfgsCompanion({
-    this.id = const Value.absent(),
-    this.projectId = const Value.absent(),
-    this.title = const Value.absent(),
-    this.tagIds = const Value.absent(),
-    this.order = const Value.absent(),
-    this.defaultEstimate = const Value.absent(),
-    this.startTime = const Value.absent(),
-    this.remindAt = const Value.absent(),
-    this.isPaused = const Value.absent(),
-    this.quickSetting = const Value.absent(),
-    this.repeatCycle = const Value.absent(),
-    this.startDate = const Value.absent(),
-    this.repeatEvery = const Value.absent(),
-    this.monday = const Value.absent(),
-    this.tuesday = const Value.absent(),
-    this.wednesday = const Value.absent(),
-    this.thursday = const Value.absent(),
-    this.friday = const Value.absent(),
-    this.saturday = const Value.absent(),
-    this.sunday = const Value.absent(),
-    this.notes = const Value.absent(),
-    this.subTaskTemplates = const Value.absent(),
-    this.lastTaskCreation = const Value.absent(),
-    this.lastTaskCreationDay = const Value.absent(),
-    this.deletedInstanceDates = const Value.absent(),
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  TaskRepeatCfgsCompanion.insert({
-    required String id,
-    this.projectId = const Value.absent(),
-    this.title = const Value.absent(),
-    this.tagIds = const Value.absent(),
-    this.order = const Value.absent(),
-    this.defaultEstimate = const Value.absent(),
-    this.startTime = const Value.absent(),
-    this.remindAt = const Value.absent(),
-    this.isPaused = const Value.absent(),
-    required String quickSetting,
-    required String repeatCycle,
-    this.startDate = const Value.absent(),
-    this.repeatEvery = const Value.absent(),
-    this.monday = const Value.absent(),
-    this.tuesday = const Value.absent(),
-    this.wednesday = const Value.absent(),
-    this.thursday = const Value.absent(),
-    this.friday = const Value.absent(),
-    this.saturday = const Value.absent(),
-    this.sunday = const Value.absent(),
-    this.notes = const Value.absent(),
-    this.subTaskTemplates = const Value.absent(),
-    this.lastTaskCreation = const Value.absent(),
-    this.lastTaskCreationDay = const Value.absent(),
-    this.deletedInstanceDates = const Value.absent(),
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       quickSetting = Value(quickSetting),
-       repeatCycle = Value(repeatCycle);
-  static Insertable<TaskRepeatCfg> custom({
-    Expression<String>? id,
-    Expression<String>? projectId,
-    Expression<String>? title,
-    Expression<String>? tagIds,
-    Expression<int>? order,
-    Expression<int>? defaultEstimate,
-    Expression<String>? startTime,
-    Expression<String>? remindAt,
-    Expression<bool>? isPaused,
-    Expression<String>? quickSetting,
-    Expression<String>? repeatCycle,
-    Expression<String>? startDate,
-    Expression<int>? repeatEvery,
-    Expression<bool>? monday,
-    Expression<bool>? tuesday,
-    Expression<bool>? wednesday,
-    Expression<bool>? thursday,
-    Expression<bool>? friday,
-    Expression<bool>? saturday,
-    Expression<bool>? sunday,
-    Expression<String>? notes,
-    Expression<String>? subTaskTemplates,
-    Expression<int>? lastTaskCreation,
-    Expression<String>? lastTaskCreationDay,
-    Expression<String>? deletedInstanceDates,
-    Expression<String>? crdtClock,
-    Expression<String>? crdtState,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (projectId != null) 'project_id': projectId,
-      if (title != null) 'title': title,
-      if (tagIds != null) 'tag_ids': tagIds,
-      if (order != null) 'order': order,
-      if (defaultEstimate != null) 'default_estimate': defaultEstimate,
-      if (startTime != null) 'start_time': startTime,
-      if (remindAt != null) 'remind_at': remindAt,
-      if (isPaused != null) 'is_paused': isPaused,
-      if (quickSetting != null) 'quick_setting': quickSetting,
-      if (repeatCycle != null) 'repeat_cycle': repeatCycle,
-      if (startDate != null) 'start_date': startDate,
-      if (repeatEvery != null) 'repeat_every': repeatEvery,
-      if (monday != null) 'monday': monday,
-      if (tuesday != null) 'tuesday': tuesday,
-      if (wednesday != null) 'wednesday': wednesday,
-      if (thursday != null) 'thursday': thursday,
-      if (friday != null) 'friday': friday,
-      if (saturday != null) 'saturday': saturday,
-      if (sunday != null) 'sunday': sunday,
-      if (notes != null) 'notes': notes,
-      if (subTaskTemplates != null) 'sub_task_templates': subTaskTemplates,
-      if (lastTaskCreation != null) 'last_task_creation': lastTaskCreation,
-      if (lastTaskCreationDay != null)
-        'last_task_creation_day': lastTaskCreationDay,
-      if (deletedInstanceDates != null)
-        'deleted_instance_dates': deletedInstanceDates,
-      if (crdtClock != null) 'crdt_clock': crdtClock,
-      if (crdtState != null) 'crdt_state': crdtState,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  TaskRepeatCfgsCompanion copyWith({
-    Value<String>? id,
-    Value<String?>? projectId,
-    Value<String?>? title,
-    Value<String>? tagIds,
-    Value<int>? order,
-    Value<int?>? defaultEstimate,
-    Value<String?>? startTime,
-    Value<String?>? remindAt,
-    Value<bool>? isPaused,
-    Value<String>? quickSetting,
-    Value<String>? repeatCycle,
-    Value<String?>? startDate,
-    Value<int>? repeatEvery,
-    Value<bool>? monday,
-    Value<bool>? tuesday,
-    Value<bool>? wednesday,
-    Value<bool>? thursday,
-    Value<bool>? friday,
-    Value<bool>? saturday,
-    Value<bool>? sunday,
-    Value<String?>? notes,
-    Value<String>? subTaskTemplates,
-    Value<int?>? lastTaskCreation,
-    Value<String?>? lastTaskCreationDay,
-    Value<String>? deletedInstanceDates,
-    Value<String>? crdtClock,
-    Value<String>? crdtState,
-    Value<int>? rowid,
-  }) {
-    return TaskRepeatCfgsCompanion(
-      id: id ?? this.id,
-      projectId: projectId ?? this.projectId,
-      title: title ?? this.title,
-      tagIds: tagIds ?? this.tagIds,
-      order: order ?? this.order,
-      defaultEstimate: defaultEstimate ?? this.defaultEstimate,
-      startTime: startTime ?? this.startTime,
-      remindAt: remindAt ?? this.remindAt,
-      isPaused: isPaused ?? this.isPaused,
-      quickSetting: quickSetting ?? this.quickSetting,
-      repeatCycle: repeatCycle ?? this.repeatCycle,
-      startDate: startDate ?? this.startDate,
-      repeatEvery: repeatEvery ?? this.repeatEvery,
-      monday: monday ?? this.monday,
-      tuesday: tuesday ?? this.tuesday,
-      wednesday: wednesday ?? this.wednesday,
-      thursday: thursday ?? this.thursday,
-      friday: friday ?? this.friday,
-      saturday: saturday ?? this.saturday,
-      sunday: sunday ?? this.sunday,
-      notes: notes ?? this.notes,
-      subTaskTemplates: subTaskTemplates ?? this.subTaskTemplates,
-      lastTaskCreation: lastTaskCreation ?? this.lastTaskCreation,
-      lastTaskCreationDay: lastTaskCreationDay ?? this.lastTaskCreationDay,
-      deletedInstanceDates: deletedInstanceDates ?? this.deletedInstanceDates,
-      crdtClock: crdtClock ?? this.crdtClock,
-      crdtState: crdtState ?? this.crdtState,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (projectId.present) {
-      map['project_id'] = Variable<String>(projectId.value);
-    }
-    if (title.present) {
-      map['title'] = Variable<String>(title.value);
-    }
-    if (tagIds.present) {
-      map['tag_ids'] = Variable<String>(tagIds.value);
-    }
-    if (order.present) {
-      map['order'] = Variable<int>(order.value);
-    }
-    if (defaultEstimate.present) {
-      map['default_estimate'] = Variable<int>(defaultEstimate.value);
-    }
-    if (startTime.present) {
-      map['start_time'] = Variable<String>(startTime.value);
-    }
-    if (remindAt.present) {
-      map['remind_at'] = Variable<String>(remindAt.value);
-    }
-    if (isPaused.present) {
-      map['is_paused'] = Variable<bool>(isPaused.value);
-    }
-    if (quickSetting.present) {
-      map['quick_setting'] = Variable<String>(quickSetting.value);
-    }
-    if (repeatCycle.present) {
-      map['repeat_cycle'] = Variable<String>(repeatCycle.value);
-    }
-    if (startDate.present) {
-      map['start_date'] = Variable<String>(startDate.value);
-    }
-    if (repeatEvery.present) {
-      map['repeat_every'] = Variable<int>(repeatEvery.value);
-    }
-    if (monday.present) {
-      map['monday'] = Variable<bool>(monday.value);
-    }
-    if (tuesday.present) {
-      map['tuesday'] = Variable<bool>(tuesday.value);
-    }
-    if (wednesday.present) {
-      map['wednesday'] = Variable<bool>(wednesday.value);
-    }
-    if (thursday.present) {
-      map['thursday'] = Variable<bool>(thursday.value);
-    }
-    if (friday.present) {
-      map['friday'] = Variable<bool>(friday.value);
-    }
-    if (saturday.present) {
-      map['saturday'] = Variable<bool>(saturday.value);
-    }
-    if (sunday.present) {
-      map['sunday'] = Variable<bool>(sunday.value);
-    }
-    if (notes.present) {
-      map['notes'] = Variable<String>(notes.value);
-    }
-    if (subTaskTemplates.present) {
-      map['sub_task_templates'] = Variable<String>(subTaskTemplates.value);
-    }
-    if (lastTaskCreation.present) {
-      map['last_task_creation'] = Variable<int>(lastTaskCreation.value);
-    }
-    if (lastTaskCreationDay.present) {
-      map['last_task_creation_day'] = Variable<String>(
-        lastTaskCreationDay.value,
-      );
-    }
-    if (deletedInstanceDates.present) {
-      map['deleted_instance_dates'] = Variable<String>(
-        deletedInstanceDates.value,
-      );
-    }
-    if (crdtClock.present) {
-      map['crdt_clock'] = Variable<String>(crdtClock.value);
-    }
-    if (crdtState.present) {
-      map['crdt_state'] = Variable<String>(crdtState.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TaskRepeatCfgsCompanion(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('title: $title, ')
-          ..write('tagIds: $tagIds, ')
-          ..write('order: $order, ')
-          ..write('defaultEstimate: $defaultEstimate, ')
-          ..write('startTime: $startTime, ')
-          ..write('remindAt: $remindAt, ')
-          ..write('isPaused: $isPaused, ')
-          ..write('quickSetting: $quickSetting, ')
-          ..write('repeatCycle: $repeatCycle, ')
-          ..write('startDate: $startDate, ')
-          ..write('repeatEvery: $repeatEvery, ')
-          ..write('monday: $monday, ')
-          ..write('tuesday: $tuesday, ')
-          ..write('wednesday: $wednesday, ')
-          ..write('thursday: $thursday, ')
-          ..write('friday: $friday, ')
-          ..write('saturday: $saturday, ')
-          ..write('sunday: $sunday, ')
-          ..write('notes: $notes, ')
-          ..write('subTaskTemplates: $subTaskTemplates, ')
-          ..write('lastTaskCreation: $lastTaskCreation, ')
-          ..write('lastTaskCreationDay: $lastTaskCreationDay, ')
-          ..write('deletedInstanceDates: $deletedInstanceDates, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $JiraIntegrationsTable extends JiraIntegrations
     with TableInfo<$JiraIntegrationsTable, JiraIntegration> {
   @override
@@ -6512,26 +4277,6 @@ class $JiraIntegrationsTable extends JiraIntegrations
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _emailMeta = const VerificationMeta('email');
-  @override
-  late final GeneratedColumn<String> email = GeneratedColumn<String>(
-    'email',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _apiTokenMeta = const VerificationMeta(
-    'apiToken',
-  );
-  @override
-  late final GeneratedColumn<String> apiToken = GeneratedColumn<String>(
-    'api_token',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
   static const VerificationMeta _jiraProjectKeyMeta = const VerificationMeta(
     'jiraProjectKey',
   );
@@ -6554,6 +4299,17 @@ class $JiraIntegrationsTable extends JiraIntegrations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _credentialsFilePathMeta =
+      const VerificationMeta('credentialsFilePath');
+  @override
+  late final GeneratedColumn<String> credentialsFilePath =
+      GeneratedColumn<String>(
+        'credentials_file_path',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
   static const VerificationMeta _jqlFilterMeta = const VerificationMeta(
     'jqlFilter',
   );
@@ -6718,10 +4474,9 @@ class $JiraIntegrationsTable extends JiraIntegrations
     id,
     projectId,
     baseUrl,
-    email,
-    apiToken,
     jiraProjectKey,
     boardId,
+    credentialsFilePath,
     jqlFilter,
     syncEnabled,
     syncSubtasks,
@@ -6767,22 +4522,6 @@ class $JiraIntegrationsTable extends JiraIntegrations
     } else if (isInserting) {
       context.missing(_baseUrlMeta);
     }
-    if (data.containsKey('email')) {
-      context.handle(
-        _emailMeta,
-        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_emailMeta);
-    }
-    if (data.containsKey('api_token')) {
-      context.handle(
-        _apiTokenMeta,
-        apiToken.isAcceptableOrUnknown(data['api_token']!, _apiTokenMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_apiTokenMeta);
-    }
     if (data.containsKey('jira_project_key')) {
       context.handle(
         _jiraProjectKeyMeta,
@@ -6799,6 +4538,17 @@ class $JiraIntegrationsTable extends JiraIntegrations
         _boardIdMeta,
         boardId.isAcceptableOrUnknown(data['board_id']!, _boardIdMeta),
       );
+    }
+    if (data.containsKey('credentials_file_path')) {
+      context.handle(
+        _credentialsFilePathMeta,
+        credentialsFilePath.isAcceptableOrUnknown(
+          data['credentials_file_path']!,
+          _credentialsFilePathMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_credentialsFilePathMeta);
     }
     if (data.containsKey('jql_filter')) {
       context.handle(
@@ -6925,14 +4675,6 @@ class $JiraIntegrationsTable extends JiraIntegrations
         DriftSqlType.string,
         data['${effectivePrefix}base_url'],
       )!,
-      email: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}email'],
-      )!,
-      apiToken: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}api_token'],
-      )!,
       jiraProjectKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}jira_project_key'],
@@ -6941,6 +4683,10 @@ class $JiraIntegrationsTable extends JiraIntegrations
         DriftSqlType.string,
         data['${effectivePrefix}board_id'],
       ),
+      credentialsFilePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}credentials_file_path'],
+      )!,
       jqlFilter: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}jql_filter'],
@@ -7006,10 +4752,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
   final String id;
   final String? projectId;
   final String baseUrl;
-  final String email;
-  final String apiToken;
   final String jiraProjectKey;
   final String? boardId;
+  final String credentialsFilePath;
   final String? jqlFilter;
   final bool syncEnabled;
   final bool syncSubtasks;
@@ -7027,10 +4772,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     required this.id,
     this.projectId,
     required this.baseUrl,
-    required this.email,
-    required this.apiToken,
     required this.jiraProjectKey,
     this.boardId,
+    required this.credentialsFilePath,
     this.jqlFilter,
     required this.syncEnabled,
     required this.syncSubtasks,
@@ -7053,12 +4797,11 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       map['project_id'] = Variable<String>(projectId);
     }
     map['base_url'] = Variable<String>(baseUrl);
-    map['email'] = Variable<String>(email);
-    map['api_token'] = Variable<String>(apiToken);
     map['jira_project_key'] = Variable<String>(jiraProjectKey);
     if (!nullToAbsent || boardId != null) {
       map['board_id'] = Variable<String>(boardId);
     }
+    map['credentials_file_path'] = Variable<String>(credentialsFilePath);
     if (!nullToAbsent || jqlFilter != null) {
       map['jql_filter'] = Variable<String>(jqlFilter);
     }
@@ -7090,12 +4833,11 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
           ? const Value.absent()
           : Value(projectId),
       baseUrl: Value(baseUrl),
-      email: Value(email),
-      apiToken: Value(apiToken),
       jiraProjectKey: Value(jiraProjectKey),
       boardId: boardId == null && nullToAbsent
           ? const Value.absent()
           : Value(boardId),
+      credentialsFilePath: Value(credentialsFilePath),
       jqlFilter: jqlFilter == null && nullToAbsent
           ? const Value.absent()
           : Value(jqlFilter),
@@ -7129,10 +4871,11 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       id: serializer.fromJson<String>(json['id']),
       projectId: serializer.fromJson<String?>(json['projectId']),
       baseUrl: serializer.fromJson<String>(json['baseUrl']),
-      email: serializer.fromJson<String>(json['email']),
-      apiToken: serializer.fromJson<String>(json['apiToken']),
       jiraProjectKey: serializer.fromJson<String>(json['jiraProjectKey']),
       boardId: serializer.fromJson<String?>(json['boardId']),
+      credentialsFilePath: serializer.fromJson<String>(
+        json['credentialsFilePath'],
+      ),
       jqlFilter: serializer.fromJson<String?>(json['jqlFilter']),
       syncEnabled: serializer.fromJson<bool>(json['syncEnabled']),
       syncSubtasks: serializer.fromJson<bool>(json['syncSubtasks']),
@@ -7157,10 +4900,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       'id': serializer.toJson<String>(id),
       'projectId': serializer.toJson<String?>(projectId),
       'baseUrl': serializer.toJson<String>(baseUrl),
-      'email': serializer.toJson<String>(email),
-      'apiToken': serializer.toJson<String>(apiToken),
       'jiraProjectKey': serializer.toJson<String>(jiraProjectKey),
       'boardId': serializer.toJson<String?>(boardId),
+      'credentialsFilePath': serializer.toJson<String>(credentialsFilePath),
       'jqlFilter': serializer.toJson<String?>(jqlFilter),
       'syncEnabled': serializer.toJson<bool>(syncEnabled),
       'syncSubtasks': serializer.toJson<bool>(syncSubtasks),
@@ -7181,10 +4923,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     String? id,
     Value<String?> projectId = const Value.absent(),
     String? baseUrl,
-    String? email,
-    String? apiToken,
     String? jiraProjectKey,
     Value<String?> boardId = const Value.absent(),
+    String? credentialsFilePath,
     Value<String?> jqlFilter = const Value.absent(),
     bool? syncEnabled,
     bool? syncSubtasks,
@@ -7202,10 +4943,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     id: id ?? this.id,
     projectId: projectId.present ? projectId.value : this.projectId,
     baseUrl: baseUrl ?? this.baseUrl,
-    email: email ?? this.email,
-    apiToken: apiToken ?? this.apiToken,
     jiraProjectKey: jiraProjectKey ?? this.jiraProjectKey,
     boardId: boardId.present ? boardId.value : this.boardId,
+    credentialsFilePath: credentialsFilePath ?? this.credentialsFilePath,
     jqlFilter: jqlFilter.present ? jqlFilter.value : this.jqlFilter,
     syncEnabled: syncEnabled ?? this.syncEnabled,
     syncSubtasks: syncSubtasks ?? this.syncSubtasks,
@@ -7227,12 +4967,13 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       id: data.id.present ? data.id.value : this.id,
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
       baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
-      email: data.email.present ? data.email.value : this.email,
-      apiToken: data.apiToken.present ? data.apiToken.value : this.apiToken,
       jiraProjectKey: data.jiraProjectKey.present
           ? data.jiraProjectKey.value
           : this.jiraProjectKey,
       boardId: data.boardId.present ? data.boardId.value : this.boardId,
+      credentialsFilePath: data.credentialsFilePath.present
+          ? data.credentialsFilePath.value
+          : this.credentialsFilePath,
       jqlFilter: data.jqlFilter.present ? data.jqlFilter.value : this.jqlFilter,
       syncEnabled: data.syncEnabled.present
           ? data.syncEnabled.value
@@ -7271,10 +5012,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
           ..write('id: $id, ')
           ..write('projectId: $projectId, ')
           ..write('baseUrl: $baseUrl, ')
-          ..write('email: $email, ')
-          ..write('apiToken: $apiToken, ')
           ..write('jiraProjectKey: $jiraProjectKey, ')
           ..write('boardId: $boardId, ')
+          ..write('credentialsFilePath: $credentialsFilePath, ')
           ..write('jqlFilter: $jqlFilter, ')
           ..write('syncEnabled: $syncEnabled, ')
           ..write('syncSubtasks: $syncSubtasks, ')
@@ -7297,10 +5037,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     id,
     projectId,
     baseUrl,
-    email,
-    apiToken,
     jiraProjectKey,
     boardId,
+    credentialsFilePath,
     jqlFilter,
     syncEnabled,
     syncSubtasks,
@@ -7322,10 +5061,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
           other.id == this.id &&
           other.projectId == this.projectId &&
           other.baseUrl == this.baseUrl &&
-          other.email == this.email &&
-          other.apiToken == this.apiToken &&
           other.jiraProjectKey == this.jiraProjectKey &&
           other.boardId == this.boardId &&
+          other.credentialsFilePath == this.credentialsFilePath &&
           other.jqlFilter == this.jqlFilter &&
           other.syncEnabled == this.syncEnabled &&
           other.syncSubtasks == this.syncSubtasks &&
@@ -7345,10 +5083,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
   final Value<String> id;
   final Value<String?> projectId;
   final Value<String> baseUrl;
-  final Value<String> email;
-  final Value<String> apiToken;
   final Value<String> jiraProjectKey;
   final Value<String?> boardId;
+  final Value<String> credentialsFilePath;
   final Value<String?> jqlFilter;
   final Value<bool> syncEnabled;
   final Value<bool> syncSubtasks;
@@ -7367,10 +5104,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     this.id = const Value.absent(),
     this.projectId = const Value.absent(),
     this.baseUrl = const Value.absent(),
-    this.email = const Value.absent(),
-    this.apiToken = const Value.absent(),
     this.jiraProjectKey = const Value.absent(),
     this.boardId = const Value.absent(),
+    this.credentialsFilePath = const Value.absent(),
     this.jqlFilter = const Value.absent(),
     this.syncEnabled = const Value.absent(),
     this.syncSubtasks = const Value.absent(),
@@ -7390,10 +5126,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     required String id,
     this.projectId = const Value.absent(),
     required String baseUrl,
-    required String email,
-    required String apiToken,
     required String jiraProjectKey,
     this.boardId = const Value.absent(),
+    required String credentialsFilePath,
     this.jqlFilter = const Value.absent(),
     this.syncEnabled = const Value.absent(),
     this.syncSubtasks = const Value.absent(),
@@ -7410,18 +5145,16 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        baseUrl = Value(baseUrl),
-       email = Value(email),
-       apiToken = Value(apiToken),
        jiraProjectKey = Value(jiraProjectKey),
+       credentialsFilePath = Value(credentialsFilePath),
        created = Value(created);
   static Insertable<JiraIntegration> custom({
     Expression<String>? id,
     Expression<String>? projectId,
     Expression<String>? baseUrl,
-    Expression<String>? email,
-    Expression<String>? apiToken,
     Expression<String>? jiraProjectKey,
     Expression<String>? boardId,
+    Expression<String>? credentialsFilePath,
     Expression<String>? jqlFilter,
     Expression<bool>? syncEnabled,
     Expression<bool>? syncSubtasks,
@@ -7441,10 +5174,10 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
       if (id != null) 'id': id,
       if (projectId != null) 'project_id': projectId,
       if (baseUrl != null) 'base_url': baseUrl,
-      if (email != null) 'email': email,
-      if (apiToken != null) 'api_token': apiToken,
       if (jiraProjectKey != null) 'jira_project_key': jiraProjectKey,
       if (boardId != null) 'board_id': boardId,
+      if (credentialsFilePath != null)
+        'credentials_file_path': credentialsFilePath,
       if (jqlFilter != null) 'jql_filter': jqlFilter,
       if (syncEnabled != null) 'sync_enabled': syncEnabled,
       if (syncSubtasks != null) 'sync_subtasks': syncSubtasks,
@@ -7467,10 +5200,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     Value<String>? id,
     Value<String?>? projectId,
     Value<String>? baseUrl,
-    Value<String>? email,
-    Value<String>? apiToken,
     Value<String>? jiraProjectKey,
     Value<String?>? boardId,
+    Value<String>? credentialsFilePath,
     Value<String?>? jqlFilter,
     Value<bool>? syncEnabled,
     Value<bool>? syncSubtasks,
@@ -7490,10 +5222,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
       baseUrl: baseUrl ?? this.baseUrl,
-      email: email ?? this.email,
-      apiToken: apiToken ?? this.apiToken,
       jiraProjectKey: jiraProjectKey ?? this.jiraProjectKey,
       boardId: boardId ?? this.boardId,
+      credentialsFilePath: credentialsFilePath ?? this.credentialsFilePath,
       jqlFilter: jqlFilter ?? this.jqlFilter,
       syncEnabled: syncEnabled ?? this.syncEnabled,
       syncSubtasks: syncSubtasks ?? this.syncSubtasks,
@@ -7523,17 +5254,16 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     if (baseUrl.present) {
       map['base_url'] = Variable<String>(baseUrl.value);
     }
-    if (email.present) {
-      map['email'] = Variable<String>(email.value);
-    }
-    if (apiToken.present) {
-      map['api_token'] = Variable<String>(apiToken.value);
-    }
     if (jiraProjectKey.present) {
       map['jira_project_key'] = Variable<String>(jiraProjectKey.value);
     }
     if (boardId.present) {
       map['board_id'] = Variable<String>(boardId.value);
+    }
+    if (credentialsFilePath.present) {
+      map['credentials_file_path'] = Variable<String>(
+        credentialsFilePath.value,
+      );
     }
     if (jqlFilter.present) {
       map['jql_filter'] = Variable<String>(jqlFilter.value);
@@ -7586,10 +5316,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
           ..write('id: $id, ')
           ..write('projectId: $projectId, ')
           ..write('baseUrl: $baseUrl, ')
-          ..write('email: $email, ')
-          ..write('apiToken: $apiToken, ')
           ..write('jiraProjectKey: $jiraProjectKey, ')
           ..write('boardId: $boardId, ')
+          ..write('credentialsFilePath: $credentialsFilePath, ')
           ..write('jqlFilter: $jqlFilter, ')
           ..write('syncEnabled: $syncEnabled, ')
           ..write('syncSubtasks: $syncSubtasks, ')
@@ -7597,1045 +5326,6 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
           ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
           ..write('fieldMappings: $fieldMappings, ')
           ..write('statusMappings: $statusMappings, ')
-          ..write('lastSyncAt: $lastSyncAt, ')
-          ..write('lastSyncError: $lastSyncError, ')
-          ..write('created: $created, ')
-          ..write('modified: $modified, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $GithubIntegrationsTable extends GithubIntegrations
-    with TableInfo<$GithubIntegrationsTable, GithubIntegration> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $GithubIntegrationsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _projectIdMeta = const VerificationMeta(
-    'projectId',
-  );
-  @override
-  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
-    'project_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
-  @override
-  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
-    'owner',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _repoMeta = const VerificationMeta('repo');
-  @override
-  late final GeneratedColumn<String> repo = GeneratedColumn<String>(
-    'repo',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _accessTokenMeta = const VerificationMeta(
-    'accessToken',
-  );
-  @override
-  late final GeneratedColumn<String> accessToken = GeneratedColumn<String>(
-    'access_token',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _labelFilterMeta = const VerificationMeta(
-    'labelFilter',
-  );
-  @override
-  late final GeneratedColumn<String> labelFilter = GeneratedColumn<String>(
-    'label_filter',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _syncEnabledMeta = const VerificationMeta(
-    'syncEnabled',
-  );
-  @override
-  late final GeneratedColumn<bool> syncEnabled = GeneratedColumn<bool>(
-    'sync_enabled',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("sync_enabled" IN (0, 1))',
-    ),
-    defaultValue: const Constant(true),
-  );
-  static const VerificationMeta _syncClosedIssuesMeta = const VerificationMeta(
-    'syncClosedIssues',
-  );
-  @override
-  late final GeneratedColumn<bool> syncClosedIssues = GeneratedColumn<bool>(
-    'sync_closed_issues',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("sync_closed_issues" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _syncIntervalMinutesMeta =
-      const VerificationMeta('syncIntervalMinutes');
-  @override
-  late final GeneratedColumn<int> syncIntervalMinutes = GeneratedColumn<int>(
-    'sync_interval_minutes',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(15),
-  );
-  static const VerificationMeta _labelMappingsMeta = const VerificationMeta(
-    'labelMappings',
-  );
-  @override
-  late final GeneratedColumn<String> labelMappings = GeneratedColumn<String>(
-    'label_mappings',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
-  );
-  static const VerificationMeta _statusMappingsMeta = const VerificationMeta(
-    'statusMappings',
-  );
-  @override
-  late final GeneratedColumn<String> statusMappings = GeneratedColumn<String>(
-    'status_mappings',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
-  );
-  static const VerificationMeta _milestoneMappingsMeta = const VerificationMeta(
-    'milestoneMappings',
-  );
-  @override
-  late final GeneratedColumn<String> milestoneMappings =
-      GeneratedColumn<String>(
-        'milestone_mappings',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        defaultValue: const Constant('{}'),
-      );
-  static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
-    'lastSyncAt',
-  );
-  @override
-  late final GeneratedColumn<int> lastSyncAt = GeneratedColumn<int>(
-    'last_sync_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _lastSyncErrorMeta = const VerificationMeta(
-    'lastSyncError',
-  );
-  @override
-  late final GeneratedColumn<String> lastSyncError = GeneratedColumn<String>(
-    'last_sync_error',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _createdMeta = const VerificationMeta(
-    'created',
-  );
-  @override
-  late final GeneratedColumn<int> created = GeneratedColumn<int>(
-    'created',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _modifiedMeta = const VerificationMeta(
-    'modified',
-  );
-  @override
-  late final GeneratedColumn<int> modified = GeneratedColumn<int>(
-    'modified',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
-    'crdtClock',
-  );
-  @override
-  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
-    'crdt_clock',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
-  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
-    'crdtState',
-  );
-  @override
-  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
-    'crdt_state',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    projectId,
-    owner,
-    repo,
-    accessToken,
-    labelFilter,
-    syncEnabled,
-    syncClosedIssues,
-    syncIntervalMinutes,
-    labelMappings,
-    statusMappings,
-    milestoneMappings,
-    lastSyncAt,
-    lastSyncError,
-    created,
-    modified,
-    crdtClock,
-    crdtState,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'github_integrations';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<GithubIntegration> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('project_id')) {
-      context.handle(
-        _projectIdMeta,
-        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
-      );
-    }
-    if (data.containsKey('owner')) {
-      context.handle(
-        _ownerMeta,
-        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_ownerMeta);
-    }
-    if (data.containsKey('repo')) {
-      context.handle(
-        _repoMeta,
-        repo.isAcceptableOrUnknown(data['repo']!, _repoMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_repoMeta);
-    }
-    if (data.containsKey('access_token')) {
-      context.handle(
-        _accessTokenMeta,
-        accessToken.isAcceptableOrUnknown(
-          data['access_token']!,
-          _accessTokenMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_accessTokenMeta);
-    }
-    if (data.containsKey('label_filter')) {
-      context.handle(
-        _labelFilterMeta,
-        labelFilter.isAcceptableOrUnknown(
-          data['label_filter']!,
-          _labelFilterMeta,
-        ),
-      );
-    }
-    if (data.containsKey('sync_enabled')) {
-      context.handle(
-        _syncEnabledMeta,
-        syncEnabled.isAcceptableOrUnknown(
-          data['sync_enabled']!,
-          _syncEnabledMeta,
-        ),
-      );
-    }
-    if (data.containsKey('sync_closed_issues')) {
-      context.handle(
-        _syncClosedIssuesMeta,
-        syncClosedIssues.isAcceptableOrUnknown(
-          data['sync_closed_issues']!,
-          _syncClosedIssuesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('sync_interval_minutes')) {
-      context.handle(
-        _syncIntervalMinutesMeta,
-        syncIntervalMinutes.isAcceptableOrUnknown(
-          data['sync_interval_minutes']!,
-          _syncIntervalMinutesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('label_mappings')) {
-      context.handle(
-        _labelMappingsMeta,
-        labelMappings.isAcceptableOrUnknown(
-          data['label_mappings']!,
-          _labelMappingsMeta,
-        ),
-      );
-    }
-    if (data.containsKey('status_mappings')) {
-      context.handle(
-        _statusMappingsMeta,
-        statusMappings.isAcceptableOrUnknown(
-          data['status_mappings']!,
-          _statusMappingsMeta,
-        ),
-      );
-    }
-    if (data.containsKey('milestone_mappings')) {
-      context.handle(
-        _milestoneMappingsMeta,
-        milestoneMappings.isAcceptableOrUnknown(
-          data['milestone_mappings']!,
-          _milestoneMappingsMeta,
-        ),
-      );
-    }
-    if (data.containsKey('last_sync_at')) {
-      context.handle(
-        _lastSyncAtMeta,
-        lastSyncAt.isAcceptableOrUnknown(
-          data['last_sync_at']!,
-          _lastSyncAtMeta,
-        ),
-      );
-    }
-    if (data.containsKey('last_sync_error')) {
-      context.handle(
-        _lastSyncErrorMeta,
-        lastSyncError.isAcceptableOrUnknown(
-          data['last_sync_error']!,
-          _lastSyncErrorMeta,
-        ),
-      );
-    }
-    if (data.containsKey('created')) {
-      context.handle(
-        _createdMeta,
-        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdMeta);
-    }
-    if (data.containsKey('modified')) {
-      context.handle(
-        _modifiedMeta,
-        modified.isAcceptableOrUnknown(data['modified']!, _modifiedMeta),
-      );
-    }
-    if (data.containsKey('crdt_clock')) {
-      context.handle(
-        _crdtClockMeta,
-        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
-      );
-    }
-    if (data.containsKey('crdt_state')) {
-      context.handle(
-        _crdtStateMeta,
-        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  GithubIntegration map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return GithubIntegration(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      projectId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}project_id'],
-      ),
-      owner: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}owner'],
-      )!,
-      repo: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}repo'],
-      )!,
-      accessToken: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}access_token'],
-      )!,
-      labelFilter: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}label_filter'],
-      ),
-      syncEnabled: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}sync_enabled'],
-      )!,
-      syncClosedIssues: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}sync_closed_issues'],
-      )!,
-      syncIntervalMinutes: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}sync_interval_minutes'],
-      )!,
-      labelMappings: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}label_mappings'],
-      )!,
-      statusMappings: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status_mappings'],
-      )!,
-      milestoneMappings: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}milestone_mappings'],
-      )!,
-      lastSyncAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}last_sync_at'],
-      ),
-      lastSyncError: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}last_sync_error'],
-      ),
-      created: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created'],
-      )!,
-      modified: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}modified'],
-      ),
-      crdtClock: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_clock'],
-      )!,
-      crdtState: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crdt_state'],
-      )!,
-    );
-  }
-
-  @override
-  $GithubIntegrationsTable createAlias(String alias) {
-    return $GithubIntegrationsTable(attachedDatabase, alias);
-  }
-}
-
-class GithubIntegration extends DataClass
-    implements Insertable<GithubIntegration> {
-  final String id;
-  final String? projectId;
-  final String owner;
-  final String repo;
-  final String accessToken;
-  final String? labelFilter;
-  final bool syncEnabled;
-  final bool syncClosedIssues;
-  final int syncIntervalMinutes;
-  final String labelMappings;
-  final String statusMappings;
-  final String milestoneMappings;
-  final int? lastSyncAt;
-  final String? lastSyncError;
-  final int created;
-  final int? modified;
-  final String crdtClock;
-  final String crdtState;
-  const GithubIntegration({
-    required this.id,
-    this.projectId,
-    required this.owner,
-    required this.repo,
-    required this.accessToken,
-    this.labelFilter,
-    required this.syncEnabled,
-    required this.syncClosedIssues,
-    required this.syncIntervalMinutes,
-    required this.labelMappings,
-    required this.statusMappings,
-    required this.milestoneMappings,
-    this.lastSyncAt,
-    this.lastSyncError,
-    required this.created,
-    this.modified,
-    required this.crdtClock,
-    required this.crdtState,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    if (!nullToAbsent || projectId != null) {
-      map['project_id'] = Variable<String>(projectId);
-    }
-    map['owner'] = Variable<String>(owner);
-    map['repo'] = Variable<String>(repo);
-    map['access_token'] = Variable<String>(accessToken);
-    if (!nullToAbsent || labelFilter != null) {
-      map['label_filter'] = Variable<String>(labelFilter);
-    }
-    map['sync_enabled'] = Variable<bool>(syncEnabled);
-    map['sync_closed_issues'] = Variable<bool>(syncClosedIssues);
-    map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes);
-    map['label_mappings'] = Variable<String>(labelMappings);
-    map['status_mappings'] = Variable<String>(statusMappings);
-    map['milestone_mappings'] = Variable<String>(milestoneMappings);
-    if (!nullToAbsent || lastSyncAt != null) {
-      map['last_sync_at'] = Variable<int>(lastSyncAt);
-    }
-    if (!nullToAbsent || lastSyncError != null) {
-      map['last_sync_error'] = Variable<String>(lastSyncError);
-    }
-    map['created'] = Variable<int>(created);
-    if (!nullToAbsent || modified != null) {
-      map['modified'] = Variable<int>(modified);
-    }
-    map['crdt_clock'] = Variable<String>(crdtClock);
-    map['crdt_state'] = Variable<String>(crdtState);
-    return map;
-  }
-
-  GithubIntegrationsCompanion toCompanion(bool nullToAbsent) {
-    return GithubIntegrationsCompanion(
-      id: Value(id),
-      projectId: projectId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(projectId),
-      owner: Value(owner),
-      repo: Value(repo),
-      accessToken: Value(accessToken),
-      labelFilter: labelFilter == null && nullToAbsent
-          ? const Value.absent()
-          : Value(labelFilter),
-      syncEnabled: Value(syncEnabled),
-      syncClosedIssues: Value(syncClosedIssues),
-      syncIntervalMinutes: Value(syncIntervalMinutes),
-      labelMappings: Value(labelMappings),
-      statusMappings: Value(statusMappings),
-      milestoneMappings: Value(milestoneMappings),
-      lastSyncAt: lastSyncAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastSyncAt),
-      lastSyncError: lastSyncError == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastSyncError),
-      created: Value(created),
-      modified: modified == null && nullToAbsent
-          ? const Value.absent()
-          : Value(modified),
-      crdtClock: Value(crdtClock),
-      crdtState: Value(crdtState),
-    );
-  }
-
-  factory GithubIntegration.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return GithubIntegration(
-      id: serializer.fromJson<String>(json['id']),
-      projectId: serializer.fromJson<String?>(json['projectId']),
-      owner: serializer.fromJson<String>(json['owner']),
-      repo: serializer.fromJson<String>(json['repo']),
-      accessToken: serializer.fromJson<String>(json['accessToken']),
-      labelFilter: serializer.fromJson<String?>(json['labelFilter']),
-      syncEnabled: serializer.fromJson<bool>(json['syncEnabled']),
-      syncClosedIssues: serializer.fromJson<bool>(json['syncClosedIssues']),
-      syncIntervalMinutes: serializer.fromJson<int>(
-        json['syncIntervalMinutes'],
-      ),
-      labelMappings: serializer.fromJson<String>(json['labelMappings']),
-      statusMappings: serializer.fromJson<String>(json['statusMappings']),
-      milestoneMappings: serializer.fromJson<String>(json['milestoneMappings']),
-      lastSyncAt: serializer.fromJson<int?>(json['lastSyncAt']),
-      lastSyncError: serializer.fromJson<String?>(json['lastSyncError']),
-      created: serializer.fromJson<int>(json['created']),
-      modified: serializer.fromJson<int?>(json['modified']),
-      crdtClock: serializer.fromJson<String>(json['crdtClock']),
-      crdtState: serializer.fromJson<String>(json['crdtState']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'projectId': serializer.toJson<String?>(projectId),
-      'owner': serializer.toJson<String>(owner),
-      'repo': serializer.toJson<String>(repo),
-      'accessToken': serializer.toJson<String>(accessToken),
-      'labelFilter': serializer.toJson<String?>(labelFilter),
-      'syncEnabled': serializer.toJson<bool>(syncEnabled),
-      'syncClosedIssues': serializer.toJson<bool>(syncClosedIssues),
-      'syncIntervalMinutes': serializer.toJson<int>(syncIntervalMinutes),
-      'labelMappings': serializer.toJson<String>(labelMappings),
-      'statusMappings': serializer.toJson<String>(statusMappings),
-      'milestoneMappings': serializer.toJson<String>(milestoneMappings),
-      'lastSyncAt': serializer.toJson<int?>(lastSyncAt),
-      'lastSyncError': serializer.toJson<String?>(lastSyncError),
-      'created': serializer.toJson<int>(created),
-      'modified': serializer.toJson<int?>(modified),
-      'crdtClock': serializer.toJson<String>(crdtClock),
-      'crdtState': serializer.toJson<String>(crdtState),
-    };
-  }
-
-  GithubIntegration copyWith({
-    String? id,
-    Value<String?> projectId = const Value.absent(),
-    String? owner,
-    String? repo,
-    String? accessToken,
-    Value<String?> labelFilter = const Value.absent(),
-    bool? syncEnabled,
-    bool? syncClosedIssues,
-    int? syncIntervalMinutes,
-    String? labelMappings,
-    String? statusMappings,
-    String? milestoneMappings,
-    Value<int?> lastSyncAt = const Value.absent(),
-    Value<String?> lastSyncError = const Value.absent(),
-    int? created,
-    Value<int?> modified = const Value.absent(),
-    String? crdtClock,
-    String? crdtState,
-  }) => GithubIntegration(
-    id: id ?? this.id,
-    projectId: projectId.present ? projectId.value : this.projectId,
-    owner: owner ?? this.owner,
-    repo: repo ?? this.repo,
-    accessToken: accessToken ?? this.accessToken,
-    labelFilter: labelFilter.present ? labelFilter.value : this.labelFilter,
-    syncEnabled: syncEnabled ?? this.syncEnabled,
-    syncClosedIssues: syncClosedIssues ?? this.syncClosedIssues,
-    syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
-    labelMappings: labelMappings ?? this.labelMappings,
-    statusMappings: statusMappings ?? this.statusMappings,
-    milestoneMappings: milestoneMappings ?? this.milestoneMappings,
-    lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
-    lastSyncError: lastSyncError.present
-        ? lastSyncError.value
-        : this.lastSyncError,
-    created: created ?? this.created,
-    modified: modified.present ? modified.value : this.modified,
-    crdtClock: crdtClock ?? this.crdtClock,
-    crdtState: crdtState ?? this.crdtState,
-  );
-  GithubIntegration copyWithCompanion(GithubIntegrationsCompanion data) {
-    return GithubIntegration(
-      id: data.id.present ? data.id.value : this.id,
-      projectId: data.projectId.present ? data.projectId.value : this.projectId,
-      owner: data.owner.present ? data.owner.value : this.owner,
-      repo: data.repo.present ? data.repo.value : this.repo,
-      accessToken: data.accessToken.present
-          ? data.accessToken.value
-          : this.accessToken,
-      labelFilter: data.labelFilter.present
-          ? data.labelFilter.value
-          : this.labelFilter,
-      syncEnabled: data.syncEnabled.present
-          ? data.syncEnabled.value
-          : this.syncEnabled,
-      syncClosedIssues: data.syncClosedIssues.present
-          ? data.syncClosedIssues.value
-          : this.syncClosedIssues,
-      syncIntervalMinutes: data.syncIntervalMinutes.present
-          ? data.syncIntervalMinutes.value
-          : this.syncIntervalMinutes,
-      labelMappings: data.labelMappings.present
-          ? data.labelMappings.value
-          : this.labelMappings,
-      statusMappings: data.statusMappings.present
-          ? data.statusMappings.value
-          : this.statusMappings,
-      milestoneMappings: data.milestoneMappings.present
-          ? data.milestoneMappings.value
-          : this.milestoneMappings,
-      lastSyncAt: data.lastSyncAt.present
-          ? data.lastSyncAt.value
-          : this.lastSyncAt,
-      lastSyncError: data.lastSyncError.present
-          ? data.lastSyncError.value
-          : this.lastSyncError,
-      created: data.created.present ? data.created.value : this.created,
-      modified: data.modified.present ? data.modified.value : this.modified,
-      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
-      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('GithubIntegration(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('owner: $owner, ')
-          ..write('repo: $repo, ')
-          ..write('accessToken: $accessToken, ')
-          ..write('labelFilter: $labelFilter, ')
-          ..write('syncEnabled: $syncEnabled, ')
-          ..write('syncClosedIssues: $syncClosedIssues, ')
-          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
-          ..write('labelMappings: $labelMappings, ')
-          ..write('statusMappings: $statusMappings, ')
-          ..write('milestoneMappings: $milestoneMappings, ')
-          ..write('lastSyncAt: $lastSyncAt, ')
-          ..write('lastSyncError: $lastSyncError, ')
-          ..write('created: $created, ')
-          ..write('modified: $modified, ')
-          ..write('crdtClock: $crdtClock, ')
-          ..write('crdtState: $crdtState')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    projectId,
-    owner,
-    repo,
-    accessToken,
-    labelFilter,
-    syncEnabled,
-    syncClosedIssues,
-    syncIntervalMinutes,
-    labelMappings,
-    statusMappings,
-    milestoneMappings,
-    lastSyncAt,
-    lastSyncError,
-    created,
-    modified,
-    crdtClock,
-    crdtState,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is GithubIntegration &&
-          other.id == this.id &&
-          other.projectId == this.projectId &&
-          other.owner == this.owner &&
-          other.repo == this.repo &&
-          other.accessToken == this.accessToken &&
-          other.labelFilter == this.labelFilter &&
-          other.syncEnabled == this.syncEnabled &&
-          other.syncClosedIssues == this.syncClosedIssues &&
-          other.syncIntervalMinutes == this.syncIntervalMinutes &&
-          other.labelMappings == this.labelMappings &&
-          other.statusMappings == this.statusMappings &&
-          other.milestoneMappings == this.milestoneMappings &&
-          other.lastSyncAt == this.lastSyncAt &&
-          other.lastSyncError == this.lastSyncError &&
-          other.created == this.created &&
-          other.modified == this.modified &&
-          other.crdtClock == this.crdtClock &&
-          other.crdtState == this.crdtState);
-}
-
-class GithubIntegrationsCompanion extends UpdateCompanion<GithubIntegration> {
-  final Value<String> id;
-  final Value<String?> projectId;
-  final Value<String> owner;
-  final Value<String> repo;
-  final Value<String> accessToken;
-  final Value<String?> labelFilter;
-  final Value<bool> syncEnabled;
-  final Value<bool> syncClosedIssues;
-  final Value<int> syncIntervalMinutes;
-  final Value<String> labelMappings;
-  final Value<String> statusMappings;
-  final Value<String> milestoneMappings;
-  final Value<int?> lastSyncAt;
-  final Value<String?> lastSyncError;
-  final Value<int> created;
-  final Value<int?> modified;
-  final Value<String> crdtClock;
-  final Value<String> crdtState;
-  final Value<int> rowid;
-  const GithubIntegrationsCompanion({
-    this.id = const Value.absent(),
-    this.projectId = const Value.absent(),
-    this.owner = const Value.absent(),
-    this.repo = const Value.absent(),
-    this.accessToken = const Value.absent(),
-    this.labelFilter = const Value.absent(),
-    this.syncEnabled = const Value.absent(),
-    this.syncClosedIssues = const Value.absent(),
-    this.syncIntervalMinutes = const Value.absent(),
-    this.labelMappings = const Value.absent(),
-    this.statusMappings = const Value.absent(),
-    this.milestoneMappings = const Value.absent(),
-    this.lastSyncAt = const Value.absent(),
-    this.lastSyncError = const Value.absent(),
-    this.created = const Value.absent(),
-    this.modified = const Value.absent(),
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  GithubIntegrationsCompanion.insert({
-    required String id,
-    this.projectId = const Value.absent(),
-    required String owner,
-    required String repo,
-    required String accessToken,
-    this.labelFilter = const Value.absent(),
-    this.syncEnabled = const Value.absent(),
-    this.syncClosedIssues = const Value.absent(),
-    this.syncIntervalMinutes = const Value.absent(),
-    this.labelMappings = const Value.absent(),
-    this.statusMappings = const Value.absent(),
-    this.milestoneMappings = const Value.absent(),
-    this.lastSyncAt = const Value.absent(),
-    this.lastSyncError = const Value.absent(),
-    required int created,
-    this.modified = const Value.absent(),
-    this.crdtClock = const Value.absent(),
-    this.crdtState = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       owner = Value(owner),
-       repo = Value(repo),
-       accessToken = Value(accessToken),
-       created = Value(created);
-  static Insertable<GithubIntegration> custom({
-    Expression<String>? id,
-    Expression<String>? projectId,
-    Expression<String>? owner,
-    Expression<String>? repo,
-    Expression<String>? accessToken,
-    Expression<String>? labelFilter,
-    Expression<bool>? syncEnabled,
-    Expression<bool>? syncClosedIssues,
-    Expression<int>? syncIntervalMinutes,
-    Expression<String>? labelMappings,
-    Expression<String>? statusMappings,
-    Expression<String>? milestoneMappings,
-    Expression<int>? lastSyncAt,
-    Expression<String>? lastSyncError,
-    Expression<int>? created,
-    Expression<int>? modified,
-    Expression<String>? crdtClock,
-    Expression<String>? crdtState,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (projectId != null) 'project_id': projectId,
-      if (owner != null) 'owner': owner,
-      if (repo != null) 'repo': repo,
-      if (accessToken != null) 'access_token': accessToken,
-      if (labelFilter != null) 'label_filter': labelFilter,
-      if (syncEnabled != null) 'sync_enabled': syncEnabled,
-      if (syncClosedIssues != null) 'sync_closed_issues': syncClosedIssues,
-      if (syncIntervalMinutes != null)
-        'sync_interval_minutes': syncIntervalMinutes,
-      if (labelMappings != null) 'label_mappings': labelMappings,
-      if (statusMappings != null) 'status_mappings': statusMappings,
-      if (milestoneMappings != null) 'milestone_mappings': milestoneMappings,
-      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
-      if (lastSyncError != null) 'last_sync_error': lastSyncError,
-      if (created != null) 'created': created,
-      if (modified != null) 'modified': modified,
-      if (crdtClock != null) 'crdt_clock': crdtClock,
-      if (crdtState != null) 'crdt_state': crdtState,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  GithubIntegrationsCompanion copyWith({
-    Value<String>? id,
-    Value<String?>? projectId,
-    Value<String>? owner,
-    Value<String>? repo,
-    Value<String>? accessToken,
-    Value<String?>? labelFilter,
-    Value<bool>? syncEnabled,
-    Value<bool>? syncClosedIssues,
-    Value<int>? syncIntervalMinutes,
-    Value<String>? labelMappings,
-    Value<String>? statusMappings,
-    Value<String>? milestoneMappings,
-    Value<int?>? lastSyncAt,
-    Value<String?>? lastSyncError,
-    Value<int>? created,
-    Value<int?>? modified,
-    Value<String>? crdtClock,
-    Value<String>? crdtState,
-    Value<int>? rowid,
-  }) {
-    return GithubIntegrationsCompanion(
-      id: id ?? this.id,
-      projectId: projectId ?? this.projectId,
-      owner: owner ?? this.owner,
-      repo: repo ?? this.repo,
-      accessToken: accessToken ?? this.accessToken,
-      labelFilter: labelFilter ?? this.labelFilter,
-      syncEnabled: syncEnabled ?? this.syncEnabled,
-      syncClosedIssues: syncClosedIssues ?? this.syncClosedIssues,
-      syncIntervalMinutes: syncIntervalMinutes ?? this.syncIntervalMinutes,
-      labelMappings: labelMappings ?? this.labelMappings,
-      statusMappings: statusMappings ?? this.statusMappings,
-      milestoneMappings: milestoneMappings ?? this.milestoneMappings,
-      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
-      lastSyncError: lastSyncError ?? this.lastSyncError,
-      created: created ?? this.created,
-      modified: modified ?? this.modified,
-      crdtClock: crdtClock ?? this.crdtClock,
-      crdtState: crdtState ?? this.crdtState,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (projectId.present) {
-      map['project_id'] = Variable<String>(projectId.value);
-    }
-    if (owner.present) {
-      map['owner'] = Variable<String>(owner.value);
-    }
-    if (repo.present) {
-      map['repo'] = Variable<String>(repo.value);
-    }
-    if (accessToken.present) {
-      map['access_token'] = Variable<String>(accessToken.value);
-    }
-    if (labelFilter.present) {
-      map['label_filter'] = Variable<String>(labelFilter.value);
-    }
-    if (syncEnabled.present) {
-      map['sync_enabled'] = Variable<bool>(syncEnabled.value);
-    }
-    if (syncClosedIssues.present) {
-      map['sync_closed_issues'] = Variable<bool>(syncClosedIssues.value);
-    }
-    if (syncIntervalMinutes.present) {
-      map['sync_interval_minutes'] = Variable<int>(syncIntervalMinutes.value);
-    }
-    if (labelMappings.present) {
-      map['label_mappings'] = Variable<String>(labelMappings.value);
-    }
-    if (statusMappings.present) {
-      map['status_mappings'] = Variable<String>(statusMappings.value);
-    }
-    if (milestoneMappings.present) {
-      map['milestone_mappings'] = Variable<String>(milestoneMappings.value);
-    }
-    if (lastSyncAt.present) {
-      map['last_sync_at'] = Variable<int>(lastSyncAt.value);
-    }
-    if (lastSyncError.present) {
-      map['last_sync_error'] = Variable<String>(lastSyncError.value);
-    }
-    if (created.present) {
-      map['created'] = Variable<int>(created.value);
-    }
-    if (modified.present) {
-      map['modified'] = Variable<int>(modified.value);
-    }
-    if (crdtClock.present) {
-      map['crdt_clock'] = Variable<String>(crdtClock.value);
-    }
-    if (crdtState.present) {
-      map['crdt_state'] = Variable<String>(crdtState.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('GithubIntegrationsCompanion(')
-          ..write('id: $id, ')
-          ..write('projectId: $projectId, ')
-          ..write('owner: $owner, ')
-          ..write('repo: $repo, ')
-          ..write('accessToken: $accessToken, ')
-          ..write('labelFilter: $labelFilter, ')
-          ..write('syncEnabled: $syncEnabled, ')
-          ..write('syncClosedIssues: $syncClosedIssues, ')
-          ..write('syncIntervalMinutes: $syncIntervalMinutes, ')
-          ..write('labelMappings: $labelMappings, ')
-          ..write('statusMappings: $statusMappings, ')
-          ..write('milestoneMappings: $milestoneMappings, ')
           ..write('lastSyncAt: $lastSyncAt, ')
           ..write('lastSyncError: $lastSyncError, ')
           ..write('created: $created, ')
@@ -8656,13 +5346,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProjectsTable projects = $ProjectsTable(this);
   late final $TagsTable tags = $TagsTable(this);
   late final $WorklogEntriesTable worklogEntries = $WorklogEntriesTable(this);
-  late final $NotesTable notes = $NotesTable(this);
-  late final $TaskRepeatCfgsTable taskRepeatCfgs = $TaskRepeatCfgsTable(this);
   late final $JiraIntegrationsTable jiraIntegrations = $JiraIntegrationsTable(
     this,
   );
-  late final $GithubIntegrationsTable githubIntegrations =
-      $GithubIntegrationsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8673,10 +5359,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     projects,
     tags,
     worklogEntries,
-    notes,
-    taskRepeatCfgs,
     jiraIntegrations,
-    githubIntegrations,
   ];
 }
 
@@ -9634,11 +6317,9 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<bool> isEnableBacklog,
       Value<String> taskIds,
       Value<String> backlogTaskIds,
-      Value<String> noteIds,
       Value<String> theme,
       Value<String> advancedCfg,
       Value<String?> icon,
-      Value<String> issueIntegrationCfgs,
       required int created,
       Value<int?> modified,
       Value<String> crdtClock,
@@ -9654,11 +6335,9 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<bool> isEnableBacklog,
       Value<String> taskIds,
       Value<String> backlogTaskIds,
-      Value<String> noteIds,
       Value<String> theme,
       Value<String> advancedCfg,
       Value<String?> icon,
-      Value<String> issueIntegrationCfgs,
       Value<int> created,
       Value<int?> modified,
       Value<String> crdtClock,
@@ -9710,11 +6389,6 @@ class $$ProjectsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get noteIds => $composableBuilder(
-    column: $table.noteIds,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get theme => $composableBuilder(
     column: $table.theme,
     builder: (column) => ColumnFilters(column),
@@ -9727,11 +6401,6 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<String> get icon => $composableBuilder(
     column: $table.icon,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get issueIntegrationCfgs => $composableBuilder(
-    column: $table.issueIntegrationCfgs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9800,11 +6469,6 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get noteIds => $composableBuilder(
-    column: $table.noteIds,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get theme => $composableBuilder(
     column: $table.theme,
     builder: (column) => ColumnOrderings(column),
@@ -9817,11 +6481,6 @@ class $$ProjectsTableOrderingComposer
 
   ColumnOrderings<String> get icon => $composableBuilder(
     column: $table.icon,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get issueIntegrationCfgs => $composableBuilder(
-    column: $table.issueIntegrationCfgs,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -9884,9 +6543,6 @@ class $$ProjectsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get noteIds =>
-      $composableBuilder(column: $table.noteIds, builder: (column) => column);
-
   GeneratedColumn<String> get theme =>
       $composableBuilder(column: $table.theme, builder: (column) => column);
 
@@ -9897,11 +6553,6 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<String> get icon =>
       $composableBuilder(column: $table.icon, builder: (column) => column);
-
-  GeneratedColumn<String> get issueIntegrationCfgs => $composableBuilder(
-    column: $table.issueIntegrationCfgs,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<int> get created =>
       $composableBuilder(column: $table.created, builder: (column) => column);
@@ -9951,11 +6602,9 @@ class $$ProjectsTableTableManager
                 Value<bool> isEnableBacklog = const Value.absent(),
                 Value<String> taskIds = const Value.absent(),
                 Value<String> backlogTaskIds = const Value.absent(),
-                Value<String> noteIds = const Value.absent(),
                 Value<String> theme = const Value.absent(),
                 Value<String> advancedCfg = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
-                Value<String> issueIntegrationCfgs = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<int?> modified = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
@@ -9969,11 +6618,9 @@ class $$ProjectsTableTableManager
                 isEnableBacklog: isEnableBacklog,
                 taskIds: taskIds,
                 backlogTaskIds: backlogTaskIds,
-                noteIds: noteIds,
                 theme: theme,
                 advancedCfg: advancedCfg,
                 icon: icon,
-                issueIntegrationCfgs: issueIntegrationCfgs,
                 created: created,
                 modified: modified,
                 crdtClock: crdtClock,
@@ -9989,11 +6636,9 @@ class $$ProjectsTableTableManager
                 Value<bool> isEnableBacklog = const Value.absent(),
                 Value<String> taskIds = const Value.absent(),
                 Value<String> backlogTaskIds = const Value.absent(),
-                Value<String> noteIds = const Value.absent(),
                 Value<String> theme = const Value.absent(),
                 Value<String> advancedCfg = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
-                Value<String> issueIntegrationCfgs = const Value.absent(),
                 required int created,
                 Value<int?> modified = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
@@ -10007,11 +6652,9 @@ class $$ProjectsTableTableManager
                 isEnableBacklog: isEnableBacklog,
                 taskIds: taskIds,
                 backlogTaskIds: backlogTaskIds,
-                noteIds: noteIds,
                 theme: theme,
                 advancedCfg: advancedCfg,
                 icon: icon,
-                issueIntegrationCfgs: issueIntegrationCfgs,
                 created: created,
                 modified: modified,
                 crdtClock: crdtClock,
@@ -10666,962 +7309,14 @@ typedef $$WorklogEntriesTableProcessedTableManager =
       WorklogEntry,
       PrefetchHooks Function()
     >;
-typedef $$NotesTableCreateCompanionBuilder =
-    NotesCompanion Function({
-      required String id,
-      Value<String?> projectId,
-      required String content,
-      Value<String?> imgUrl,
-      Value<String?> backgroundColor,
-      Value<bool> isPinnedToToday,
-      Value<bool> isLock,
-      required int created,
-      required int modified,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-typedef $$NotesTableUpdateCompanionBuilder =
-    NotesCompanion Function({
-      Value<String> id,
-      Value<String?> projectId,
-      Value<String> content,
-      Value<String?> imgUrl,
-      Value<String?> backgroundColor,
-      Value<bool> isPinnedToToday,
-      Value<bool> isLock,
-      Value<int> created,
-      Value<int> modified,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-
-class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
-  $$NotesTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get content => $composableBuilder(
-    column: $table.content,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get imgUrl => $composableBuilder(
-    column: $table.imgUrl,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get backgroundColor => $composableBuilder(
-    column: $table.backgroundColor,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isPinnedToToday => $composableBuilder(
-    column: $table.isPinnedToToday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isLock => $composableBuilder(
-    column: $table.isLock,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get created => $composableBuilder(
-    column: $table.created,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get modified => $composableBuilder(
-    column: $table.modified,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$NotesTableOrderingComposer
-    extends Composer<_$AppDatabase, $NotesTable> {
-  $$NotesTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get content => $composableBuilder(
-    column: $table.content,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get imgUrl => $composableBuilder(
-    column: $table.imgUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get backgroundColor => $composableBuilder(
-    column: $table.backgroundColor,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isPinnedToToday => $composableBuilder(
-    column: $table.isPinnedToToday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isLock => $composableBuilder(
-    column: $table.isLock,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get created => $composableBuilder(
-    column: $table.created,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get modified => $composableBuilder(
-    column: $table.modified,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$NotesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $NotesTable> {
-  $$NotesTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get projectId =>
-      $composableBuilder(column: $table.projectId, builder: (column) => column);
-
-  GeneratedColumn<String> get content =>
-      $composableBuilder(column: $table.content, builder: (column) => column);
-
-  GeneratedColumn<String> get imgUrl =>
-      $composableBuilder(column: $table.imgUrl, builder: (column) => column);
-
-  GeneratedColumn<String> get backgroundColor => $composableBuilder(
-    column: $table.backgroundColor,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get isPinnedToToday => $composableBuilder(
-    column: $table.isPinnedToToday,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get isLock =>
-      $composableBuilder(column: $table.isLock, builder: (column) => column);
-
-  GeneratedColumn<int> get created =>
-      $composableBuilder(column: $table.created, builder: (column) => column);
-
-  GeneratedColumn<int> get modified =>
-      $composableBuilder(column: $table.modified, builder: (column) => column);
-
-  GeneratedColumn<String> get crdtClock =>
-      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
-
-  GeneratedColumn<String> get crdtState =>
-      $composableBuilder(column: $table.crdtState, builder: (column) => column);
-}
-
-class $$NotesTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $NotesTable,
-          Note,
-          $$NotesTableFilterComposer,
-          $$NotesTableOrderingComposer,
-          $$NotesTableAnnotationComposer,
-          $$NotesTableCreateCompanionBuilder,
-          $$NotesTableUpdateCompanionBuilder,
-          (Note, BaseReferences<_$AppDatabase, $NotesTable, Note>),
-          Note,
-          PrefetchHooks Function()
-        > {
-  $$NotesTableTableManager(_$AppDatabase db, $NotesTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$NotesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$NotesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$NotesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String?> projectId = const Value.absent(),
-                Value<String> content = const Value.absent(),
-                Value<String?> imgUrl = const Value.absent(),
-                Value<String?> backgroundColor = const Value.absent(),
-                Value<bool> isPinnedToToday = const Value.absent(),
-                Value<bool> isLock = const Value.absent(),
-                Value<int> created = const Value.absent(),
-                Value<int> modified = const Value.absent(),
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => NotesCompanion(
-                id: id,
-                projectId: projectId,
-                content: content,
-                imgUrl: imgUrl,
-                backgroundColor: backgroundColor,
-                isPinnedToToday: isPinnedToToday,
-                isLock: isLock,
-                created: created,
-                modified: modified,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                Value<String?> projectId = const Value.absent(),
-                required String content,
-                Value<String?> imgUrl = const Value.absent(),
-                Value<String?> backgroundColor = const Value.absent(),
-                Value<bool> isPinnedToToday = const Value.absent(),
-                Value<bool> isLock = const Value.absent(),
-                required int created,
-                required int modified,
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => NotesCompanion.insert(
-                id: id,
-                projectId: projectId,
-                content: content,
-                imgUrl: imgUrl,
-                backgroundColor: backgroundColor,
-                isPinnedToToday: isPinnedToToday,
-                isLock: isLock,
-                created: created,
-                modified: modified,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$NotesTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $NotesTable,
-      Note,
-      $$NotesTableFilterComposer,
-      $$NotesTableOrderingComposer,
-      $$NotesTableAnnotationComposer,
-      $$NotesTableCreateCompanionBuilder,
-      $$NotesTableUpdateCompanionBuilder,
-      (Note, BaseReferences<_$AppDatabase, $NotesTable, Note>),
-      Note,
-      PrefetchHooks Function()
-    >;
-typedef $$TaskRepeatCfgsTableCreateCompanionBuilder =
-    TaskRepeatCfgsCompanion Function({
-      required String id,
-      Value<String?> projectId,
-      Value<String?> title,
-      Value<String> tagIds,
-      Value<int> order,
-      Value<int?> defaultEstimate,
-      Value<String?> startTime,
-      Value<String?> remindAt,
-      Value<bool> isPaused,
-      required String quickSetting,
-      required String repeatCycle,
-      Value<String?> startDate,
-      Value<int> repeatEvery,
-      Value<bool> monday,
-      Value<bool> tuesday,
-      Value<bool> wednesday,
-      Value<bool> thursday,
-      Value<bool> friday,
-      Value<bool> saturday,
-      Value<bool> sunday,
-      Value<String?> notes,
-      Value<String> subTaskTemplates,
-      Value<int?> lastTaskCreation,
-      Value<String?> lastTaskCreationDay,
-      Value<String> deletedInstanceDates,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-typedef $$TaskRepeatCfgsTableUpdateCompanionBuilder =
-    TaskRepeatCfgsCompanion Function({
-      Value<String> id,
-      Value<String?> projectId,
-      Value<String?> title,
-      Value<String> tagIds,
-      Value<int> order,
-      Value<int?> defaultEstimate,
-      Value<String?> startTime,
-      Value<String?> remindAt,
-      Value<bool> isPaused,
-      Value<String> quickSetting,
-      Value<String> repeatCycle,
-      Value<String?> startDate,
-      Value<int> repeatEvery,
-      Value<bool> monday,
-      Value<bool> tuesday,
-      Value<bool> wednesday,
-      Value<bool> thursday,
-      Value<bool> friday,
-      Value<bool> saturday,
-      Value<bool> sunday,
-      Value<String?> notes,
-      Value<String> subTaskTemplates,
-      Value<int?> lastTaskCreation,
-      Value<String?> lastTaskCreationDay,
-      Value<String> deletedInstanceDates,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-
-class $$TaskRepeatCfgsTableFilterComposer
-    extends Composer<_$AppDatabase, $TaskRepeatCfgsTable> {
-  $$TaskRepeatCfgsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get tagIds => $composableBuilder(
-    column: $table.tagIds,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get order => $composableBuilder(
-    column: $table.order,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get defaultEstimate => $composableBuilder(
-    column: $table.defaultEstimate,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get startTime => $composableBuilder(
-    column: $table.startTime,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get remindAt => $composableBuilder(
-    column: $table.remindAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isPaused => $composableBuilder(
-    column: $table.isPaused,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get quickSetting => $composableBuilder(
-    column: $table.quickSetting,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get repeatCycle => $composableBuilder(
-    column: $table.repeatCycle,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get startDate => $composableBuilder(
-    column: $table.startDate,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get repeatEvery => $composableBuilder(
-    column: $table.repeatEvery,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get monday => $composableBuilder(
-    column: $table.monday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get tuesday => $composableBuilder(
-    column: $table.tuesday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get wednesday => $composableBuilder(
-    column: $table.wednesday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get thursday => $composableBuilder(
-    column: $table.thursday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get friday => $composableBuilder(
-    column: $table.friday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get saturday => $composableBuilder(
-    column: $table.saturday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get sunday => $composableBuilder(
-    column: $table.sunday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get subTaskTemplates => $composableBuilder(
-    column: $table.subTaskTemplates,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get lastTaskCreation => $composableBuilder(
-    column: $table.lastTaskCreation,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get lastTaskCreationDay => $composableBuilder(
-    column: $table.lastTaskCreationDay,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get deletedInstanceDates => $composableBuilder(
-    column: $table.deletedInstanceDates,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$TaskRepeatCfgsTableOrderingComposer
-    extends Composer<_$AppDatabase, $TaskRepeatCfgsTable> {
-  $$TaskRepeatCfgsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get tagIds => $composableBuilder(
-    column: $table.tagIds,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get order => $composableBuilder(
-    column: $table.order,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get defaultEstimate => $composableBuilder(
-    column: $table.defaultEstimate,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get startTime => $composableBuilder(
-    column: $table.startTime,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get remindAt => $composableBuilder(
-    column: $table.remindAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isPaused => $composableBuilder(
-    column: $table.isPaused,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get quickSetting => $composableBuilder(
-    column: $table.quickSetting,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get repeatCycle => $composableBuilder(
-    column: $table.repeatCycle,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get startDate => $composableBuilder(
-    column: $table.startDate,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get repeatEvery => $composableBuilder(
-    column: $table.repeatEvery,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get monday => $composableBuilder(
-    column: $table.monday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get tuesday => $composableBuilder(
-    column: $table.tuesday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get wednesday => $composableBuilder(
-    column: $table.wednesday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get thursday => $composableBuilder(
-    column: $table.thursday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get friday => $composableBuilder(
-    column: $table.friday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get saturday => $composableBuilder(
-    column: $table.saturday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get sunday => $composableBuilder(
-    column: $table.sunday,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get subTaskTemplates => $composableBuilder(
-    column: $table.subTaskTemplates,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get lastTaskCreation => $composableBuilder(
-    column: $table.lastTaskCreation,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get lastTaskCreationDay => $composableBuilder(
-    column: $table.lastTaskCreationDay,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get deletedInstanceDates => $composableBuilder(
-    column: $table.deletedInstanceDates,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$TaskRepeatCfgsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $TaskRepeatCfgsTable> {
-  $$TaskRepeatCfgsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get projectId =>
-      $composableBuilder(column: $table.projectId, builder: (column) => column);
-
-  GeneratedColumn<String> get title =>
-      $composableBuilder(column: $table.title, builder: (column) => column);
-
-  GeneratedColumn<String> get tagIds =>
-      $composableBuilder(column: $table.tagIds, builder: (column) => column);
-
-  GeneratedColumn<int> get order =>
-      $composableBuilder(column: $table.order, builder: (column) => column);
-
-  GeneratedColumn<int> get defaultEstimate => $composableBuilder(
-    column: $table.defaultEstimate,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get startTime =>
-      $composableBuilder(column: $table.startTime, builder: (column) => column);
-
-  GeneratedColumn<String> get remindAt =>
-      $composableBuilder(column: $table.remindAt, builder: (column) => column);
-
-  GeneratedColumn<bool> get isPaused =>
-      $composableBuilder(column: $table.isPaused, builder: (column) => column);
-
-  GeneratedColumn<String> get quickSetting => $composableBuilder(
-    column: $table.quickSetting,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get repeatCycle => $composableBuilder(
-    column: $table.repeatCycle,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get startDate =>
-      $composableBuilder(column: $table.startDate, builder: (column) => column);
-
-  GeneratedColumn<int> get repeatEvery => $composableBuilder(
-    column: $table.repeatEvery,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get monday =>
-      $composableBuilder(column: $table.monday, builder: (column) => column);
-
-  GeneratedColumn<bool> get tuesday =>
-      $composableBuilder(column: $table.tuesday, builder: (column) => column);
-
-  GeneratedColumn<bool> get wednesday =>
-      $composableBuilder(column: $table.wednesday, builder: (column) => column);
-
-  GeneratedColumn<bool> get thursday =>
-      $composableBuilder(column: $table.thursday, builder: (column) => column);
-
-  GeneratedColumn<bool> get friday =>
-      $composableBuilder(column: $table.friday, builder: (column) => column);
-
-  GeneratedColumn<bool> get saturday =>
-      $composableBuilder(column: $table.saturday, builder: (column) => column);
-
-  GeneratedColumn<bool> get sunday =>
-      $composableBuilder(column: $table.sunday, builder: (column) => column);
-
-  GeneratedColumn<String> get notes =>
-      $composableBuilder(column: $table.notes, builder: (column) => column);
-
-  GeneratedColumn<String> get subTaskTemplates => $composableBuilder(
-    column: $table.subTaskTemplates,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get lastTaskCreation => $composableBuilder(
-    column: $table.lastTaskCreation,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get lastTaskCreationDay => $composableBuilder(
-    column: $table.lastTaskCreationDay,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get deletedInstanceDates => $composableBuilder(
-    column: $table.deletedInstanceDates,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get crdtClock =>
-      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
-
-  GeneratedColumn<String> get crdtState =>
-      $composableBuilder(column: $table.crdtState, builder: (column) => column);
-}
-
-class $$TaskRepeatCfgsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $TaskRepeatCfgsTable,
-          TaskRepeatCfg,
-          $$TaskRepeatCfgsTableFilterComposer,
-          $$TaskRepeatCfgsTableOrderingComposer,
-          $$TaskRepeatCfgsTableAnnotationComposer,
-          $$TaskRepeatCfgsTableCreateCompanionBuilder,
-          $$TaskRepeatCfgsTableUpdateCompanionBuilder,
-          (
-            TaskRepeatCfg,
-            BaseReferences<_$AppDatabase, $TaskRepeatCfgsTable, TaskRepeatCfg>,
-          ),
-          TaskRepeatCfg,
-          PrefetchHooks Function()
-        > {
-  $$TaskRepeatCfgsTableTableManager(
-    _$AppDatabase db,
-    $TaskRepeatCfgsTable table,
-  ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$TaskRepeatCfgsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$TaskRepeatCfgsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$TaskRepeatCfgsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String?> projectId = const Value.absent(),
-                Value<String?> title = const Value.absent(),
-                Value<String> tagIds = const Value.absent(),
-                Value<int> order = const Value.absent(),
-                Value<int?> defaultEstimate = const Value.absent(),
-                Value<String?> startTime = const Value.absent(),
-                Value<String?> remindAt = const Value.absent(),
-                Value<bool> isPaused = const Value.absent(),
-                Value<String> quickSetting = const Value.absent(),
-                Value<String> repeatCycle = const Value.absent(),
-                Value<String?> startDate = const Value.absent(),
-                Value<int> repeatEvery = const Value.absent(),
-                Value<bool> monday = const Value.absent(),
-                Value<bool> tuesday = const Value.absent(),
-                Value<bool> wednesday = const Value.absent(),
-                Value<bool> thursday = const Value.absent(),
-                Value<bool> friday = const Value.absent(),
-                Value<bool> saturday = const Value.absent(),
-                Value<bool> sunday = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<String> subTaskTemplates = const Value.absent(),
-                Value<int?> lastTaskCreation = const Value.absent(),
-                Value<String?> lastTaskCreationDay = const Value.absent(),
-                Value<String> deletedInstanceDates = const Value.absent(),
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TaskRepeatCfgsCompanion(
-                id: id,
-                projectId: projectId,
-                title: title,
-                tagIds: tagIds,
-                order: order,
-                defaultEstimate: defaultEstimate,
-                startTime: startTime,
-                remindAt: remindAt,
-                isPaused: isPaused,
-                quickSetting: quickSetting,
-                repeatCycle: repeatCycle,
-                startDate: startDate,
-                repeatEvery: repeatEvery,
-                monday: monday,
-                tuesday: tuesday,
-                wednesday: wednesday,
-                thursday: thursday,
-                friday: friday,
-                saturday: saturday,
-                sunday: sunday,
-                notes: notes,
-                subTaskTemplates: subTaskTemplates,
-                lastTaskCreation: lastTaskCreation,
-                lastTaskCreationDay: lastTaskCreationDay,
-                deletedInstanceDates: deletedInstanceDates,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                Value<String?> projectId = const Value.absent(),
-                Value<String?> title = const Value.absent(),
-                Value<String> tagIds = const Value.absent(),
-                Value<int> order = const Value.absent(),
-                Value<int?> defaultEstimate = const Value.absent(),
-                Value<String?> startTime = const Value.absent(),
-                Value<String?> remindAt = const Value.absent(),
-                Value<bool> isPaused = const Value.absent(),
-                required String quickSetting,
-                required String repeatCycle,
-                Value<String?> startDate = const Value.absent(),
-                Value<int> repeatEvery = const Value.absent(),
-                Value<bool> monday = const Value.absent(),
-                Value<bool> tuesday = const Value.absent(),
-                Value<bool> wednesday = const Value.absent(),
-                Value<bool> thursday = const Value.absent(),
-                Value<bool> friday = const Value.absent(),
-                Value<bool> saturday = const Value.absent(),
-                Value<bool> sunday = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<String> subTaskTemplates = const Value.absent(),
-                Value<int?> lastTaskCreation = const Value.absent(),
-                Value<String?> lastTaskCreationDay = const Value.absent(),
-                Value<String> deletedInstanceDates = const Value.absent(),
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => TaskRepeatCfgsCompanion.insert(
-                id: id,
-                projectId: projectId,
-                title: title,
-                tagIds: tagIds,
-                order: order,
-                defaultEstimate: defaultEstimate,
-                startTime: startTime,
-                remindAt: remindAt,
-                isPaused: isPaused,
-                quickSetting: quickSetting,
-                repeatCycle: repeatCycle,
-                startDate: startDate,
-                repeatEvery: repeatEvery,
-                monday: monday,
-                tuesday: tuesday,
-                wednesday: wednesday,
-                thursday: thursday,
-                friday: friday,
-                saturday: saturday,
-                sunday: sunday,
-                notes: notes,
-                subTaskTemplates: subTaskTemplates,
-                lastTaskCreation: lastTaskCreation,
-                lastTaskCreationDay: lastTaskCreationDay,
-                deletedInstanceDates: deletedInstanceDates,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$TaskRepeatCfgsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $TaskRepeatCfgsTable,
-      TaskRepeatCfg,
-      $$TaskRepeatCfgsTableFilterComposer,
-      $$TaskRepeatCfgsTableOrderingComposer,
-      $$TaskRepeatCfgsTableAnnotationComposer,
-      $$TaskRepeatCfgsTableCreateCompanionBuilder,
-      $$TaskRepeatCfgsTableUpdateCompanionBuilder,
-      (
-        TaskRepeatCfg,
-        BaseReferences<_$AppDatabase, $TaskRepeatCfgsTable, TaskRepeatCfg>,
-      ),
-      TaskRepeatCfg,
-      PrefetchHooks Function()
-    >;
 typedef $$JiraIntegrationsTableCreateCompanionBuilder =
     JiraIntegrationsCompanion Function({
       required String id,
       Value<String?> projectId,
       required String baseUrl,
-      required String email,
-      required String apiToken,
       required String jiraProjectKey,
       Value<String?> boardId,
+      required String credentialsFilePath,
       Value<String?> jqlFilter,
       Value<bool> syncEnabled,
       Value<bool> syncSubtasks,
@@ -11642,10 +7337,9 @@ typedef $$JiraIntegrationsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String?> projectId,
       Value<String> baseUrl,
-      Value<String> email,
-      Value<String> apiToken,
       Value<String> jiraProjectKey,
       Value<String?> boardId,
+      Value<String> credentialsFilePath,
       Value<String?> jqlFilter,
       Value<bool> syncEnabled,
       Value<bool> syncSubtasks,
@@ -11686,16 +7380,6 @@ class $$JiraIntegrationsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get email => $composableBuilder(
-    column: $table.email,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get apiToken => $composableBuilder(
-    column: $table.apiToken,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get jiraProjectKey => $composableBuilder(
     column: $table.jiraProjectKey,
     builder: (column) => ColumnFilters(column),
@@ -11703,6 +7387,11 @@ class $$JiraIntegrationsTableFilterComposer
 
   ColumnFilters<String> get boardId => $composableBuilder(
     column: $table.boardId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get credentialsFilePath => $composableBuilder(
+    column: $table.credentialsFilePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11796,16 +7485,6 @@ class $$JiraIntegrationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get email => $composableBuilder(
-    column: $table.email,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get apiToken => $composableBuilder(
-    column: $table.apiToken,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get jiraProjectKey => $composableBuilder(
     column: $table.jiraProjectKey,
     builder: (column) => ColumnOrderings(column),
@@ -11813,6 +7492,11 @@ class $$JiraIntegrationsTableOrderingComposer
 
   ColumnOrderings<String> get boardId => $composableBuilder(
     column: $table.boardId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get credentialsFilePath => $composableBuilder(
+    column: $table.credentialsFilePath,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -11900,12 +7584,6 @@ class $$JiraIntegrationsTableAnnotationComposer
   GeneratedColumn<String> get baseUrl =>
       $composableBuilder(column: $table.baseUrl, builder: (column) => column);
 
-  GeneratedColumn<String> get email =>
-      $composableBuilder(column: $table.email, builder: (column) => column);
-
-  GeneratedColumn<String> get apiToken =>
-      $composableBuilder(column: $table.apiToken, builder: (column) => column);
-
   GeneratedColumn<String> get jiraProjectKey => $composableBuilder(
     column: $table.jiraProjectKey,
     builder: (column) => column,
@@ -11913,6 +7591,11 @@ class $$JiraIntegrationsTableAnnotationComposer
 
   GeneratedColumn<String> get boardId =>
       $composableBuilder(column: $table.boardId, builder: (column) => column);
+
+  GeneratedColumn<String> get credentialsFilePath => $composableBuilder(
+    column: $table.credentialsFilePath,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get jqlFilter =>
       $composableBuilder(column: $table.jqlFilter, builder: (column) => column);
@@ -12010,10 +7693,9 @@ class $$JiraIntegrationsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
                 Value<String> baseUrl = const Value.absent(),
-                Value<String> email = const Value.absent(),
-                Value<String> apiToken = const Value.absent(),
                 Value<String> jiraProjectKey = const Value.absent(),
                 Value<String?> boardId = const Value.absent(),
+                Value<String> credentialsFilePath = const Value.absent(),
                 Value<String?> jqlFilter = const Value.absent(),
                 Value<bool> syncEnabled = const Value.absent(),
                 Value<bool> syncSubtasks = const Value.absent(),
@@ -12032,10 +7714,9 @@ class $$JiraIntegrationsTableTableManager
                 id: id,
                 projectId: projectId,
                 baseUrl: baseUrl,
-                email: email,
-                apiToken: apiToken,
                 jiraProjectKey: jiraProjectKey,
                 boardId: boardId,
+                credentialsFilePath: credentialsFilePath,
                 jqlFilter: jqlFilter,
                 syncEnabled: syncEnabled,
                 syncSubtasks: syncSubtasks,
@@ -12056,10 +7737,9 @@ class $$JiraIntegrationsTableTableManager
                 required String id,
                 Value<String?> projectId = const Value.absent(),
                 required String baseUrl,
-                required String email,
-                required String apiToken,
                 required String jiraProjectKey,
                 Value<String?> boardId = const Value.absent(),
+                required String credentialsFilePath,
                 Value<String?> jqlFilter = const Value.absent(),
                 Value<bool> syncEnabled = const Value.absent(),
                 Value<bool> syncSubtasks = const Value.absent(),
@@ -12078,10 +7758,9 @@ class $$JiraIntegrationsTableTableManager
                 id: id,
                 projectId: projectId,
                 baseUrl: baseUrl,
-                email: email,
-                apiToken: apiToken,
                 jiraProjectKey: jiraProjectKey,
                 boardId: boardId,
+                credentialsFilePath: credentialsFilePath,
                 jqlFilter: jqlFilter,
                 syncEnabled: syncEnabled,
                 syncSubtasks: syncSubtasks,
@@ -12122,486 +7801,6 @@ typedef $$JiraIntegrationsTableProcessedTableManager =
       JiraIntegration,
       PrefetchHooks Function()
     >;
-typedef $$GithubIntegrationsTableCreateCompanionBuilder =
-    GithubIntegrationsCompanion Function({
-      required String id,
-      Value<String?> projectId,
-      required String owner,
-      required String repo,
-      required String accessToken,
-      Value<String?> labelFilter,
-      Value<bool> syncEnabled,
-      Value<bool> syncClosedIssues,
-      Value<int> syncIntervalMinutes,
-      Value<String> labelMappings,
-      Value<String> statusMappings,
-      Value<String> milestoneMappings,
-      Value<int?> lastSyncAt,
-      Value<String?> lastSyncError,
-      required int created,
-      Value<int?> modified,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-typedef $$GithubIntegrationsTableUpdateCompanionBuilder =
-    GithubIntegrationsCompanion Function({
-      Value<String> id,
-      Value<String?> projectId,
-      Value<String> owner,
-      Value<String> repo,
-      Value<String> accessToken,
-      Value<String?> labelFilter,
-      Value<bool> syncEnabled,
-      Value<bool> syncClosedIssues,
-      Value<int> syncIntervalMinutes,
-      Value<String> labelMappings,
-      Value<String> statusMappings,
-      Value<String> milestoneMappings,
-      Value<int?> lastSyncAt,
-      Value<String?> lastSyncError,
-      Value<int> created,
-      Value<int?> modified,
-      Value<String> crdtClock,
-      Value<String> crdtState,
-      Value<int> rowid,
-    });
-
-class $$GithubIntegrationsTableFilterComposer
-    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
-  $$GithubIntegrationsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get owner => $composableBuilder(
-    column: $table.owner,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get repo => $composableBuilder(
-    column: $table.repo,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get accessToken => $composableBuilder(
-    column: $table.accessToken,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get labelFilter => $composableBuilder(
-    column: $table.labelFilter,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get syncEnabled => $composableBuilder(
-    column: $table.syncEnabled,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get syncClosedIssues => $composableBuilder(
-    column: $table.syncClosedIssues,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get syncIntervalMinutes => $composableBuilder(
-    column: $table.syncIntervalMinutes,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get labelMappings => $composableBuilder(
-    column: $table.labelMappings,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get statusMappings => $composableBuilder(
-    column: $table.statusMappings,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get milestoneMappings => $composableBuilder(
-    column: $table.milestoneMappings,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get lastSyncAt => $composableBuilder(
-    column: $table.lastSyncAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get lastSyncError => $composableBuilder(
-    column: $table.lastSyncError,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get created => $composableBuilder(
-    column: $table.created,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get modified => $composableBuilder(
-    column: $table.modified,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$GithubIntegrationsTableOrderingComposer
-    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
-  $$GithubIntegrationsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get owner => $composableBuilder(
-    column: $table.owner,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get repo => $composableBuilder(
-    column: $table.repo,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get accessToken => $composableBuilder(
-    column: $table.accessToken,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get labelFilter => $composableBuilder(
-    column: $table.labelFilter,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get syncEnabled => $composableBuilder(
-    column: $table.syncEnabled,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get syncClosedIssues => $composableBuilder(
-    column: $table.syncClosedIssues,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get syncIntervalMinutes => $composableBuilder(
-    column: $table.syncIntervalMinutes,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get labelMappings => $composableBuilder(
-    column: $table.labelMappings,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get statusMappings => $composableBuilder(
-    column: $table.statusMappings,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get milestoneMappings => $composableBuilder(
-    column: $table.milestoneMappings,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get lastSyncAt => $composableBuilder(
-    column: $table.lastSyncAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get lastSyncError => $composableBuilder(
-    column: $table.lastSyncError,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get created => $composableBuilder(
-    column: $table.created,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get modified => $composableBuilder(
-    column: $table.modified,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtClock => $composableBuilder(
-    column: $table.crdtClock,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get crdtState => $composableBuilder(
-    column: $table.crdtState,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$GithubIntegrationsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $GithubIntegrationsTable> {
-  $$GithubIntegrationsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get projectId =>
-      $composableBuilder(column: $table.projectId, builder: (column) => column);
-
-  GeneratedColumn<String> get owner =>
-      $composableBuilder(column: $table.owner, builder: (column) => column);
-
-  GeneratedColumn<String> get repo =>
-      $composableBuilder(column: $table.repo, builder: (column) => column);
-
-  GeneratedColumn<String> get accessToken => $composableBuilder(
-    column: $table.accessToken,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get labelFilter => $composableBuilder(
-    column: $table.labelFilter,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get syncEnabled => $composableBuilder(
-    column: $table.syncEnabled,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get syncClosedIssues => $composableBuilder(
-    column: $table.syncClosedIssues,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get syncIntervalMinutes => $composableBuilder(
-    column: $table.syncIntervalMinutes,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get labelMappings => $composableBuilder(
-    column: $table.labelMappings,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get statusMappings => $composableBuilder(
-    column: $table.statusMappings,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get milestoneMappings => $composableBuilder(
-    column: $table.milestoneMappings,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get lastSyncAt => $composableBuilder(
-    column: $table.lastSyncAt,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get lastSyncError => $composableBuilder(
-    column: $table.lastSyncError,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get created =>
-      $composableBuilder(column: $table.created, builder: (column) => column);
-
-  GeneratedColumn<int> get modified =>
-      $composableBuilder(column: $table.modified, builder: (column) => column);
-
-  GeneratedColumn<String> get crdtClock =>
-      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
-
-  GeneratedColumn<String> get crdtState =>
-      $composableBuilder(column: $table.crdtState, builder: (column) => column);
-}
-
-class $$GithubIntegrationsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $GithubIntegrationsTable,
-          GithubIntegration,
-          $$GithubIntegrationsTableFilterComposer,
-          $$GithubIntegrationsTableOrderingComposer,
-          $$GithubIntegrationsTableAnnotationComposer,
-          $$GithubIntegrationsTableCreateCompanionBuilder,
-          $$GithubIntegrationsTableUpdateCompanionBuilder,
-          (
-            GithubIntegration,
-            BaseReferences<
-              _$AppDatabase,
-              $GithubIntegrationsTable,
-              GithubIntegration
-            >,
-          ),
-          GithubIntegration,
-          PrefetchHooks Function()
-        > {
-  $$GithubIntegrationsTableTableManager(
-    _$AppDatabase db,
-    $GithubIntegrationsTable table,
-  ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$GithubIntegrationsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$GithubIntegrationsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$GithubIntegrationsTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String?> projectId = const Value.absent(),
-                Value<String> owner = const Value.absent(),
-                Value<String> repo = const Value.absent(),
-                Value<String> accessToken = const Value.absent(),
-                Value<String?> labelFilter = const Value.absent(),
-                Value<bool> syncEnabled = const Value.absent(),
-                Value<bool> syncClosedIssues = const Value.absent(),
-                Value<int> syncIntervalMinutes = const Value.absent(),
-                Value<String> labelMappings = const Value.absent(),
-                Value<String> statusMappings = const Value.absent(),
-                Value<String> milestoneMappings = const Value.absent(),
-                Value<int?> lastSyncAt = const Value.absent(),
-                Value<String?> lastSyncError = const Value.absent(),
-                Value<int> created = const Value.absent(),
-                Value<int?> modified = const Value.absent(),
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => GithubIntegrationsCompanion(
-                id: id,
-                projectId: projectId,
-                owner: owner,
-                repo: repo,
-                accessToken: accessToken,
-                labelFilter: labelFilter,
-                syncEnabled: syncEnabled,
-                syncClosedIssues: syncClosedIssues,
-                syncIntervalMinutes: syncIntervalMinutes,
-                labelMappings: labelMappings,
-                statusMappings: statusMappings,
-                milestoneMappings: milestoneMappings,
-                lastSyncAt: lastSyncAt,
-                lastSyncError: lastSyncError,
-                created: created,
-                modified: modified,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                Value<String?> projectId = const Value.absent(),
-                required String owner,
-                required String repo,
-                required String accessToken,
-                Value<String?> labelFilter = const Value.absent(),
-                Value<bool> syncEnabled = const Value.absent(),
-                Value<bool> syncClosedIssues = const Value.absent(),
-                Value<int> syncIntervalMinutes = const Value.absent(),
-                Value<String> labelMappings = const Value.absent(),
-                Value<String> statusMappings = const Value.absent(),
-                Value<String> milestoneMappings = const Value.absent(),
-                Value<int?> lastSyncAt = const Value.absent(),
-                Value<String?> lastSyncError = const Value.absent(),
-                required int created,
-                Value<int?> modified = const Value.absent(),
-                Value<String> crdtClock = const Value.absent(),
-                Value<String> crdtState = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => GithubIntegrationsCompanion.insert(
-                id: id,
-                projectId: projectId,
-                owner: owner,
-                repo: repo,
-                accessToken: accessToken,
-                labelFilter: labelFilter,
-                syncEnabled: syncEnabled,
-                syncClosedIssues: syncClosedIssues,
-                syncIntervalMinutes: syncIntervalMinutes,
-                labelMappings: labelMappings,
-                statusMappings: statusMappings,
-                milestoneMappings: milestoneMappings,
-                lastSyncAt: lastSyncAt,
-                lastSyncError: lastSyncError,
-                created: created,
-                modified: modified,
-                crdtClock: crdtClock,
-                crdtState: crdtState,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$GithubIntegrationsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $GithubIntegrationsTable,
-      GithubIntegration,
-      $$GithubIntegrationsTableFilterComposer,
-      $$GithubIntegrationsTableOrderingComposer,
-      $$GithubIntegrationsTableAnnotationComposer,
-      $$GithubIntegrationsTableCreateCompanionBuilder,
-      $$GithubIntegrationsTableUpdateCompanionBuilder,
-      (
-        GithubIntegration,
-        BaseReferences<
-          _$AppDatabase,
-          $GithubIntegrationsTable,
-          GithubIntegration
-        >,
-      ),
-      GithubIntegration,
-      PrefetchHooks Function()
-    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12615,12 +7814,6 @@ class $AppDatabaseManager {
   $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
   $$WorklogEntriesTableTableManager get worklogEntries =>
       $$WorklogEntriesTableTableManager(_db, _db.worklogEntries);
-  $$NotesTableTableManager get notes =>
-      $$NotesTableTableManager(_db, _db.notes);
-  $$TaskRepeatCfgsTableTableManager get taskRepeatCfgs =>
-      $$TaskRepeatCfgsTableTableManager(_db, _db.taskRepeatCfgs);
   $$JiraIntegrationsTableTableManager get jiraIntegrations =>
       $$JiraIntegrationsTableTableManager(_db, _db.jiraIntegrations);
-  $$GithubIntegrationsTableTableManager get githubIntegrations =>
-      $$GithubIntegrationsTableTableManager(_db, _db.githubIntegrations);
 }

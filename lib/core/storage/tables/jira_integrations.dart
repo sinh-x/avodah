@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 /// Jira integration configuration table
 /// Stores connection settings and sync preferences for Jira instances
+/// Note: Credentials are stored externally (file path only), not in DB
 class JiraIntegrations extends Table {
   // Core identification
   TextColumn get id => text()();
@@ -9,12 +10,11 @@ class JiraIntegrations extends Table {
 
   // Connection settings
   TextColumn get baseUrl => text()(); // e.g., https://company.atlassian.net
-  TextColumn get email => text()(); // Jira account email
-  TextColumn get apiToken => text()(); // Encrypted API token
-
-  // Jira project config
   TextColumn get jiraProjectKey => text()(); // e.g., "PROJ"
   TextColumn get boardId => text().nullable()(); // For sprint tracking
+
+  // Credentials (external file, not stored in DB)
+  TextColumn get credentialsFilePath => text()(); // Path to JSON credentials file
 
   // Sync settings
   TextColumn get jqlFilter => text().nullable()(); // Custom JQL for issue filtering

@@ -10,6 +10,18 @@ All entities use:
 - **JSON Strings**: Complex nested data stored as JSON strings in the database
 - **CRDT Metadata**: Each entity includes `crdtClock` and `crdtState` for conflict-free sync
 
+### Scope
+
+**Phase 2 (Current) - Linux/NixOS MVP:**
+- Task ✅, Subtask, Project, Tag, WorklogEntry
+- JiraIntegration (external credentials file, no in-app storage)
+
+**Deferred:**
+- Platform secure storage (Android Keystore, iOS Keychain) - later phase
+- GitHubIntegration - later phase
+- Other integrations (GitLab, Trello, etc.) - later phase
+- TaskRepeatCfg (recurring tasks) - later phase
+
 ---
 
 ## Core Entities
@@ -31,9 +43,9 @@ The central entity for task management. Tasks can have subtasks (parent-child re
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `timeSpent` | Integer | Total time spent in milliseconds |
-| `timeEstimate` | Integer | Estimated time in milliseconds |
-| `timeSpentOnDay` | JSON | Map of date → milliseconds spent: `{"2024-01-15": 3600000}` |
+| `timeEstimate` | Integer | Estimated time in milliseconds (user input) |
+
+> **Note**: `timeSpent` and `timeSpentOnDay` are derived from WorklogEntry records at query time. No duplication needed.
 
 #### Due Dates
 
@@ -58,12 +70,13 @@ The central entity for task management. Tasks can have subtasks (parent-child re
 | `reminderId` | String? | Associated reminder ID |
 | `remindAt` | Integer? | Reminder timestamp (Unix ms) |
 
-#### Completion & Modification
+#### Completion
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `doneOn` | Integer? | Completion timestamp (Unix ms) |
-| `modified` | Integer? | Last modification timestamp (Unix ms) |
+
+> **Note**: `modified` timestamp is tracked internally by CRDT via `_modifiedAt`. No separate field needed.
 
 #### Repeating Tasks
 
@@ -73,7 +86,7 @@ The central entity for task management. Tasks can have subtasks (parent-child re
 
 #### Issue Integration
 
-For linking tasks to external issue trackers (Jira, GitHub, etc.):
+For linking tasks to external issue trackers (Jira, GitHub, etc.). One task links to at most one external issue.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -83,8 +96,9 @@ For linking tasks to external issue trackers (Jira, GitHub, etc.):
 | `issueWasUpdated` | Boolean? | Whether issue was updated externally |
 | `issueLastUpdated` | Integer? | Last sync timestamp (Unix ms) |
 | `issueAttachmentNr` | Integer? | Number of attachments on external issue |
-| `issueTimeTracked` | JSON? | Time tracked per provider: `{"jira": 3600000}` |
 | `issuePoints` | Integer? | Story points (Jira/agile) |
+
+> **Note**: `issueTimeTracked` removed - derive from WorklogEntry records filtered by provider.
 
 #### CRDT Metadata
 
@@ -152,7 +166,6 @@ Projects group tasks and contain configuration for integrations and theming.
 |-------|------|-------------|
 | `taskIds` | JSON | Active task IDs: `["id1", "id2"]` |
 | `backlogTaskIds` | JSON | Backlog task IDs: `["id3", "id4"]` |
-| `noteIds` | JSON | Associated note IDs: `["note1"]` |
 
 #### Configuration
 
@@ -160,7 +173,8 @@ Projects group tasks and contain configuration for integrations and theming.
 |-------|------|-------------|
 | `theme` | JSON | Theme configuration (see Theme schema) |
 | `advancedCfg` | JSON | Advanced settings (worklog export, etc.) |
-| `issueIntegrationCfgs` | JSON | Issue provider configurations |
+
+> **Note**: Issue integration configs moved to separate `JiraIntegration` table (Option B+). See [Integration Tables](#integration-tables) section.
 
 #### Timestamps
 
@@ -207,25 +221,133 @@ Individual time tracking sessions. Each entry represents a continuous work perio
 
 ---
 
-### 6. Note
+## Integration Tables
 
-Notes for capturing ideas, meeting notes, or project documentation.
+Integration configurations are stored in **separate tables per provider** (Option B+) rather than embedded JSON in Project. This enables:
+- Parallel development (each integration is isolated)
+- Type-safe fields (not buried in JSON)
+- External credential management (not stored in app)
+
+### MVP Architecture (Linux/NixOS)
+
+For initial development, credentials are **externalized** - Avodah stores a path to a credentials file, not the credentials themselves.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  SQLite (JiraIntegration table)                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│  id, projectId, baseUrl, jiraProjectKey, syncEnabled, ...               │
+│  credentialsFilePath: "~/.config/avodah/jira-creds.json"                │
+│                        ↑                                                 │
+│                        └── Path to external file (user manages)         │
+└─────────────────────────────────────────────────────────────────────────┘
+                    │
+                    │ Read at runtime (not stored)
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  External Credentials File (user-managed)                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Options:                                                                │
+│  - Plain file with chmod 600                                            │
+│  - sops-nix encrypted file                                              │
+│  - agenix secret                                                         │
+│  - Environment variable path                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│  File: ~/.config/avodah/jira-creds.json                                 │
+│  {                                                                       │
+│    "email": "user@company.com",                                         │
+│    "apiToken": "ATATT3xFfGF0..."                                        │
+│  }                                                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- No credential storage in app = no security responsibility
+- Works with NixOS secret management (sops-nix, agenix)
+- User controls credential lifecycle
+- Simple to implement
+
+**Future:** Add platform secure storage when targeting Android/iOS.
+
+### 6. JiraIntegration
+
+Configuration for Jira issue sync. Credentials read from external file at runtime.
+
+#### Core Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | String | Unique identifier (UUID) |
-| `projectId` | String? | Associated project ID |
-| `content` | String | Note content (markdown supported) |
-| `imgUrl` | String? | Attached image URL |
-| `backgroundColor` | String? | Note background color |
-| `isPinnedToToday` | Boolean | Pin to today's view |
-| `isLock` | Boolean | Lock note from editing |
+| `projectId` | String? | Links to Avodah Project (null = global) |
+
+#### Connection Settings
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `baseUrl` | String | Jira instance URL: `https://company.atlassian.net` |
+| `jiraProjectKey` | String | Jira project key: `PROJ` |
+| `boardId` | String? | Jira board ID for sprint tracking |
+
+#### Credentials (External)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `credentialsFilePath` | String | Path to JSON credentials file |
+
+Expected file format:
+```json
+{
+  "email": "user@company.com",
+  "apiToken": "ATATT3xFfGF0..."
+}
+```
+
+> **Note**: Avodah reads this file at runtime, never stores credentials in SQLite.
+
+#### Sync Settings
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `jqlFilter` | String? | Custom JQL for issue filtering |
+| `syncEnabled` | Boolean | Enable/disable sync |
+| `syncSubtasks` | Boolean | Sync Jira subtasks |
+| `syncWorklogs` | Boolean | Push worklogs to Jira |
+| `syncIntervalMinutes` | Integer | Auto-sync interval (default: 15) |
+
+#### Sync Status (Operational)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lastSyncAt` | Integer? | Last successful sync (Unix ms) |
+| `lastSyncError` | String? | Last error message |
+
+#### Timestamps & CRDT
+
+| Field | Type | Description |
+|-------|------|-------------|
 | `created` | Integer | Creation timestamp (Unix ms) |
-| `modified` | Integer | Last modification timestamp (Unix ms) |
+| `modified` | Integer? | Last modification (Unix ms) |
+| `crdtClock` | String | HLC value |
+| `crdtState` | JSON | CRDT state |
+
+#### Jira Sync Flow
+
+```
+Jira                                    Avodah
+─────                                   ──────
+Project (PROJ)  ◄─────────────────────► Project + JiraIntegration
+   │                                       │
+   ▼                                       ▼
+Issue (PROJ-123) ◄────────────────────► Task (issueId="PROJ-123")
+   │                                       │
+   ├── Subtasks ◄─────────────────────► Subtask (title, isDone, order)
+   │                                       │
+   └── Worklogs ◄─────────────────────► WorklogEntry (jiraWorklogId)
+```
 
 ---
 
-### 7. Task Repeat Configuration
+### 7. Task Repeat Configuration (DEFERRED)
 
 Configuration for recurring/repeating tasks.
 
@@ -404,33 +526,53 @@ Note: Super Productivity uses a simple boolean for completion status rather than
 ## Entity Relationships
 
 ```
-┌─────────────┐       ┌─────────────┐       ┌─────────────┐
-│   Project   │◄──────│    Task     │──────►│   Subtask   │
-└─────────────┘       └─────────────┘       └─────────────┘
-       │                     │                (simple list)
-       │                     │
-       ▼                     │ tagIds
-┌─────────────┐              │
-│    Note     │              ▼
-└─────────────┘       ┌─────────────┐
-                      │     Tag     │
-                      └─────────────┘
-
-┌─────────────┐       ┌─────────────┐
-│    Task     │──────►│WorklogEntry │
-└─────────────┘       └─────────────┘
-      │                (time tracked here)
-      │
-      ▼
-┌─────────────┐
-│TaskRepeatCfg│ (creates tasks)
-└─────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PHASE 2 ENTITIES                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌───────────────┐         1:N          ┌───────────────┐                   │
+│  │    Project    │◄─────────────────────│     Task      │                   │
+│  └───────────────┘                      └───────────────┘                   │
+│         │                                      │                            │
+│         │ 1:N                                  │ 1:N                        │
+│         ▼                                      ▼                            │
+│  ┌───────────────┐                      ┌───────────────┐                   │
+│  │JiraIntegration│                      │   Subtask     │                   │
+│  └───────────────┘                      └───────────────┘                   │
+│         │                                                                    │
+│         │ reads credentials                                                  │
+│         ▼                                                                    │
+│  ┌───────────────┐                      ┌───────────────┐                   │
+│  │ External File │                      │ WorklogEntry  │◄── Task (1:N)     │
+│  │ (user-managed)│                      └───────────────┘                   │
+│  └───────────────┘                                                          │
+│                                                                              │
+│               ┌───────────────┐                                             │
+│               │      Tag      │◄── Task.tagIds (M:N via JSON)               │
+│               └───────────────┘                                             │
+│                                                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  DEFERRED: TaskRepeatCfg, GitHubIntegration                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Entity Summary
+
+| # | Entity | Table | Status |
+|---|--------|-------|--------|
+| 1 | Task | `Tasks` | ✅ Finalized |
+| 2 | Subtask | `Subtasks` | ✅ Approved |
+| 3 | Project | `Projects` | ✅ Approved (removed issueIntegrationCfgs) |
+| 4 | Tag | `Tags` | ✅ Approved |
+| 5 | WorklogEntry | `WorklogEntries` | ✅ Approved |
+| 6 | JiraIntegration | `JiraIntegrations` | ✅ Approved (external credentials) |
+| 7 | TaskRepeatCfg | `TaskRepeatCfgs` | ⏸️ Deferred |
 
 **Key Design Decisions:**
 - Subtasks are simple checklist items, not full Task entities
 - All time tracking happens at Task level only
 - Subtasks have no tags, no issue integration, no time tracking
+- JiraIntegration uses external credentials file (not stored in app)
 
 **Jira Subtask Sync:**
 - Jira subtasks map to our simplified Subtask model
@@ -443,11 +585,11 @@ Note: Super Productivity uses a simple boolean for completion status rather than
 ## Time Tracking Flow
 
 1. **Start Timer**: Create active session in memory
-2. **Stop Timer**:
-   - Create `WorklogEntry` with start, end, duration
-   - Update `Task.timeSpent` += duration
-   - Update `Task.timeSpentOnDay[date]` += duration
+2. **Stop Timer**: Create `WorklogEntry` with start, end, duration, date
 3. **Manual Entry**: Create `WorklogEntry` directly
+4. **Display**: Query WorklogEntry, aggregate by taskId for totals
+
+> **Design Principle**: WorklogEntry is the single source of truth for time tracking. Task only stores `timeEstimate` (user input). All other time values are derived at query time.
 
 ---
 
@@ -491,6 +633,8 @@ Key differences:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.3.0 | 2026-02-09 | Option B+ architecture: Separate JiraIntegration table with external credentials file. Removed Note entity, issueIntegrationCfgs from Project, GitHub (deferred). Linux/NixOS MVP scope. |
+| 0.2.0 | 2026-02-09 | Removed derived fields (timeSpent, timeSpentOnDay, issueTimeTracked, modified). Single source of truth: WorklogEntry for time, CRDT for modified. |
 | 0.1.0 | 2024-02-08 | Initial schema aligned with Super Productivity |
 
 ---

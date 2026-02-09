@@ -10,10 +10,10 @@ import 'tables/subtasks.dart';
 import 'tables/projects.dart';
 import 'tables/tags.dart';
 import 'tables/worklogs.dart';
-import 'tables/notes.dart';
-import 'tables/task_repeat_cfgs.dart';
 import 'tables/jira_integrations.dart';
-import 'tables/github_integrations.dart';
+// Deferred: import 'tables/task_repeat_cfgs.dart';
+// Deferred: import 'tables/github_integrations.dart';
+// Removed: import 'tables/notes.dart';
 
 part 'database.g.dart';
 
@@ -23,10 +23,10 @@ part 'database.g.dart';
   Projects,
   Tags,
   WorklogEntries,
-  Notes,
-  TaskRepeatCfgs,
   JiraIntegrations,
-  GithubIntegrations,
+  // Deferred: TaskRepeatCfgs,
+  // Deferred: GithubIntegrations,
+  // Removed: Notes,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -35,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -47,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
         if (from < 2) {
           // Add integration tables
           await m.createTable(jiraIntegrations);
-          await m.createTable(githubIntegrations);
+          // Note: githubIntegrations was added in v2 but removed in v5
         }
         if (from < 3) {
           // Add description field to tasks
@@ -56,6 +56,16 @@ class AppDatabase extends _$AppDatabase {
         if (from < 4) {
           // Remove IssueLinks table (1 task = 1 issue, embedded fields sufficient)
           await m.deleteTable('issue_links');
+        }
+        if (from < 5) {
+          // v0.3.0: Linux/NixOS MVP cleanup
+          // Drop Notes table (entity removed)
+          await m.deleteTable('notes');
+          // Drop GithubIntegrations table (deferred)
+          await m.deleteTable('github_integrations');
+          // Note: Column changes to projects and jira_integrations
+          // require table recreation - handled by Drift automatically
+          // for new installs. Existing DBs may need manual cleanup.
         }
       },
     );

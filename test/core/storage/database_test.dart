@@ -22,20 +22,15 @@ void main() {
       final projects = await db.select(db.projects).get();
       final tags = await db.select(db.tags).get();
       final worklogs = await db.select(db.worklogEntries).get();
-      final notes = await db.select(db.notes).get();
-      final repeatCfgs = await db.select(db.taskRepeatCfgs).get();
       final jiraIntegrations = await db.select(db.jiraIntegrations).get();
-      final githubIntegrations = await db.select(db.githubIntegrations).get();
+      // Deferred: notes, taskRepeatCfgs, githubIntegrations
 
       expect(tasks, isEmpty);
       expect(subtasks, isEmpty);
       expect(projects, isEmpty);
       expect(tags, isEmpty);
       expect(worklogs, isEmpty);
-      expect(notes, isEmpty);
-      expect(repeatCfgs, isEmpty);
       expect(jiraIntegrations, isEmpty);
-      expect(githubIntegrations, isEmpty);
     });
   });
 
@@ -229,9 +224,8 @@ void main() {
       await db.into(db.jiraIntegrations).insert(JiraIntegrationsCompanion.insert(
         id: 'jira-1',
         baseUrl: 'https://company.atlassian.net',
-        email: 'user@company.com',
-        apiToken: 'encrypted-token',
         jiraProjectKey: 'PROJ',
+        credentialsFilePath: '~/.config/avodah/jira-creds.json',
         created: now,
       ));
 
@@ -239,6 +233,7 @@ void main() {
       expect(integrations.length, 1);
       expect(integrations.first.baseUrl, 'https://company.atlassian.net');
       expect(integrations.first.jiraProjectKey, 'PROJ');
+      expect(integrations.first.credentialsFilePath, '~/.config/avodah/jira-creds.json');
       expect(integrations.first.syncEnabled, true);
     });
 
@@ -248,9 +243,8 @@ void main() {
       await db.into(db.jiraIntegrations).insert(JiraIntegrationsCompanion.insert(
         id: 'jira-1',
         baseUrl: 'https://company.atlassian.net',
-        email: 'user@company.com',
-        apiToken: 'token',
         jiraProjectKey: 'PROJ',
+        credentialsFilePath: '~/.config/avodah/jira-creds.json',
         created: now,
       ));
 
@@ -269,24 +263,6 @@ void main() {
     });
   });
 
-  group('GithubIntegrations table', () {
-    test('inserts and retrieves github integration', () async {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
-      await db.into(db.githubIntegrations).insert(GithubIntegrationsCompanion.insert(
-        id: 'github-1',
-        owner: 'myorg',
-        repo: 'myrepo',
-        accessToken: 'ghp_token',
-        created: now,
-      ));
-
-      final integrations = await db.select(db.githubIntegrations).get();
-      expect(integrations.length, 1);
-      expect(integrations.first.owner, 'myorg');
-      expect(integrations.first.repo, 'myrepo');
-      expect(integrations.first.syncEnabled, true);
-    });
-  });
+  // Deferred: GithubIntegrations table tests (GitHub integration deferred)
 
 }

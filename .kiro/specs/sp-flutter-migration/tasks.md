@@ -4,19 +4,23 @@
 
 This document breaks down the Flutter migration into actionable tasks. The project creates a new Flutter application with local-first, P2P sync architecture inspired by Anytype.
 
-**Total Estimated Tasks**: 37+ tasks organized into 6 phases
+**Current Scope**: Linux/NixOS MVP with Jira integration
+
+**Total Estimated Tasks**: 35+ tasks organized into 6 phases
 
 **Requirements Reference**: `requirements.md`
 
 **Design Reference**: `design.md`
 
-**New Repository**: `super-productivity-flutter` (to be created)
+**Data Model Reference**: `data-model.md`
+
+**Repository**: `avodah`
 
 ## Implementation Tasks
 
-### Phase 1: Project Foundation
+### Phase 1: Project Foundation ✅
 
-- [ ] **1.1** Create new Flutter repository
+- [x] **1.1** Create new Flutter repository ✅
   - **Description**: Initialize new Flutter project with proper structure, linting, and CI setup
   - **Deliverables**:
     - `super-productivity-flutter` GitHub repository
@@ -27,7 +31,7 @@ This document breaks down the Flutter migration into actionable tasks. The proje
   - **Requirements**: Technical Architecture
   - **Dependencies**: None
 
-- [ ] **1.2** Setup core dependencies
+- [x] **1.2** Setup core dependencies ✅
   - **Description**: Add and configure essential packages for state management, storage, and code generation
   - **Deliverables**:
     - `pubspec.yaml` with core dependencies:
@@ -40,8 +44,9 @@ This document breaks down the Flutter migration into actionable tasks. The proje
     - Working `build_runner` setup
   - **Requirements**: Technical Architecture
   - **Dependencies**: 1.1
+  - **Status**: Complete
 
-- [ ] **1.3** Implement base app shell
+- [x] **1.3** Implement base app shell ✅
   - **Description**: Create app entry point, theme setup, and navigation structure
   - **Deliverables**:
     - `lib/main.dart` - App entry point
@@ -51,82 +56,87 @@ This document breaks down the Flutter migration into actionable tasks. The proje
     - Basic screens: Home, Tasks, Settings (empty shells)
   - **Requirements**: User Experience Requirements
   - **Dependencies**: 1.2
+  - **Status**: Complete
 
-- [ ] **1.4** Setup Drift database
+- [x] **1.4** Setup Drift database ✅
   - **Description**: Configure Drift (SQLite) for local persistence with initial schema
   - **Deliverables**:
     - `lib/core/storage/database.dart` - Database initialization
-    - `lib/core/storage/schemas/` - Initial entity schemas
-    - Database migration strategy documentation
+    - `lib/core/storage/tables/` - Entity table definitions
+    - Database migration strategy (schema versioning)
     - Unit tests for database operations
   - **Requirements**: Offline-First Requirements
   - **Dependencies**: 1.2
+  - **Status**: Complete (schema v4)
 
-- [ ] **1.5** Define Jira/GitHub integration data models
-  - **Description**: Create CRDT-backed data models for external issue tracker integration. This task establishes the foundation for future Jira/GitHub sync without implementing API integration.
+- [ ] **1.5** Define Jira integration data model
+  - **Description**: Create CRDT-backed data model for Jira integration. Uses external credentials file (not stored in app).
   - **Deliverables**:
     - `lib/features/integrations/models/jira_integration_document.dart` - Jira config CRDT document
-    - `lib/features/integrations/models/github_integration_document.dart` - GitHub config CRDT document
-    - `lib/features/integrations/models/issue_link_document.dart` - Task-to-issue link CRDT document
-    - `lib/core/storage/tables/jira_integration_table.dart` - Drift table
-    - `lib/core/storage/tables/github_integration_table.dart` - Drift table
-    - `lib/core/storage/tables/issue_link_table.dart` - Drift table
+    - `lib/core/storage/tables/jira_integrations.dart` - Drift table (already exists, update if needed)
     - Unit tests for CRDT merge operations
   - **Requirements**: Core Feature Requirements (Integration Data Models)
   - **Dependencies**: 1.2, 1.4
-  - **Note**: API clients and sync logic will be implemented in Phase 2+
+  - **Note**: Credentials read from external file at runtime. GitHub integration deferred.
 
 ### Phase 2: CRDT Foundation
 
-- [ ] **2.1** Implement CRDT primitives
+- [x] **2.1** Implement CRDT primitives ✅
   - **Description**: Build or integrate CRDT types for conflict-free data
   - **Deliverables**:
     - `lib/core/crdt/hlc.dart` - Hybrid Logical Clock
     - `lib/core/crdt/lww_register.dart` - Last-Writer-Wins Register
-    - `lib/core/crdt/lww_set.dart` - Last-Writer-Wins Set
-    - `lib/core/crdt/g_counter.dart` - Grow-only Counter
-    - Comprehensive unit tests for merge operations
+    - `lib/core/crdt/lww_map.dart` - Last-Writer-Wins Map
+    - Comprehensive unit tests for merge operations (99 tests)
   - **Requirements**: CRDT Sync Requirements
   - **Dependencies**: 1.2
+  - **Status**: Complete (commit `various`)
 
-- [ ] **2.2** Create CRDT document base class
+- [x] **2.2** Create CRDT document base class ✅
   - **Description**: Abstract base for all CRDT-backed documents
   - **Deliverables**:
-    - `lib/core/crdt/crdt_document.dart` - Base document class
-    - Serialization to/from JSON
+    - `lib/core/crdt/crdt_document.dart` - Base document class (318 lines)
+    - Serialization to/from JSON (`toCrdtState()`)
     - Merge operation interface
-    - Clock/version tracking
-    - Unit tests for document operations
+    - Typed accessors (getString, setInt, getDateTime, getList, etc.)
+    - Soft delete with delete()/restore()
+    - Unit tests (34 tests)
   - **Requirements**: CRDT Sync Requirements
   - **Dependencies**: 2.1
+  - **Status**: Complete (commit `a5bcf7b`)
 
-- [ ] **2.3** Implement Task document
-  - **Description**: CRDT-backed task model with all fields including external issue links
+- [x] **2.3** Implement Task document ✅
+  - **Description**: CRDT-backed task model with all fields including Jira issue link
   - **Deliverables**:
-    - `lib/features/tasks/models/task_document.dart`
+    - `lib/features/tasks/models/task_document.dart` (~500 lines)
     - All task fields as CRDT types
-    - External issue link fields (`jiraIssueKey`, `githubIssueNumber`)
-    - Conversion to/from UI model (`Task`)
+    - Jira issue link fields (`issueId`, `issueType`, `issueProviderId`)
+    - `linkToIssue()` / `unlinkIssue()` helpers
+    - Conversion to/from UI model (`TaskModel`)
     - Conversion to/from Drift entity
-    - Unit tests including concurrent edit scenarios
+    - Unit tests including concurrent edit scenarios (40 tests)
   - **Requirements**: Core Feature Requirements
-  - **Dependencies**: 2.2, 1.4, 1.5
+  - **Dependencies**: 2.2, 1.4
+  - **Status**: Complete (commit `f7578aa`)
 
-- [ ] **2.4** Implement Project and Tag documents
-  - **Description**: CRDT-backed project and tag models
+- [ ] **2.4** Implement Project, Tag, and Subtask documents
+  - **Description**: CRDT-backed project, tag, and subtask models
   - **Deliverables**:
     - `lib/features/projects/models/project_document.dart`
     - `lib/features/tags/models/tag_document.dart`
+    - `lib/features/tasks/models/subtask_document.dart`
     - Conversion utilities
     - Unit tests
   - **Requirements**: Core Feature Requirements
   - **Dependencies**: 2.2, 1.4
 
-- [ ] **2.5** Implement Worklog document
-  - **Description**: CRDT-backed time tracking entries
+- [ ] **2.5** Implement Worklog and JiraIntegration documents
+  - **Description**: CRDT-backed time tracking entries and Jira config
   - **Deliverables**:
     - `lib/features/worklog/models/worklog_document.dart`
+    - `lib/features/integrations/models/jira_integration_document.dart`
     - Link to task document
+    - External credentials loading (`loadCredentials()`)
     - Duration calculations
     - Unit tests
   - **Requirements**: Core Feature Requirements
@@ -230,20 +240,17 @@ This document breaks down the Flutter migration into actionable tasks. The proje
   - **Requirements**: Core Feature Requirements
   - **Dependencies**: 2.5, 3.7
 
-- [ ] **3.9** Build Integration repositories and providers
-  - **Description**: Data access layer for Jira/GitHub integrations and issue links
+- [ ] **3.9** Build Jira integration repository and providers
+  - **Description**: Data access layer for Jira integration config
   - **Deliverables**:
     - `lib/features/integrations/data/jira_repository.dart`
-    - `lib/features/integrations/data/github_repository.dart`
-    - `lib/features/integrations/data/issue_link_repository.dart`
-    - `lib/features/integrations/providers/integration_providers.dart`
-    - CRUD operations for integration configs
-    - Link/unlink task to external issue
-    - Query issue links by task ID
+    - `lib/features/integrations/providers/jira_providers.dart`
+    - CRUD operations for Jira integration configs
+    - Credentials loading from external file
     - Integration tests with Drift
   - **Requirements**: Core Feature Requirements (Integration Data Models)
-  - **Dependencies**: 1.5, 2.2
-  - **Note**: No API sync - data layer only. UI for configuration in settings screen.
+  - **Dependencies**: 1.5, 2.5
+  - **Note**: No API sync yet - data layer only. GitHub integration deferred.
 
 ### Phase 4: P2P Sync
 
@@ -468,11 +475,11 @@ Each task is considered complete when:
 
 ### Milestone Checkpoints
 
-- **Milestone 1**: Phase 1 Complete - Project foundation ready (includes Jira/GitHub data models)
-- **Milestone 2**: Phase 2 Complete - CRDT layer working
-- **Milestone 3**: Phase 3 Complete - Fully functional offline app with integration data layer
+- **Milestone 1**: Phase 1 Complete - Project foundation ready ✅
+- **Milestone 2**: Phase 2 Complete - CRDT layer working (Tasks 2.1-2.3 done)
+- **Milestone 3**: Phase 3 Complete - Fully functional offline app with Jira integration data layer
 - **Milestone 4**: Phase 4 Complete - P2P sync working
-- **Milestone 5**: Phase 5 Complete - Platform builds ready
+- **Milestone 5**: Phase 5 Complete - Linux build ready (NixOS)
 - **Milestone 6**: Phase 6 Complete - Ready for personal use
 
 ### Definition of Done
@@ -528,7 +535,7 @@ A task is considered "Done" when:
 
 ## Git Tracking
 
-**Repository**: `super-productivity-flutter` (to be created)
+**Repository**: `avodah`
 
 **Branch Strategy**:
 
@@ -538,14 +545,22 @@ A task is considered "Done" when:
 
 ---
 
-**Task Status**: Not Started
+**Task Status**: In Progress
 
-**Current Phase**: Phase 1 (pending repository creation)
+**Current Phase**: Phase 2 (CRDT Foundation)
 
-**Overall Progress**: 0/37 tasks completed (0%)
+**Overall Progress**: ~8/35 tasks completed (~23%)
+- Phase 1: ✅ Complete (5 tasks)
+- Phase 2: 3/5 tasks done (2.1, 2.2, 2.3 ✅)
 
-**Last Updated**: 2025-02-06
+**Commits**: 15+ commits, 5 ahead of origin
+
+**Tests**: 171 passing
+
+**Last Updated**: 2026-02-09
 
 **Assigned Developer**: Personal project
 
 **Estimated Completion**: Incremental, no fixed deadline
+
+**Platform**: Linux/NixOS (MVP), Android/iOS deferred

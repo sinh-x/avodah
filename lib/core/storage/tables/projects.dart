@@ -14,7 +14,6 @@ class Projects extends Table {
   // Task lists
   TextColumn get taskIds => text().withDefault(const Constant('[]'))(); // JSON array
   TextColumn get backlogTaskIds => text().withDefault(const Constant('[]'))(); // JSON array
-  TextColumn get noteIds => text().withDefault(const Constant('[]'))(); // JSON array
 
   // Theme config (stored as JSON)
   TextColumn get theme => text().withDefault(const Constant('{}'))();
@@ -24,9 +23,6 @@ class Projects extends Table {
 
   // Icon
   TextColumn get icon => text().nullable()();
-
-  // Issue integration configs (stored as JSON map)
-  TextColumn get issueIntegrationCfgs => text().withDefault(const Constant('{}'))();
 
   // Timestamps
   IntColumn get created => integer()(); // Unix ms
