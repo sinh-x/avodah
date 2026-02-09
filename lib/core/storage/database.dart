@@ -53,8 +53,8 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(issueLinks);
         }
         if (from < 3) {
-          // Add notes field to tasks
-          await m.addColumn(tasks, tasks.notes);
+          // Add description field to tasks
+          await m.addColumn(tasks, tasks.description);
         }
       },
     );

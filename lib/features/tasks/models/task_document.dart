@@ -18,7 +18,7 @@ class TaskFields {
 
   static const String projectId = 'projectId';
   static const String title = 'title';
-  static const String notes = 'notes';
+  static const String description = 'description';
   static const String isDone = 'isDone';
   static const String created = 'created';
   static const String timeSpent = 'timeSpent';
@@ -123,7 +123,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
   void _initializeFromDrift(Task task) {
     setString(TaskFields.projectId, task.projectId);
     setString(TaskFields.title, task.title);
-    setString(TaskFields.notes, task.notes);
+    setString(TaskFields.description, task.description);
     setBool(TaskFields.isDone, task.isDone);
     setInt(TaskFields.created, task.created);
     setInt(TaskFields.timeSpent, task.timeSpent);
@@ -159,9 +159,9 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
   String get title => getString(TaskFields.title) ?? '';
   set title(String value) => setString(TaskFields.title, value);
 
-  /// Detailed notes/description (rich text).
-  String get notes => getString(TaskFields.notes) ?? '';
-  set notes(String value) => setString(TaskFields.notes, value);
+  /// Task description (supports markdown).
+  String? get description => getString(TaskFields.description);
+  set description(String? value) => setString(TaskFields.description, value);
 
   /// Whether the task is completed.
   bool get isDone => getBool(TaskFields.isDone) ?? false;
@@ -432,7 +432,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       id: Value(id),
       projectId: Value(projectId),
       title: Value(title),
-      notes: Value(notes),
+      description: Value(description),
       isDone: Value(isDone),
       created: Value(createdTimestamp?.millisecondsSinceEpoch ??
           DateTime.now().millisecondsSinceEpoch),
@@ -468,7 +468,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       id: id,
       projectId: projectId,
       title: title,
-      notes: notes,
+      description: description,
       isDone: isDone,
       isDeleted: isDeleted,
       created: createdTimestamp,
@@ -503,7 +503,7 @@ class TaskModel {
   final String id;
   final String? projectId;
   final String title;
-  final String notes;
+  final String? description;
   final bool isDone;
   final bool isDeleted;
   final DateTime? created;
@@ -523,7 +523,7 @@ class TaskModel {
     required this.id,
     this.projectId,
     required this.title,
-    required this.notes,
+    this.description,
     required this.isDone,
     required this.isDeleted,
     this.created,

@@ -7,7 +7,7 @@ class Tasks extends Table {
   TextColumn get id => text()();
   TextColumn get projectId => text().nullable()();
   TextColumn get title => text()();
-  TextColumn get notes => text().withDefault(const Constant(''))(); // Rich text description
+  TextColumn get description => text().nullable()(); // Task description (supports markdown)
   BoolColumn get isDone => boolean().withDefault(const Constant(false))();
   IntColumn get created => integer()(); // Unix ms
 

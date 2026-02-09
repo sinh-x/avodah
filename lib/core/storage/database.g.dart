@@ -37,15 +37,16 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
   @override
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant(''),
   );
   static const VerificationMeta _isDoneMeta = const VerificationMeta('isDone');
   @override
@@ -322,7 +323,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     id,
     projectId,
     title,
-    notes,
+    description,
     isDone,
     created,
     timeSpent,
@@ -379,10 +380,13 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
-    if (data.containsKey('notes')) {
+    if (data.containsKey('description')) {
       context.handle(
-        _notesMeta,
-        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
       );
     }
     if (data.containsKey('is_done')) {
@@ -585,10 +589,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
-      notes: attachedDatabase.typeMapping.read(
+      description: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
+        data['${effectivePrefix}description'],
+      ),
       isDone: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_done'],
@@ -698,7 +702,7 @@ class Task extends DataClass implements Insertable<Task> {
   final String id;
   final String? projectId;
   final String title;
-  final String notes;
+  final String? description;
   final bool isDone;
   final int created;
   final int timeSpent;
@@ -727,7 +731,7 @@ class Task extends DataClass implements Insertable<Task> {
     required this.id,
     this.projectId,
     required this.title,
-    required this.notes,
+    this.description,
     required this.isDone,
     required this.created,
     required this.timeSpent,
@@ -761,7 +765,9 @@ class Task extends DataClass implements Insertable<Task> {
       map['project_id'] = Variable<String>(projectId);
     }
     map['title'] = Variable<String>(title);
-    map['notes'] = Variable<String>(notes);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
     map['is_done'] = Variable<bool>(isDone);
     map['created'] = Variable<int>(created);
     map['time_spent'] = Variable<int>(timeSpent);
@@ -826,7 +832,9 @@ class Task extends DataClass implements Insertable<Task> {
           ? const Value.absent()
           : Value(projectId),
       title: Value(title),
-      notes: Value(notes),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
       isDone: Value(isDone),
       created: Value(created),
       timeSpent: Value(timeSpent),
@@ -893,7 +901,7 @@ class Task extends DataClass implements Insertable<Task> {
       id: serializer.fromJson<String>(json['id']),
       projectId: serializer.fromJson<String?>(json['projectId']),
       title: serializer.fromJson<String>(json['title']),
-      notes: serializer.fromJson<String>(json['notes']),
+      description: serializer.fromJson<String?>(json['description']),
       isDone: serializer.fromJson<bool>(json['isDone']),
       created: serializer.fromJson<int>(json['created']),
       timeSpent: serializer.fromJson<int>(json['timeSpent']),
@@ -927,7 +935,7 @@ class Task extends DataClass implements Insertable<Task> {
       'id': serializer.toJson<String>(id),
       'projectId': serializer.toJson<String?>(projectId),
       'title': serializer.toJson<String>(title),
-      'notes': serializer.toJson<String>(notes),
+      'description': serializer.toJson<String?>(description),
       'isDone': serializer.toJson<bool>(isDone),
       'created': serializer.toJson<int>(created),
       'timeSpent': serializer.toJson<int>(timeSpent),
@@ -959,7 +967,7 @@ class Task extends DataClass implements Insertable<Task> {
     String? id,
     Value<String?> projectId = const Value.absent(),
     String? title,
-    String? notes,
+    Value<String?> description = const Value.absent(),
     bool? isDone,
     int? created,
     int? timeSpent,
@@ -988,7 +996,7 @@ class Task extends DataClass implements Insertable<Task> {
     id: id ?? this.id,
     projectId: projectId.present ? projectId.value : this.projectId,
     title: title ?? this.title,
-    notes: notes ?? this.notes,
+    description: description.present ? description.value : this.description,
     isDone: isDone ?? this.isDone,
     created: created ?? this.created,
     timeSpent: timeSpent ?? this.timeSpent,
@@ -1029,7 +1037,9 @@ class Task extends DataClass implements Insertable<Task> {
       id: data.id.present ? data.id.value : this.id,
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
       title: data.title.present ? data.title.value : this.title,
-      notes: data.notes.present ? data.notes.value : this.notes,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
       isDone: data.isDone.present ? data.isDone.value : this.isDone,
       created: data.created.present ? data.created.value : this.created,
       timeSpent: data.timeSpent.present ? data.timeSpent.value : this.timeSpent,
@@ -1087,7 +1097,7 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('id: $id, ')
           ..write('projectId: $projectId, ')
           ..write('title: $title, ')
-          ..write('notes: $notes, ')
+          ..write('description: $description, ')
           ..write('isDone: $isDone, ')
           ..write('created: $created, ')
           ..write('timeSpent: $timeSpent, ')
@@ -1121,7 +1131,7 @@ class Task extends DataClass implements Insertable<Task> {
     id,
     projectId,
     title,
-    notes,
+    description,
     isDone,
     created,
     timeSpent,
@@ -1154,7 +1164,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.id == this.id &&
           other.projectId == this.projectId &&
           other.title == this.title &&
-          other.notes == this.notes &&
+          other.description == this.description &&
           other.isDone == this.isDone &&
           other.created == this.created &&
           other.timeSpent == this.timeSpent &&
@@ -1185,7 +1195,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String> id;
   final Value<String?> projectId;
   final Value<String> title;
-  final Value<String> notes;
+  final Value<String?> description;
   final Value<bool> isDone;
   final Value<int> created;
   final Value<int> timeSpent;
@@ -1215,7 +1225,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.id = const Value.absent(),
     this.projectId = const Value.absent(),
     this.title = const Value.absent(),
-    this.notes = const Value.absent(),
+    this.description = const Value.absent(),
     this.isDone = const Value.absent(),
     this.created = const Value.absent(),
     this.timeSpent = const Value.absent(),
@@ -1246,7 +1256,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     required String id,
     this.projectId = const Value.absent(),
     required String title,
-    this.notes = const Value.absent(),
+    this.description = const Value.absent(),
     this.isDone = const Value.absent(),
     required int created,
     this.timeSpent = const Value.absent(),
@@ -1279,7 +1289,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<String>? id,
     Expression<String>? projectId,
     Expression<String>? title,
-    Expression<String>? notes,
+    Expression<String>? description,
     Expression<bool>? isDone,
     Expression<int>? created,
     Expression<int>? timeSpent,
@@ -1310,7 +1320,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (id != null) 'id': id,
       if (projectId != null) 'project_id': projectId,
       if (title != null) 'title': title,
-      if (notes != null) 'notes': notes,
+      if (description != null) 'description': description,
       if (isDone != null) 'is_done': isDone,
       if (created != null) 'created': created,
       if (timeSpent != null) 'time_spent': timeSpent,
@@ -1343,7 +1353,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String>? id,
     Value<String?>? projectId,
     Value<String>? title,
-    Value<String>? notes,
+    Value<String?>? description,
     Value<bool>? isDone,
     Value<int>? created,
     Value<int>? timeSpent,
@@ -1374,7 +1384,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
       title: title ?? this.title,
-      notes: notes ?? this.notes,
+      description: description ?? this.description,
       isDone: isDone ?? this.isDone,
       created: created ?? this.created,
       timeSpent: timeSpent ?? this.timeSpent,
@@ -1415,8 +1425,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     if (title.present) {
       map['title'] = Variable<String>(title.value);
     }
-    if (notes.present) {
-      map['notes'] = Variable<String>(notes.value);
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
     }
     if (isDone.present) {
       map['is_done'] = Variable<bool>(isDone.value);
@@ -1502,7 +1512,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('id: $id, ')
           ..write('projectId: $projectId, ')
           ..write('title: $title, ')
-          ..write('notes: $notes, ')
+          ..write('description: $description, ')
           ..write('isDone: $isDone, ')
           ..write('created: $created, ')
           ..write('timeSpent: $timeSpent, ')
@@ -9904,7 +9914,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       required String id,
       Value<String?> projectId,
       required String title,
-      Value<String> notes,
+      Value<String?> description,
       Value<bool> isDone,
       required int created,
       Value<int> timeSpent,
@@ -9936,7 +9946,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String?> projectId,
       Value<String> title,
-      Value<String> notes,
+      Value<String?> description,
       Value<bool> isDone,
       Value<int> created,
       Value<int> timeSpent,
@@ -9987,8 +9997,8 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get notes => $composableBuilder(
-    column: $table.notes,
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10137,8 +10147,8 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get notes => $composableBuilder(
-    column: $table.notes,
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -10281,8 +10291,10 @@ class $$TasksTableAnnotationComposer
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
 
-  GeneratedColumn<String> get notes =>
-      $composableBuilder(column: $table.notes, builder: (column) => column);
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get isDone =>
       $composableBuilder(column: $table.isDone, builder: (column) => column);
@@ -10412,7 +10424,7 @@ class $$TasksTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
                 Value<String> title = const Value.absent(),
-                Value<String> notes = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<bool> isDone = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<int> timeSpent = const Value.absent(),
@@ -10442,7 +10454,7 @@ class $$TasksTableTableManager
                 id: id,
                 projectId: projectId,
                 title: title,
-                notes: notes,
+                description: description,
                 isDone: isDone,
                 created: created,
                 timeSpent: timeSpent,
@@ -10474,7 +10486,7 @@ class $$TasksTableTableManager
                 required String id,
                 Value<String?> projectId = const Value.absent(),
                 required String title,
-                Value<String> notes = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<bool> isDone = const Value.absent(),
                 required int created,
                 Value<int> timeSpent = const Value.absent(),
@@ -10504,7 +10516,7 @@ class $$TasksTableTableManager
                 id: id,
                 projectId: projectId,
                 title: title,
-                notes: notes,
+                description: description,
                 isDone: isDone,
                 created: created,
                 timeSpent: timeSpent,
