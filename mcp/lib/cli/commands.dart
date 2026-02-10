@@ -4,6 +4,7 @@ library;
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import '../services/project_service.dart';
 import '../services/task_service.dart';
 import '../services/timer_service.dart';
 import '../services/worklog_service.dart';
@@ -441,6 +442,131 @@ class WeekCommand extends Command<void> {
     const width = 20;
     final filled = max > 0 ? (value * width ~/ max) : 0;
     return '${'#' * filled}${'.' * (width - filled)}';
+  }
+}
+
+/// Base class for project commands.
+abstract class ProjectSubcommand extends Command<void> {
+  final ProjectService projectService;
+  ProjectSubcommand(this.projectService);
+}
+
+/// Project management command group.
+class ProjectCommand extends Command<void> {
+  ProjectCommand(ProjectService projectService) {
+    addSubcommand(ProjectAddCommand(projectService));
+    addSubcommand(ProjectListCommand(projectService));
+    addSubcommand(ProjectShowCommand(projectService));
+  }
+
+  @override
+  String get name => 'project';
+
+  @override
+  String get description => 'Project management';
+}
+
+class ProjectAddCommand extends ProjectSubcommand {
+  ProjectAddCommand(super.projectService) {
+    argParser.addOption('icon', abbr: 'i', help: 'Project icon');
+  }
+
+  @override
+  String get name => 'add';
+
+  @override
+  String get description => 'Create a new project';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final title = args.isNotEmpty ? args.join(' ') : null;
+
+    if (title == null) {
+      print('Usage: avo project add <title> [-i icon]');
+      return;
+    }
+
+    final icon = argResults?['icon'] as String?;
+
+    final project = await projectService.add(
+      title: title,
+      icon: icon,
+    );
+    print('Created project: $title');
+    print('  ID: ${project.id.substring(0, 8)}');
+  }
+}
+
+class ProjectListCommand extends ProjectSubcommand {
+  ProjectListCommand(super.projectService) {
+    argParser.addFlag('all', abbr: 'a', help: 'Include archived projects');
+  }
+
+  @override
+  String get name => 'list';
+
+  @override
+  String get description => 'List projects';
+
+  @override
+  Future<void> run() async {
+    final includeArchived = argResults?['all'] as bool? ?? false;
+    final projects =
+        await projectService.list(includeArchived: includeArchived);
+
+    if (projects.isEmpty) {
+      print(includeArchived ? 'No projects.' : 'No active projects.');
+      return;
+    }
+
+    final label = includeArchived ? 'All Projects' : 'Projects';
+    print('$label:');
+    for (final project in projects) {
+      final id = project.id.substring(0, 8);
+      final archived = project.isArchived ? ' [archived]' : '';
+      final count = await projectService.taskCount(project.id);
+      final iconStr = project.icon != null ? '${project.icon} ' : '';
+      print('  $id  $iconStr${project.title}  ($count tasks)$archived');
+    }
+  }
+}
+
+class ProjectShowCommand extends ProjectSubcommand {
+  ProjectShowCommand(super.projectService);
+
+  @override
+  String get name => 'show';
+
+  @override
+  String get description => 'Show project details';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final projectId = args.isNotEmpty ? args.first : null;
+
+    if (projectId == null) {
+      print('Usage: avo project show <id>');
+      return;
+    }
+
+    try {
+      final project = await projectService.show(projectId);
+      final count = await projectService.taskCount(project.id);
+      print('Project: ${project.title}');
+      print('  ID:       ${project.id}');
+      if (project.icon != null) {
+        print('  Icon:     ${project.icon}');
+      }
+      print('  Tasks:    $count active');
+      print('  Archived: ${project.isArchived}');
+      print('  Created:  ${project.createdTimestamp ?? 'unknown'}');
+    } on ProjectNotFoundException catch (e) {
+      print(e);
+    } on AmbiguousProjectIdException catch (e) {
+      print(e);
+    }
   }
 }
 
