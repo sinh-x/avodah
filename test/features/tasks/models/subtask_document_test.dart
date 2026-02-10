@@ -1,4 +1,4 @@
-import 'package:avodah/core/crdt/crdt.dart';
+import 'package:avodah_core/crdt/crdt.dart';
 import 'package:avodah/features/tasks/models/subtask_document.dart';
 import 'package:test/test.dart';
 

@@ -1,5 +1,5 @@
-import 'package:avodah/core/crdt/crdt.dart';
-import 'package:avodah/features/worklog/models/worklog_document.dart';
+import 'package:avodah_core/crdt/crdt.dart';
+import 'package:avodah_core/documents/worklog_document.dart';
 import 'package:test/test.dart';
 
 void main() {

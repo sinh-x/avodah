@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:avodah/core/crdt/g_counter.dart';
+import 'package:avodah_core/crdt/g_counter.dart';
 
 void main() {
   group('GCounter', () {

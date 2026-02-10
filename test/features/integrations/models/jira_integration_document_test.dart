@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:avodah/core/crdt/crdt.dart';
+import 'package:avodah_core/crdt/crdt.dart';
 import 'package:avodah/features/integrations/models/jira_integration_document.dart';
 import 'package:test/test.dart';
 

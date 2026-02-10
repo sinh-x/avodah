@@ -127,6 +127,9 @@
           av-test = pkgs.writeShellScriptBin "av-test" "flutter test";
           av-analyze = pkgs.writeShellScriptBin "av-analyze" "flutter analyze";
           av-clean = pkgs.writeShellScriptBin "av-clean" "flutter clean && flutter pub get";
+          avo = pkgs.writeShellScriptBin "avo" ''
+            cd "$(git rev-parse --show-toplevel)/mcp" && dart run bin/avo.dart "$@"
+          '';
         in
         {
           default = pkgs.mkShell {
@@ -148,6 +151,7 @@
               av-test
               av-analyze
               av-clean
+              avo
             ] ++ deps;
 
             env = {
@@ -171,6 +175,8 @@
               echo "  av-test          - Run tests"
               echo "  av-analyze       - Run analyzer"
               echo "  av-clean         - Clean and get deps"
+              echo ""
+              echo "  avo <command>    - Run Avodah CLI (start, stop, status, ...)"
               echo ""
             '';
 
