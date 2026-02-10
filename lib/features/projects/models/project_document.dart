@@ -9,8 +9,8 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/crdt/crdt.dart';
-import '../../../core/storage/database.dart';
+import 'package:avodah_core/crdt/crdt.dart';
+import 'package:avodah_core/storage/database.dart';
 
 /// Field keys for ProjectDocument.
 class ProjectFields {

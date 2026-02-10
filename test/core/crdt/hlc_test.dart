@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:avodah/core/crdt/hlc.dart';
+import 'package:avodah_core/crdt/hlc.dart';
 
 void main() {
   group('HybridTimestamp', () {

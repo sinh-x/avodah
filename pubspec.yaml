@@ -27,6 +27,10 @@ dependencies:
   # Navigation
   go_router: ^17.1.0
 
+  # Shared core (CRDT, storage, documents)
+  avodah_core:
+    path: packages/avodah_core
+
   # Utilities
   uuid: ^4.5.1
   collection: ^1.19.1

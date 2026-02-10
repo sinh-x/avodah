@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:avodah/core/crdt/hlc.dart';
-import 'package:avodah/core/crdt/lww_register.dart';
+import 'package:avodah_core/crdt/hlc.dart';
+import 'package:avodah_core/crdt/lww_register.dart';
 
 void main() {
   group('LWWRegister', () {
