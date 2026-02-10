@@ -1,0 +1,186 @@
+import 'package:avodah_core/avodah_core.dart';
+import 'package:avodah_mcp/services/task_service.dart';
+import 'package:avodah_mcp/storage/database_opener.dart';
+import 'package:test/test.dart';
+
+void main() {
+  late AppDatabase db;
+  late HybridLogicalClock clock;
+  late TaskService service;
+
+  setUp(() {
+    db = openMemoryDatabase();
+    clock = HybridLogicalClock(nodeId: 'test-node');
+    service = TaskService(db: db, clock: clock);
+  });
+
+  tearDown(() async {
+    await db.close();
+  });
+
+  group('add', () {
+    test('creates task with title and returns it', () async {
+      final task = await service.add(title: 'Buy groceries');
+
+      expect(task.id, isNotEmpty);
+      expect(task.title, equals('Buy groceries'));
+      expect(task.isDone, isFalse);
+      expect(task.createdTimestamp, isNotNull);
+    });
+
+    test('creates task with projectId', () async {
+      final task = await service.add(
+        title: 'Fix bug',
+        projectId: 'proj-1',
+      );
+
+      expect(task.projectId, equals('proj-1'));
+    });
+
+    test('persists task to database', () async {
+      final task = await service.add(title: 'Persist me');
+
+      final fetched = await service.show(task.id);
+      expect(fetched.title, equals('Persist me'));
+    });
+  });
+
+  group('list', () {
+    test('returns active tasks by default', () async {
+      await service.add(title: 'Task 1');
+      await service.add(title: 'Task 2');
+
+      final tasks = await service.list();
+
+      expect(tasks, hasLength(2));
+    });
+
+    test('excludes completed tasks by default', () async {
+      final task = await service.add(title: 'Will be done');
+      await service.add(title: 'Still active');
+      await service.done(task.id);
+
+      final tasks = await service.list();
+
+      expect(tasks, hasLength(1));
+      expect(tasks.first.title, equals('Still active'));
+    });
+
+    test('includes completed tasks with includeCompleted', () async {
+      final task = await service.add(title: 'Will be done');
+      await service.add(title: 'Still active');
+      await service.done(task.id);
+
+      final tasks = await service.list(includeCompleted: true);
+
+      expect(tasks, hasLength(2));
+    });
+
+    test('excludes deleted tasks', () async {
+      final task = await service.add(title: 'Will be deleted');
+      await service.add(title: 'Still active');
+
+      // Delete the task directly via document
+      final doc = await service.show(task.id);
+      doc.delete();
+      await db
+          .into(db.tasks)
+          .insertOnConflictUpdate(doc.toDriftCompanion());
+
+      final tasks = await service.list(includeCompleted: true);
+
+      expect(tasks, hasLength(1));
+      expect(tasks.first.title, equals('Still active'));
+    });
+
+    test('returns empty list when no tasks', () async {
+      final tasks = await service.list();
+
+      expect(tasks, isEmpty);
+    });
+  });
+
+  group('show', () {
+    test('finds task by exact ID', () async {
+      final created = await service.add(title: 'Find me');
+
+      final found = await service.show(created.id);
+
+      expect(found.id, equals(created.id));
+      expect(found.title, equals('Find me'));
+    });
+
+    test('finds task by prefix', () async {
+      final created = await service.add(title: 'Find by prefix');
+
+      final found = await service.show(created.id.substring(0, 8));
+
+      expect(found.id, equals(created.id));
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.show('nonexistent-id'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+
+    test('throws AmbiguousTaskIdException for ambiguous prefix', () async {
+      // Create two tasks — they'll have different UUIDs but we need
+      // to test the ambiguity logic. We'll use a very short prefix
+      // that's likely to match both.
+      await service.add(title: 'Task A');
+      await service.add(title: 'Task B');
+
+      // Using empty prefix matches all — should be ambiguous
+      expect(
+        () => service.show(''),
+        throwsA(isA<AmbiguousTaskIdException>()),
+      );
+    });
+  });
+
+  group('done', () {
+    test('marks task as done', () async {
+      final created = await service.add(title: 'Complete me');
+
+      final done = await service.done(created.id);
+
+      expect(done.isDone, isTrue);
+      expect(done.doneOn, isNotNull);
+    });
+
+    test('persists done state', () async {
+      final created = await service.add(title: 'Complete me');
+      await service.done(created.id);
+
+      final fetched = await service.show(created.id);
+      expect(fetched.isDone, isTrue);
+    });
+
+    test('works with prefix', () async {
+      final created = await service.add(title: 'Done by prefix');
+
+      final done = await service.done(created.id.substring(0, 8));
+
+      expect(done.isDone, isTrue);
+    });
+
+    test('throws TaskAlreadyDoneException for completed task', () async {
+      final created = await service.add(title: 'Already done');
+      await service.done(created.id);
+
+      expect(
+        () => service.done(created.id),
+        throwsA(isA<TaskAlreadyDoneException>()),
+      );
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.done('nonexistent'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+}

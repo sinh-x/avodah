@@ -19,5 +19,6 @@ export 'storage/tables/jira_integrations.dart';
 export 'storage/tables/timer.dart';
 
 // CRDT Document types
+export 'documents/task_document.dart';
 export 'documents/timer_document.dart';
 export 'documents/worklog_document.dart';

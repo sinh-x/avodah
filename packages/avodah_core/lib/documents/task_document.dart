@@ -9,8 +9,8 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:avodah_core/crdt/crdt.dart';
-import 'package:avodah_core/storage/database.dart';
+import '../crdt/crdt.dart';
+import '../storage/database.dart';
 
 /// Field keys for TaskDocument.
 class TaskFields {

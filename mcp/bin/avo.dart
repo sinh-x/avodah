@@ -28,6 +28,7 @@ import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 
@@ -42,8 +43,9 @@ Future<void> main(List<String> args) async {
   final nodeId = paths.getNodeIdSync();
   final clock = HybridLogicalClock(nodeId: nodeId);
 
-  // Create timer service
+  // Create services
   final timerService = TimerService(db: db, clock: clock);
+  final taskService = TaskService(db: db, clock: clock);
 
   try {
     final runner = CommandRunner<void>(
@@ -56,7 +58,7 @@ Future<void> main(List<String> args) async {
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))
       ..addCommand(CancelCommand(timerService))
-      ..addCommand(TaskCommand(db))
+      ..addCommand(TaskCommand(taskService))
       ..addCommand(TodayCommand(db))
       ..addCommand(WeekCommand(db))
       ..addCommand(JiraCommand(db));
