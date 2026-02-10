@@ -8,8 +8,8 @@ library;
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/crdt/crdt.dart';
-import '../../../core/storage/database.dart';
+import '../crdt/crdt.dart';
+import '../storage/database.dart';
 
 /// Field keys for WorklogDocument.
 class WorklogFields {

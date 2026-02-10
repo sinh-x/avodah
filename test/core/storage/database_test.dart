@@ -1,13 +1,13 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:avodah/core/storage/database.dart';
+import 'package:avodah_core/storage/database.dart';
 
 void main() {
   late AppDatabase db;
 
   setUp(() {
-    db = AppDatabase.forTesting(NativeDatabase.memory());
+    db = AppDatabase.executor(NativeDatabase.memory());
   });
 
   tearDown(() async {

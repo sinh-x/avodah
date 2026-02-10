@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:avodah/core/crdt/crdt.dart';
+import 'package:avodah_core/crdt/crdt.dart';
 import 'package:test/test.dart';
 
 /// Test implementation of CrdtDocument.

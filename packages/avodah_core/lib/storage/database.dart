@@ -1,9 +1,4 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 import 'tables/tasks.dart';
 import 'tables/subtasks.dart';
@@ -12,12 +7,15 @@ import 'tables/tags.dart';
 import 'tables/worklogs.dart';
 import 'tables/jira_integrations.dart';
 import 'tables/timer.dart';
-// Deferred: import 'tables/task_repeat_cfgs.dart';
-// Deferred: import 'tables/github_integrations.dart';
-// Removed: import 'tables/notes.dart';
 
 part 'database.g.dart';
 
+/// Avodah database - shared between Flutter app and MCP server.
+///
+/// Use [AppDatabase.executor] to create with a custom QueryExecutor.
+/// The executor should be provided by the platform:
+/// - Flutter: Use NativeDatabase with path_provider
+/// - Pure Dart/CLI: Use NativeDatabase with custom path
 @DriftDatabase(tables: [
   Tasks,
   Subtasks,
@@ -26,15 +24,16 @@ part 'database.g.dart';
   WorklogEntries,
   JiraIntegrations,
   TimerEntries,
-  // Deferred: TaskRepeatCfgs,
-  // Deferred: GithubIntegrations,
-  // Removed: Notes,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  /// Creates a database with the given executor.
+  ///
+  /// The executor handles opening the SQLite connection.
+  /// Use [NativeDatabase] for native platforms.
+  AppDatabase(super.e);
 
-  /// For testing with in-memory database
-  AppDatabase.forTesting(super.e);
+  /// Named constructor for clarity.
+  AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
   int get schemaVersion => 6;
@@ -49,7 +48,6 @@ class AppDatabase extends _$AppDatabase {
         if (from < 2) {
           // Add integration tables
           await m.createTable(jiraIntegrations);
-          // Note: githubIntegrations was added in v2 but removed in v5
         }
         if (from < 3) {
           // Add description field to tasks
@@ -65,9 +63,6 @@ class AppDatabase extends _$AppDatabase {
           await m.deleteTable('notes');
           // Drop GithubIntegrations table (deferred)
           await m.deleteTable('github_integrations');
-          // Note: Column changes to projects and jira_integrations
-          // require table recreation - handled by Drift automatically
-          // for new installs. Existing DBs may need manual cleanup.
         }
         if (from < 6) {
           // v0.4.0: Add timer table for MCP worklog tracker
@@ -76,12 +71,4 @@ class AppDatabase extends _$AppDatabase {
       },
     );
   }
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'avodah.db'));
-    return NativeDatabase.createInBackground(file);
-  });
 }
