@@ -4,6 +4,7 @@ library;
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import '../services/task_service.dart';
 import '../services/timer_service.dart';
 
 /// Base class for commands that need database access.
@@ -178,13 +179,19 @@ class CancelCommand extends TimerCommand {
   }
 }
 
+/// Base class for task commands that need the TaskService.
+abstract class TaskSubcommand extends Command<void> {
+  final TaskService taskService;
+  TaskSubcommand(this.taskService);
+}
+
 /// Task management command group.
-class TaskCommand extends DatabaseCommand {
-  TaskCommand(super.db) {
-    addSubcommand(TaskAddCommand(db));
-    addSubcommand(TaskListCommand(db));
-    addSubcommand(TaskDoneCommand(db));
-    addSubcommand(TaskShowCommand(db));
+class TaskCommand extends Command<void> {
+  TaskCommand(TaskService taskService) {
+    addSubcommand(TaskAddCommand(taskService));
+    addSubcommand(TaskListCommand(taskService));
+    addSubcommand(TaskDoneCommand(taskService));
+    addSubcommand(TaskShowCommand(taskService));
   }
 
   @override
@@ -194,8 +201,10 @@ class TaskCommand extends DatabaseCommand {
   String get description => 'Task management';
 }
 
-class TaskAddCommand extends DatabaseCommand {
-  TaskAddCommand(super.db);
+class TaskAddCommand extends TaskSubcommand {
+  TaskAddCommand(super.taskService) {
+    argParser.addOption('project', abbr: 'p', help: 'Project ID');
+  }
 
   @override
   String get name => 'add';
@@ -209,17 +218,25 @@ class TaskAddCommand extends DatabaseCommand {
     final title = args.isNotEmpty ? args.join(' ') : null;
 
     if (title == null) {
-      print('Usage: avo task add <title>');
+      print('Usage: avo task add <title> [-p project]');
       return;
     }
 
-    // TODO: Implement task creation
+    final projectId = argResults?['project'] as String?;
+
+    final task = await taskService.add(
+      title: title,
+      projectId: projectId,
+    );
     print('Created task: $title');
+    print('  ID: ${task.id.substring(0, 8)}');
   }
 }
 
-class TaskListCommand extends DatabaseCommand {
-  TaskListCommand(super.db);
+class TaskListCommand extends TaskSubcommand {
+  TaskListCommand(super.taskService) {
+    argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
+  }
 
   @override
   String get name => 'list';
@@ -229,14 +246,27 @@ class TaskListCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement task list
-    print('Active Tasks:');
-    print('  (none)');
+    final includeCompleted = argResults?['all'] as bool? ?? false;
+    final tasks = await taskService.list(includeCompleted: includeCompleted);
+
+    if (tasks.isEmpty) {
+      print(includeCompleted ? 'No tasks.' : 'No active tasks.');
+      return;
+    }
+
+    final label = includeCompleted ? 'All Tasks' : 'Active Tasks';
+    print('$label:');
+    for (final task in tasks) {
+      final check = task.isDone ? 'x' : ' ';
+      final id = task.id.substring(0, 8);
+      final time = _formatDuration(Duration(milliseconds: task.timeSpent));
+      print('  [$check] $id  ${task.title}  ($time)');
+    }
   }
 }
 
-class TaskDoneCommand extends DatabaseCommand {
-  TaskDoneCommand(super.db);
+class TaskDoneCommand extends TaskSubcommand {
+  TaskDoneCommand(super.taskService);
 
   @override
   String get name => 'done';
@@ -254,13 +284,22 @@ class TaskDoneCommand extends DatabaseCommand {
       return;
     }
 
-    // TODO: Implement mark done
-    print('Marked done: $taskId');
+    try {
+      final task = await taskService.done(taskId);
+      print('Marked done: "${task.title}"');
+      print('  ID: ${task.id.substring(0, 8)}');
+    } on TaskNotFoundException catch (e) {
+      print(e);
+    } on AmbiguousTaskIdException catch (e) {
+      print(e);
+    } on TaskAlreadyDoneException catch (e) {
+      print(e);
+    }
   }
 }
 
-class TaskShowCommand extends DatabaseCommand {
-  TaskShowCommand(super.db);
+class TaskShowCommand extends TaskSubcommand {
+  TaskShowCommand(super.taskService);
 
   @override
   String get name => 'show';
@@ -278,9 +317,40 @@ class TaskShowCommand extends DatabaseCommand {
       return;
     }
 
-    // TODO: Implement task show
-    print('Task: $taskId');
-    print('  (not found)');
+    try {
+      final task = await taskService.show(taskId);
+      final status = task.isDone ? 'Done' : (task.isDeleted ? 'Deleted' : 'Active');
+      print('Task: ${task.title}');
+      print('  ID:       ${task.id}');
+      print('  Status:   $status');
+      if (task.projectId != null) {
+        print('  Project:  ${task.projectId}');
+      }
+      if (task.description != null) {
+        print('  Desc:     ${task.description}');
+      }
+      print('  Created:  ${task.createdTimestamp ?? 'unknown'}');
+      print('  Spent:    ${_formatDuration(Duration(milliseconds: task.timeSpent))}');
+      if (task.timeEstimate > 0) {
+        print('  Estimate: ${_formatDuration(Duration(milliseconds: task.timeEstimate))}');
+      }
+      if (task.dueDay != null) {
+        print('  Due:      ${task.dueDay}');
+      }
+      if (task.doneOn != null) {
+        print('  Done on:  ${task.doneOn}');
+      }
+      if (task.tagIds.isNotEmpty) {
+        print('  Tags:     ${task.tagIds.join(', ')}');
+      }
+      if (task.hasIssueLink) {
+        print('  Issue:    ${task.issueId} (${task.issueType?.toValue()})');
+      }
+    } on TaskNotFoundException catch (e) {
+      print(e);
+    } on AmbiguousTaskIdException catch (e) {
+      print(e);
+    }
   }
 }
 
@@ -392,6 +462,13 @@ class JiraSetupCommand extends DatabaseCommand {
 // ============================================================
 
 String _formatTime(DateTime dt) => dt.toString().substring(11, 16);
+
+String _formatDuration(Duration d) {
+  final hours = d.inHours;
+  final minutes = d.inMinutes % 60;
+  if (hours > 0) return '${hours}h ${minutes}m';
+  return '${minutes}m';
+}
 
 String _formatDate(DateTime date) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
