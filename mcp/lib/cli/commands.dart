@@ -6,6 +6,7 @@ import 'package:avodah_core/avodah_core.dart';
 
 import '../services/task_service.dart';
 import '../services/timer_service.dart';
+import '../services/worklog_service.dart';
 
 /// Base class for commands that need database access.
 abstract class DatabaseCommand extends Command<void> {
@@ -355,8 +356,11 @@ class TaskShowCommand extends TaskSubcommand {
 }
 
 /// Today summary command.
-class TodayCommand extends DatabaseCommand {
-  TodayCommand(super.db);
+class TodayCommand extends Command<void> {
+  final WorklogService worklogService;
+  final TaskService taskService;
+
+  TodayCommand({required this.worklogService, required this.taskService});
 
   @override
   String get name => 'today';
@@ -366,16 +370,41 @@ class TodayCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement today summary
+    final summary = await worklogService.todaySummary();
     final now = DateTime.now();
-    print('Today (${_formatDate(now)}):');
-    print('  Total: 0m');
+
+    print('Today (${_formatDate(now)}):      ${summary.formattedDuration}');
+
+    if (summary.tasks.isEmpty) {
+      print('  No time logged today.');
+      return;
+    }
+
+    // Resolve task titles
+    for (final task in summary.tasks) {
+      final title = await _resolveTaskTitle(task.taskId);
+      final pad = '  $title'.padRight(30);
+      print('$pad ${task.formattedDuration}');
+    }
+  }
+
+  Future<String> _resolveTaskTitle(String taskId) async {
+    try {
+      final task = await taskService.show(taskId);
+      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+      return '${task.title}$issueTag';
+    } catch (_) {
+      // taskId might be the title itself (from timer without linked task)
+      return taskId;
+    }
   }
 }
 
 /// Week summary command.
-class WeekCommand extends DatabaseCommand {
-  WeekCommand(super.db);
+class WeekCommand extends Command<void> {
+  final WorklogService worklogService;
+
+  WeekCommand({required this.worklogService});
 
   @override
   String get name => 'week';
@@ -385,9 +414,33 @@ class WeekCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement week summary
-    print('This Week:');
-    print('  Total: 0m');
+    final summaries = await worklogService.weekSummary();
+    final totalMs = summaries.fold<int>(
+        0, (sum, d) => sum + d.total.inMilliseconds);
+    final total = Duration(milliseconds: totalMs);
+
+    print('This Week:      ${_formatDuration(total)}');
+    print('');
+
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final maxMs = summaries.fold<int>(
+        0, (max, d) => d.total.inMilliseconds > max ? d.total.inMilliseconds : max);
+
+    for (var i = 0; i < summaries.length; i++) {
+      final day = summaries[i];
+      final label = days[i];
+      final bar = maxMs > 0
+          ? _buildBar(day.total.inMilliseconds, maxMs)
+          : '';
+      final dur = day.total.inMilliseconds > 0 ? day.formattedDuration : '-';
+      print('  $label  $bar  $dur');
+    }
+  }
+
+  String _buildBar(int value, int max) {
+    const width = 20;
+    final filled = max > 0 ? (value * width ~/ max) : 0;
+    return '${'#' * filled}${'.' * (width - filled)}';
   }
 }
 
