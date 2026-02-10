@@ -28,6 +28,7 @@ import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
 import 'package:avodah_mcp/services/worklog_service.dart';
@@ -48,6 +49,7 @@ Future<void> main(List<String> args) async {
   final timerService = TimerService(db: db, clock: clock);
   final taskService = TaskService(db: db, clock: clock);
   final worklogService = WorklogService(db: db, clock: clock);
+  final projectService = ProjectService(db: db, clock: clock);
 
   try {
     final runner = CommandRunner<void>(
@@ -61,6 +63,7 @@ Future<void> main(List<String> args) async {
       ..addCommand(ResumeCommand(timerService))
       ..addCommand(CancelCommand(timerService))
       ..addCommand(TaskCommand(taskService))
+      ..addCommand(ProjectCommand(projectService))
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))
