@@ -10,8 +10,8 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:avodah_core/crdt/crdt.dart';
-import 'package:avodah_core/storage/database.dart';
+import '../crdt/crdt.dart';
+import '../storage/database.dart';
 
 /// Field keys for JiraIntegrationDocument.
 class JiraIntegrationFields {

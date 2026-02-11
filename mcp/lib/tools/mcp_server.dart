@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -19,6 +20,7 @@ class McpServer {
   final TaskService taskService;
   final WorklogService worklogService;
   final ProjectService projectService;
+  final JiraService jiraService;
   final AvodahPaths paths;
 
   static const String serverName = 'avodah';
@@ -29,6 +31,7 @@ class McpServer {
     required this.taskService,
     required this.worklogService,
     required this.projectService,
+    required this.jiraService,
     required this.paths,
   });
 
@@ -500,11 +503,71 @@ class McpServer {
   }
 
   Future<Map<String, dynamic>> _handleJira(Map<String, dynamic> params) async {
-    // Placeholder until Session 4 (Jira Integration)
-    return {
-      'ok': false,
-      'error': 'Jira integration not configured. Run `avo jira setup` first.',
-    };
+    final action = params['action'] as String?;
+
+    switch (action) {
+      case 'sync':
+        try {
+          final result = await jiraService.sync();
+          return {
+            'ok': true,
+            'pull': {'created': result.pull.created, 'updated': result.pull.updated},
+            'push': {'pushed': result.push.pushed, 'failed': result.push.failed},
+          };
+        } on JiraNotConfiguredException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on JiraCredentialsNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on JiraSyncException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
+      case 'status':
+        final status = await jiraService.status();
+        return {
+          'ok': true,
+          'configured': status.configured,
+          'jiraProjectKey': status.jiraProjectKey,
+          'baseUrl': status.baseUrl,
+          'lastSyncAt': status.lastSyncAt?.toIso8601String(),
+          'lastSyncError': status.lastSyncError,
+          'pendingWorklogs': status.pendingWorklogs,
+          'linkedTasks': status.linkedTasks,
+        };
+
+      case 'pull':
+        try {
+          final result = await jiraService.pull();
+          return {
+            'ok': true,
+            'created': result.created,
+            'updated': result.updated,
+          };
+        } on JiraNotConfiguredException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on JiraCredentialsNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on JiraSyncException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
+      case 'push':
+        try {
+          final result = await jiraService.push();
+          return {
+            'ok': true,
+            'pushed': result.pushed,
+            'failed': result.failed,
+          };
+        } on JiraNotConfiguredException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on JiraCredentialsNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
+      default:
+        throw Exception('Unknown jira action: $action');
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
