@@ -42,6 +42,7 @@ class SyncResult {
 class JiraStatus {
   final bool configured;
   final String? jiraProjectKey;
+  final String? profileName;
   final String? baseUrl;
   final DateTime? lastSyncAt;
   final String? lastSyncError;
@@ -51,12 +52,17 @@ class JiraStatus {
   const JiraStatus({
     required this.configured,
     this.jiraProjectKey,
+    this.profileName,
     this.baseUrl,
     this.lastSyncAt,
     this.lastSyncError,
     required this.pendingWorklogs,
     required this.linkedTasks,
   });
+
+  /// Project keys as a list (split from comma-separated jiraProjectKey).
+  List<String> get projectKeysList =>
+      (jiraProjectKey ?? '').split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 }
 
 /// Wraps all Jira integration operations.
@@ -92,28 +98,38 @@ class JiraService {
         .insertOnConflictUpdate(worklog.toDriftCompanion());
   }
 
-  /// Configures Jira integration.
-  Future<JiraIntegrationDocument> setup({
-    required String baseUrl,
-    required String jiraProjectKey,
-    required String credentialsPath,
-  }) async {
+  /// Configures Jira integration from a profile in the config file.
+  ///
+  /// Loads the profile config from [paths.jiraCredentialsPath], finds the
+  /// profile by [profileName] (or default if null), and stores the connection info.
+  Future<JiraIntegrationDocument> setup({String? profileName}) async {
+    final configFile = paths.jiraCredentialsPath;
+    final profileConfig = await JiraProfileConfig.load(configFile);
+    final profile = profileConfig.getProfile(profileName);
+    if (profile == null) {
+      throw JiraProfileNotFoundException(profileName ?? 'default');
+    }
+
+    final projectKeysJoined = profile.projectKeys.join(',');
+
     // Check if config already exists, update it
     final existing = await getConfig();
     if (existing != null) {
-      existing.baseUrl = baseUrl;
-      existing.jiraProjectKey = jiraProjectKey;
-      existing.credentialsFilePath = credentialsPath;
+      existing.baseUrl = profile.baseUrl;
+      existing.jiraProjectKey = projectKeysJoined;
+      existing.credentialsFilePath = configFile;
+      existing.profileName = profile.key;
       await _saveConfig(existing);
       return existing;
     }
 
     final config = JiraIntegrationDocument.create(
       clock: clock,
-      baseUrl: baseUrl,
-      jiraProjectKey: jiraProjectKey,
-      credentialsFilePath: credentialsPath,
+      baseUrl: profile.baseUrl,
+      jiraProjectKey: projectKeysJoined,
+      credentialsFilePath: configFile,
     );
+    config.profileName = profile.key;
     await _saveConfig(config);
     return config;
   }
@@ -131,15 +147,33 @@ class JiraService {
   }
 
   /// Pulls issues from Jira and creates/updates local tasks.
-  Future<PullResult> pull() async {
+  ///
+  /// If [issueKey] is given, pulls that specific issue only.
+  /// Otherwise pulls all assigned issues across configured project keys.
+  Future<PullResult> pull({String? issueKey}) async {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
     final creds = await config.loadCredentials();
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
 
-    final jql = config.jqlFilter ??
-        'assignee=currentUser() AND project=${config.jiraProjectKey}';
+    final String jql;
+    if (issueKey != null) {
+      jql = 'key = $issueKey';
+    } else if (config.jqlFilter != null) {
+      jql = config.jqlFilter!;
+    } else {
+      final keys = config.jiraProjectKey
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (keys.length == 1) {
+        jql = 'assignee=currentUser() AND project=${keys.first}';
+      } else {
+        jql = 'assignee=currentUser() AND project in (${keys.join(', ')})';
+      }
+    }
 
     final response = await _makeRequest(
       config: config,
@@ -278,8 +312,10 @@ class JiraService {
   }
 
   /// Runs a full sync: pull then push.
-  Future<SyncResult> sync() async {
-    final pullResult = await pull();
+  ///
+  /// If [issueKey] is given, only pulls that specific issue.
+  Future<SyncResult> sync({String? issueKey}) async {
+    final pullResult = await pull(issueKey: issueKey);
     final pushResult = await push();
     return SyncResult(pull: pullResult, push: pushResult);
   }
@@ -316,6 +352,7 @@ class JiraService {
     return JiraStatus(
       configured: true,
       jiraProjectKey: config.jiraProjectKey,
+      profileName: config.profileName,
       baseUrl: config.baseUrl,
       lastSyncAt: config.lastSyncAt,
       lastSyncError: config.lastSyncError,
@@ -371,6 +408,15 @@ class JiraCredentialsNotFoundException implements Exception {
 
   @override
   String toString() => 'Jira credentials file not found at "$path".';
+}
+
+/// Thrown when a Jira profile is not found in the config file.
+class JiraProfileNotFoundException implements Exception {
+  final String profileName;
+  JiraProfileNotFoundException(this.profileName);
+
+  @override
+  String toString() => 'Jira profile "$profileName" not found in config file.';
 }
 
 /// Thrown when a Jira sync operation fails.

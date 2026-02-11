@@ -22,6 +22,7 @@ class JiraIntegrationFields {
   static const String jiraProjectKey = 'jiraProjectKey';
   static const String boardId = 'boardId';
   static const String credentialsFilePath = 'credentialsFilePath';
+  static const String profileName = 'profileName';
   static const String jqlFilter = 'jqlFilter';
   static const String syncEnabled = 'syncEnabled';
   static const String syncSubtasks = 'syncSubtasks';
@@ -53,6 +54,107 @@ class JiraCredentials {
 
   /// Creates Basic auth header value.
   String get basicAuth => base64Encode(utf8.encode('$email:$apiToken'));
+}
+
+/// A single Jira instance profile (work, personal, etc.).
+class JiraProfile {
+  final String key;
+  final String name;
+  final String baseUrl;
+  final String username;
+  final String apiToken;
+  final List<String> projectKeys;
+
+  const JiraProfile({
+    required this.key,
+    required this.name,
+    required this.baseUrl,
+    required this.username,
+    required this.apiToken,
+    required this.projectKeys,
+  });
+
+  factory JiraProfile.fromJson(String key, Map<String, dynamic> json) {
+    return JiraProfile(
+      key: key,
+      name: json['name'] as String? ?? key,
+      baseUrl: json['base_url'] as String,
+      username: json['username'] as String,
+      apiToken: json['api_token'] as String,
+      projectKeys: (json['project_keys'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+    );
+  }
+
+  /// Converts this profile to JiraCredentials for API auth.
+  JiraCredentials toCredentials() =>
+      JiraCredentials(email: username, apiToken: apiToken);
+}
+
+/// Holds all Jira profiles loaded from the config file.
+class JiraProfileConfig {
+  final Map<String, JiraProfile> profiles;
+  final String? defaultJiraProfile;
+
+  const JiraProfileConfig({
+    required this.profiles,
+    this.defaultJiraProfile,
+  });
+
+  factory JiraProfileConfig.fromJson(Map<String, dynamic> json) {
+    final profilesRaw = json['jira_profiles'];
+    final profilesJson = profilesRaw is Map
+        ? Map<String, dynamic>.from(profilesRaw)
+        : <String, dynamic>{};
+    final profiles = <String, JiraProfile>{};
+    for (final entry in profilesJson.entries) {
+      profiles[entry.key] = JiraProfile.fromJson(
+          entry.key, Map<String, dynamic>.from(entry.value as Map));
+    }
+
+    final defaultsRaw = json['default_profiles'];
+    final defaults = defaultsRaw is Map
+        ? Map<String, dynamic>.from(defaultsRaw)
+        : <String, dynamic>{};
+    final defaultJira = defaults['jira'] as String?;
+
+    return JiraProfileConfig(
+      profiles: profiles,
+      defaultJiraProfile: defaultJira,
+    );
+  }
+
+  /// Loads a JiraProfileConfig from a JSON file at [filePath].
+  static Future<JiraProfileConfig> load(String filePath) async {
+    var path = filePath;
+    if (path.startsWith('~/')) {
+      final home = Platform.environment['HOME'] ?? '';
+      path = path.replaceFirst('~', home);
+    }
+
+    final file = File(path);
+    if (!await file.exists()) {
+      throw FileSystemException('Config file not found', path);
+    }
+
+    final content = await file.readAsString();
+    final json = jsonDecode(content) as Map<String, dynamic>;
+    return JiraProfileConfig.fromJson(json);
+  }
+
+  /// Gets a profile by [name], or the default profile if [name] is null.
+  JiraProfile? getProfile(String? name) {
+    if (name != null) return profiles[name];
+    return defaultProfile;
+  }
+
+  /// The default Jira profile, if configured.
+  JiraProfile? get defaultProfile {
+    if (defaultJiraProfile == null) return null;
+    return profiles[defaultJiraProfile];
+  }
 }
 
 /// A CRDT-backed Jira integration document.
@@ -169,6 +271,11 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   set credentialsFilePath(String value) =>
       setString(JiraIntegrationFields.credentialsFilePath, value);
 
+  /// Name of the Jira profile used for this integration.
+  String? get profileName => getString(JiraIntegrationFields.profileName);
+  set profileName(String? value) =>
+      setString(JiraIntegrationFields.profileName, value);
+
   /// Created timestamp (Unix ms).
   int get createdMs => getInt(JiraIntegrationFields.created) ?? 0;
   set createdMs(int value) => setInt(JiraIntegrationFields.created, value);
@@ -265,10 +372,10 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   // Credentials
   // ============================================================
 
-  /// Loads credentials from the external file.
+  /// Loads credentials from the external file using the stored profile name.
   ///
+  /// If a profile name is stored, loads via JiraProfileConfig.
   /// Returns null if file doesn't exist or is invalid.
-  /// Throws [FileSystemException] if file cannot be read.
   Future<JiraCredentials?> loadCredentials() async {
     if (credentialsFilePath.isEmpty) return null;
 
@@ -287,6 +394,15 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
     try {
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
+
+      // Profile-based: load via JiraProfileConfig
+      if (profileName != null && json.containsKey('jira_profiles')) {
+        final config = JiraProfileConfig.fromJson(json);
+        final profile = config.getProfile(profileName);
+        return profile?.toCredentials();
+      }
+
+      // Legacy fallback: direct {email, apiToken}
       return JiraCredentials.fromJson(json);
     } catch (e) {
       return null;
@@ -358,6 +474,7 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
       projectId: projectId,
       baseUrl: baseUrl,
       jiraProjectKey: jiraProjectKey,
+      profileName: profileName,
       syncEnabled: syncEnabled,
       syncSubtasks: syncSubtasks,
       syncWorklogs: syncWorklogs,
@@ -384,6 +501,7 @@ class JiraIntegrationModel {
   final String? projectId;
   final String baseUrl;
   final String jiraProjectKey;
+  final String? profileName;
   final bool syncEnabled;
   final bool syncSubtasks;
   final bool syncWorklogs;
@@ -398,6 +516,7 @@ class JiraIntegrationModel {
     this.projectId,
     required this.baseUrl,
     required this.jiraProjectKey,
+    this.profileName,
     required this.syncEnabled,
     required this.syncSubtasks,
     required this.syncWorklogs,
@@ -409,7 +528,11 @@ class JiraIntegrationModel {
   });
 
   /// Display name for the integration.
-  String get displayName => jiraProjectKey;
+  String get displayName => profileName ?? jiraProjectKey;
+
+  /// Project keys as a list (split from comma-separated jiraProjectKey).
+  List<String> get projectKeysList =>
+      jiraProjectKey.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
   @override
   bool operator ==(Object other) =>

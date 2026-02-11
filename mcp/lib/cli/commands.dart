@@ -193,7 +193,10 @@ class StatusCommand extends Command<void> {
       print(hint('avo jira init', 'to generate credentials template'));
       print(hint('avo jira setup', 'to configure connection'));
     } else {
-      print(kvRow('Project:', jira.jiraProjectKey ?? '-'));
+      if (jira.profileName != null) {
+        print(kvRow('Profile:', jira.profileName!));
+      }
+      print(kvRow('Projects:', jira.projectKeysList.join(', ')));
       print(kvRow('URL:', jira.baseUrl ?? '-'));
       print(kvRow('Linked tasks:', '${jira.linkedTasks}'));
       print(kvRow('Pending logs:', '${jira.pendingWorklogs}'));
@@ -795,7 +798,7 @@ class JiraCommand extends Command<void> {
   String get description => 'Jira integration';
 }
 
-/// Generate Jira credentials template file.
+/// Generate Jira credentials template file with profile format.
 class JiraInitCommand extends Command<void> {
   final AvodahPaths paths;
 
@@ -824,31 +827,39 @@ class JiraInitCommand extends Command<void> {
     // Ensure config directory exists
     await Directory(paths.configDir).create(recursive: true);
 
-    const template = '''{
-  "_comment": "Jira API credentials for Avodah. Get your token at: https://id.atlassian.com/manage-profile/security/api-tokens",
-  "email": "your-email@example.com",
-  "apiToken": "your-jira-api-token"
-}
-''';
+    final template = jsonEncode({
+      '_comment':
+          'Jira profiles for Avodah. Get your token at: https://id.atlassian.com/manage-profile/security/api-tokens',
+      'jira_profiles': {
+        'work': {
+          'name': 'Work JIRA',
+          'base_url': 'https://company.atlassian.net',
+          'username': 'email@company.com',
+          'api_token': 'your-api-token',
+          'project_keys': ['PROJ'],
+        },
+      },
+      'default_profiles': {
+        'jira': 'work',
+      },
+    });
 
-    await file.writeAsString(template);
+    // Pretty-print it
+    const encoder = JsonEncoder.withIndent('  ');
+    final decoded = jsonDecode(template);
+    await file.writeAsString('${encoder.convert(decoded)}\n');
 
     print('Created Jira credentials template:');
     print(kvRow('Path:', credPath));
     print('');
     print('Next steps:');
-    print('  1. Edit the file with your Jira email and API token');
+    print('  1. Edit the file with your Jira profiles');
     print('  2. Get an API token at:');
     print('     https://id.atlassian.com/manage-profile/security/api-tokens');
     print('  3. Run setup to connect:');
     print('');
-    print(hint(
-      'avo jira setup -u <url> -p <key> -c $credPath',
-      '',
-    ));
-    print('');
-    print('  Example:');
-    print('     avo jira setup -u https://company.atlassian.net -p PROJ -c $credPath');
+    print(hint('avo jira setup', 'uses default profile'));
+    print(hint('avo jira setup --profile work', 'uses named profile'));
   }
 }
 
@@ -859,13 +870,21 @@ class JiraSyncCommand extends JiraSubcommand {
   String get name => 'sync';
 
   @override
-  String get description => 'Sync with Jira';
+  String get description => 'Sync with Jira (optionally a specific issue)';
 
   @override
   Future<void> run() async {
-    print('Syncing with Jira...');
+    final args = argResults?.rest ?? [];
+    final issueKey = args.isNotEmpty ? args.first : null;
+
+    if (issueKey != null) {
+      print('Syncing issue $issueKey...');
+    } else {
+      print('Syncing with Jira...');
+    }
+
     try {
-      final result = await jiraService.sync();
+      final result = await jiraService.sync(issueKey: issueKey);
       print(kvRow('Pull:', '${result.pull.created} created, ${result.pull.updated} updated'));
       print(kvRow('Push:', '${result.push.pushed} pushed, ${result.push.failed} failed'));
       print('');
@@ -909,7 +928,12 @@ class JiraStatusCommand extends JiraSubcommand {
       return;
     }
 
-    print('Jira: ${status.jiraProjectKey}');
+    final displayName = status.profileName ?? 'default';
+    print('Jira: $displayName');
+    if (status.profileName != null) {
+      print(kvRow('Profile:', status.profileName!));
+    }
+    print(kvRow('Projects:', status.projectKeysList.join(', ')));
     print(kvRow('URL:', status.baseUrl ?? '-'));
     print(kvRow('Linked tasks:', '${status.linkedTasks}'));
     print(kvRow('Pending logs:', '${status.pendingWorklogs}'));
@@ -923,60 +947,56 @@ class JiraStatusCommand extends JiraSubcommand {
     }
     print('');
     print(hint('avo jira sync', 'to sync now'));
+    print(hint('avo jira sync PROJ-123', 'to sync specific issue'));
   }
 }
 
 class JiraSetupCommand extends JiraSubcommand {
   JiraSetupCommand(super.jiraService) {
-    argParser
-      ..addOption('url',
-          abbr: 'u',
-          help: 'Jira base URL (e.g., https://company.atlassian.net)')
-      ..addOption('project',
-          abbr: 'p', help: 'Jira project key (e.g., PROJ)')
-      ..addOption('credentials',
-          abbr: 'c', help: 'Path to credentials JSON file');
+    argParser.addOption('profile',
+        help: 'Profile name from credentials file (uses default if omitted)');
   }
 
   @override
   String get name => 'setup';
 
   @override
-  String get description => 'Configure Jira connection';
+  String get description => 'Configure Jira connection from a profile';
 
   @override
   Future<void> run() async {
-    final url = argResults?['url'] as String?;
-    final project = argResults?['project'] as String?;
-    final credentials = argResults?['credentials'] as String?;
+    final profileName = argResults?['profile'] as String?;
 
-    if (url == null || project == null || credentials == null) {
-      print('Missing required options.');
+    try {
+      final config = await jiraService.setup(
+        profileName: profileName,
+      );
+      final keys = config.jiraProjectKey
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      print('Jira configured successfully.');
+      if (config.profileName != null) {
+        print(kvRow('Profile:', config.profileName!));
+      }
+      print(kvRow('Projects:', keys.join(', ')));
+      print(kvRow('URL:', config.baseUrl));
       print('');
-      print('  Usage: avo jira setup -u <url> -p <project> -c <credentials>');
-      print('');
-      print('  Options:');
-      print('    -u  Jira base URL       (e.g., https://company.atlassian.net)');
-      print('    -p  Jira project key    (e.g., PROJ)');
-      print('    -c  Credentials file    (JSON with email + apiToken)');
-      print('');
-      print('  Example:');
-      print('    avo jira setup -u https://company.atlassian.net -p PROJ -c ~/.config/avodah/jira-credentials.json');
+      print(hint('avo jira sync', 'to pull issues and push worklogs'));
+    } on JiraProfileNotFoundException {
+      if (profileName != null) {
+        print('Profile "$profileName" not found in credentials file.');
+      } else {
+        print('No default profile configured.');
+      }
       print('');
       print(hint('avo jira init', 'to generate credentials template'));
-      return;
+      print(hintPlain('Check your profiles in the credentials file.'));
+    } on FileSystemException catch (e) {
+      print('Could not read credentials file: ${e.message}');
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
     }
-
-    final config = await jiraService.setup(
-      baseUrl: url,
-      jiraProjectKey: project,
-      credentialsPath: credentials,
-    );
-    print('Jira configured successfully.');
-    print(kvRow('Project:', config.jiraProjectKey));
-    print(kvRow('URL:', config.baseUrl));
-    print(kvRow('Credentials:', config.credentialsFilePath));
-    print('');
-    print(hint('avo jira sync', 'to pull issues and push worklogs'));
   }
 }
