@@ -59,7 +59,36 @@ class TimerService {
     await db.into(db.worklogEntries).insert(worklog.toDriftCompanion());
   }
 
+  /// Saves a task document via upsert.
+  Future<void> _saveTask(TaskDocument task) async {
+    await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+  }
+
+  /// Finds an existing task by exact title match, or creates a new one.
+  /// If [taskId] is provided, uses it directly without lookup.
+  Future<String> _resolveOrCreateTask(String taskTitle, String? taskId) async {
+    if (taskId != null) return taskId;
+
+    // Look up by exact title match among non-deleted tasks
+    final rows = await db.select(db.tasks).get();
+    for (final row in rows) {
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      if (!doc.isDeleted && doc.title == taskTitle) {
+        return doc.id;
+      }
+    }
+
+    // No match — create a new task
+    final task = TaskDocument.create(clock: clock, title: taskTitle);
+    await _saveTask(task);
+    return task.id;
+  }
+
   /// Starts a new timer. Throws if one is already running.
+  ///
+  /// If [taskId] is not provided, looks up an existing task by [taskTitle]
+  /// or creates a new one. The timer and resulting worklog always use a
+  /// real task UUID.
   Future<TimerDocument> start({
     required String taskTitle,
     String? taskId,
@@ -70,10 +99,12 @@ class TimerService {
       throw TimerAlreadyRunningException(existing);
     }
 
+    final resolvedTaskId = await _resolveOrCreateTask(taskTitle, taskId);
+
     final timer = TimerDocument.start(
       clock: clock,
       taskTitle: taskTitle,
-      taskId: taskId,
+      taskId: resolvedTaskId,
       note: note,
     );
 
@@ -88,7 +119,7 @@ class TimerService {
     if (timer == null) throw NoTimerRunningException();
 
     // Capture values before stop() clears them
-    final taskId = timer.taskId;
+    final taskId = timer.taskId!;
     final taskTitle = timer.taskTitle;
     final startedAt = timer.startedAt!;
     final note = timer.note;
@@ -102,7 +133,7 @@ class TimerService {
     final now = DateTime.now();
     final worklog = WorklogDocument.fromTimer(
       clock: clock,
-      taskId: taskId ?? taskTitle, // Use title as ID if no task ID
+      taskId: taskId,
       start: startedAt,
       end: now,
       comment: note,
