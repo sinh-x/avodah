@@ -28,6 +28,7 @@ import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -50,6 +51,7 @@ Future<void> main(List<String> args) async {
   final taskService = TaskService(db: db, clock: clock);
   final worklogService = WorklogService(db: db, clock: clock);
   final projectService = ProjectService(db: db, clock: clock);
+  final jiraService = JiraService(db: db, clock: clock, paths: paths);
 
   try {
     final runner = CommandRunner<void>(
@@ -67,7 +69,7 @@ Future<void> main(List<String> args) async {
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))
-      ..addCommand(JiraCommand(db));
+      ..addCommand(JiraCommand(jiraService));
 
     await runner.run(args);
   } on UsageException catch (e) {

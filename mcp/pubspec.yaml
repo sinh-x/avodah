@@ -24,6 +24,9 @@ dependencies:
   json_rpc_2: ^3.0.2
   stream_channel: ^2.1.2
 
+  # HTTP client (for Jira API)
+  http: ^1.2.0
+
   # Utilities
   uuid: ^4.0.0
   path: ^1.8.0

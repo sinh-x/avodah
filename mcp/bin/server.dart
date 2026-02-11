@@ -18,6 +18,7 @@ import 'dart:io';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -41,6 +42,7 @@ Future<void> main(List<String> args) async {
   final taskService = TaskService(db: db, clock: clock);
   final worklogService = WorklogService(db: db, clock: clock);
   final projectService = ProjectService(db: db, clock: clock);
+  final jiraService = JiraService(db: db, clock: clock, paths: paths);
 
   try {
     // Start MCP server over stdio
@@ -49,6 +51,7 @@ Future<void> main(List<String> args) async {
       taskService: taskService,
       worklogService: worklogService,
       projectService: projectService,
+      jiraService: jiraService,
       paths: paths,
     );
     await server.serve(stdin, stdout);

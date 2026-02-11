@@ -4,16 +4,11 @@ library;
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import '../services/jira_service.dart';
 import '../services/project_service.dart';
 import '../services/task_service.dart';
 import '../services/timer_service.dart';
 import '../services/worklog_service.dart';
-
-/// Base class for commands that need database access.
-abstract class DatabaseCommand extends Command<void> {
-  final AppDatabase db;
-  DatabaseCommand(this.db);
-}
 
 /// Base class for timer commands that need the TimerService.
 abstract class TimerCommand extends Command<void> {
@@ -570,12 +565,18 @@ class ProjectShowCommand extends ProjectSubcommand {
   }
 }
 
+/// Base class for Jira commands that need the JiraService.
+abstract class JiraSubcommand extends Command<void> {
+  final JiraService jiraService;
+  JiraSubcommand(this.jiraService);
+}
+
 /// Jira sync command group.
-class JiraCommand extends DatabaseCommand {
-  JiraCommand(super.db) {
-    addSubcommand(JiraSyncCommand(db));
-    addSubcommand(JiraStatusCommand(db));
-    addSubcommand(JiraSetupCommand(db));
+class JiraCommand extends Command<void> {
+  JiraCommand(JiraService jiraService) {
+    addSubcommand(JiraSyncCommand(jiraService));
+    addSubcommand(JiraStatusCommand(jiraService));
+    addSubcommand(JiraSetupCommand(jiraService));
   }
 
   @override
@@ -585,8 +586,8 @@ class JiraCommand extends DatabaseCommand {
   String get description => 'Jira integration';
 }
 
-class JiraSyncCommand extends DatabaseCommand {
-  JiraSyncCommand(super.db);
+class JiraSyncCommand extends JiraSubcommand {
+  JiraSyncCommand(super.jiraService);
 
   @override
   String get name => 'sync';
@@ -596,14 +597,23 @@ class JiraSyncCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement Jira sync
     print('Syncing with Jira...');
-    print('  (not configured)');
+    try {
+      final result = await jiraService.sync();
+      print('  Pull: ${result.pull.created} created, ${result.pull.updated} updated');
+      print('  Push: ${result.push.pushed} pushed, ${result.push.failed} failed');
+    } on JiraNotConfiguredException {
+      print('  Jira not configured. Run "avo jira setup" first.');
+    } on JiraCredentialsNotFoundException catch (e) {
+      print('  $e');
+    } on JiraSyncException catch (e) {
+      print('  $e');
+    }
   }
 }
 
-class JiraStatusCommand extends DatabaseCommand {
-  JiraStatusCommand(super.db);
+class JiraStatusCommand extends JiraSubcommand {
+  JiraStatusCommand(super.jiraService);
 
   @override
   String get name => 'status';
@@ -613,14 +623,36 @@ class JiraStatusCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement Jira status
-    print('Jira: not configured');
-    print('  Run "avo jira setup" to configure.');
+    final status = await jiraService.status();
+
+    if (!status.configured) {
+      print('Jira: not configured');
+      print('  Run "avo jira setup" to configure.');
+      return;
+    }
+
+    print('Jira: ${status.jiraProjectKey}');
+    print('  URL:          ${status.baseUrl}');
+    print('  Linked tasks: ${status.linkedTasks}');
+    print('  Pending logs: ${status.pendingWorklogs}');
+    if (status.lastSyncAt != null) {
+      print('  Last sync:    ${status.lastSyncAt}');
+    } else {
+      print('  Last sync:    never');
+    }
+    if (status.lastSyncError != null) {
+      print('  Last error:   ${status.lastSyncError}');
+    }
   }
 }
 
-class JiraSetupCommand extends DatabaseCommand {
-  JiraSetupCommand(super.db);
+class JiraSetupCommand extends JiraSubcommand {
+  JiraSetupCommand(super.jiraService) {
+    argParser
+      ..addOption('url', abbr: 'u', help: 'Jira base URL (e.g., https://company.atlassian.net)')
+      ..addOption('project', abbr: 'p', help: 'Jira project key (e.g., PROJ)')
+      ..addOption('credentials', abbr: 'c', help: 'Path to credentials JSON file');
+  }
 
   @override
   String get name => 'setup';
@@ -630,9 +662,28 @@ class JiraSetupCommand extends DatabaseCommand {
 
   @override
   Future<void> run() async {
-    // TODO: Implement Jira setup
-    print('Jira Setup');
-    print('  (not implemented yet)');
+    final url = argResults?['url'] as String?;
+    final project = argResults?['project'] as String?;
+    final credentials = argResults?['credentials'] as String?;
+
+    if (url == null || project == null || credentials == null) {
+      print('Usage: avo jira setup -u <url> -p <project> -c <credentials>');
+      print('');
+      print('  -u  Jira base URL (e.g., https://company.atlassian.net)');
+      print('  -p  Jira project key (e.g., PROJ)');
+      print('  -c  Path to credentials JSON file');
+      return;
+    }
+
+    final config = await jiraService.setup(
+      baseUrl: url,
+      jiraProjectKey: project,
+      credentialsPath: credentials,
+    );
+    print('Jira configured:');
+    print('  Project:     ${config.jiraProjectKey}');
+    print('  URL:         ${config.baseUrl}');
+    print('  Credentials: ${config.credentialsFilePath}');
   }
 }
 
