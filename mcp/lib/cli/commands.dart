@@ -1,14 +1,23 @@
 /// CLI commands for Avodah.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import '../config/paths.dart';
 import '../services/jira_service.dart';
 import '../services/project_service.dart';
 import '../services/task_service.dart';
 import '../services/timer_service.dart';
 import '../services/worklog_service.dart';
+import 'format.dart';
+
+// ============================================================
+// Timer Commands
+// ============================================================
 
 /// Base class for timer commands that need the TimerService.
 abstract class TimerCommand extends Command<void> {
@@ -34,7 +43,10 @@ class StartCommand extends TimerCommand {
     final taskTitle = args.isNotEmpty ? args.join(' ') : null;
 
     if (taskTitle == null) {
-      print('Usage: avo start <task title>');
+      print('Missing task title.');
+      print('');
+      print('  Usage: avo start <task title> [-n note]');
+      print('  Example: avo start "Fix login bug" -n "auth flow"');
       return;
     }
 
@@ -45,13 +57,18 @@ class StartCommand extends TimerCommand {
         taskTitle: taskTitle,
         note: note,
       );
-      print('Timer started: $taskTitle');
-      print('  Started at: ${_formatTime(timer.startedAt!)}');
-      if (note != null) print('  Note: $note');
+      print('Timer started: "$taskTitle"');
+      print(kvRow('Started:', formatTime(timer.startedAt!)));
+      if (note != null) print(kvRow('Note:', note));
+      print('');
+      print(hint('avo stop', 'to log your time'));
+      print(hint('avo pause', 'to take a break'));
     } on TimerAlreadyRunningException catch (e) {
       print('Timer already running: "${e.timer.taskTitle}"');
-      print('  Elapsed: ${e.timer.elapsedFormatted}');
-      print('  Stop or cancel the current timer first.');
+      print(kvRow('Elapsed:', e.timer.elapsedFormatted));
+      print('');
+      print(hint('avo stop', 'to stop and log time'));
+      print(hint('avo cancel', 'to discard and start fresh'));
     }
   }
 }
@@ -71,39 +88,132 @@ class StopCommand extends TimerCommand {
     try {
       final result = await timerService.stop();
       print('Timer stopped: "${result.taskTitle}"');
-      print('  Duration: ${result.elapsedFormatted}');
-      print('  Worklog: ${result.worklogId.substring(0, 8)}');
-      if (result.note != null) print('  Note: ${result.note}');
+      print(kvRow('Duration:', result.elapsedFormatted));
+      print(kvRow('Worklog:', result.worklogId.substring(0, 8)));
+      if (result.note != null) print(kvRow('Note:', result.note!));
+      print('');
+      print(hint('avo today', 'to see today\'s total'));
+      print(hint('avo start <task>', 'to start another timer'));
     } on NoTimerRunningException {
-      print('No timer running.');
+      print('No timer is running.');
+      print('');
+      print(hint('avo start <task>', 'to begin tracking'));
     }
   }
 }
 
-/// Timer status command.
-class StatusCommand extends TimerCommand {
-  StatusCommand(super.timerService);
+/// Timer status command — now a full dashboard.
+class StatusCommand extends Command<void> {
+  final TimerService timerService;
+  final TaskService taskService;
+  final WorklogService worklogService;
+  final ProjectService projectService;
+  final JiraService jiraService;
+
+  StatusCommand({
+    required this.timerService,
+    required this.taskService,
+    required this.worklogService,
+    required this.projectService,
+    required this.jiraService,
+  });
 
   @override
   String get name => 'status';
 
   @override
-  String get description => 'Show timer status';
+  String get description => 'Show dashboard (timer, today, tasks, jira)';
 
   @override
   Future<void> run() async {
+    // ── Timer ──
+    print(sectionHeader('TIMER'));
     final timer = await timerService.status();
-
     if (timer == null) {
-      print('No timer running.');
-      return;
+      print('  No timer running.');
+      print(hint('avo start <task>', 'to begin tracking'));
+    } else {
+      final indicator = timer.isPaused ? '||' : '>>';
+      print('  $indicator ${timer.isPaused ? "Paused" : "Running"}: "${timer.taskTitle}"');
+      print(kvRow('Elapsed:', timer.elapsedFormatted));
+      print(kvRow('Started:', formatTime(timer.startedAt!)));
+      if (timer.note != null) print(kvRow('Note:', timer.note!));
     }
+    print(separator());
+    print('');
 
-    final state = timer.isPaused ? 'paused' : 'running';
-    print('Timer ($state): "${timer.taskTitle}"');
-    print('  Elapsed: ${timer.elapsedFormatted}');
-    print('  Started: ${_formatTime(timer.startedAt!)}');
-    if (timer.note != null) print('  Note: ${timer.note}');
+    // ── Today ──
+    print(sectionHeader('TODAY'));
+    final summary = await worklogService.todaySummary();
+    final now = DateTime.now();
+    final dateStr = formatDate(now);
+    print('  $dateStr${' ' * (lineWidth - dateStr.length - summary.formattedDuration.length - 4)}${summary.formattedDuration}');
+
+    if (summary.tasks.isEmpty) {
+      print('  No time logged yet.');
+    } else {
+      for (final task in summary.tasks) {
+        final title = await resolveTaskTitle(taskService, task.taskId);
+        final dur = task.formattedDuration;
+        final padLen = lineWidth - title.length - dur.length - 4;
+        final padding = padLen > 0 ? ' ' * padLen : ' ';
+        print('  $title$padding$dur');
+      }
+    }
+    print(separator());
+    print('');
+
+    // ── Tasks ──
+    print(sectionHeader('TASKS'));
+    final tasks = await taskService.list();
+    if (tasks.isEmpty) {
+      print('  No active tasks.');
+      print(hint('avo task add <title>', 'to create one'));
+    } else {
+      print('  ${tasks.length} active task${tasks.length == 1 ? '' : 's'}');
+      final showTasks = tasks.take(5).toList();
+      for (final task in showTasks) {
+        final check = task.isDone ? 'x' : ' ';
+        final id = task.id.substring(0, 8);
+        final time = formatDuration(Duration(milliseconds: task.timeSpent));
+        final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+        print('  [$check] $id  ${task.title}$issueTag  ($time)');
+      }
+      if (tasks.length > 5) {
+        print(hint('avo task list', 'to see all ${tasks.length} tasks'));
+      }
+    }
+    print(separator());
+    print('');
+
+    // ── Jira ──
+    print(sectionHeader('JIRA'));
+    final jira = await jiraService.status();
+    if (!jira.configured) {
+      print('  Not configured.');
+      print(hint('avo jira init', 'to generate credentials template'));
+      print(hint('avo jira setup', 'to configure connection'));
+    } else {
+      if (jira.profileName != null) {
+        print(kvRow('Profile:', jira.profileName!));
+      }
+      print(kvRow('Projects:', jira.projectKeysList.join(', ')));
+      print(kvRow('URL:', jira.baseUrl ?? '-'));
+      print(kvRow('Linked tasks:', '${jira.linkedTasks}'));
+      print(kvRow('Pending logs:', '${jira.pendingWorklogs}'));
+      if (jira.lastSyncAt != null) {
+        print(kvRow('Last sync:', jira.lastSyncAt.toString().substring(0, 16)));
+      } else {
+        print(kvRow('Last sync:', 'never'));
+      }
+      if (jira.lastSyncError != null) {
+        print(kvRow('Last error:', jira.lastSyncError!));
+      }
+      if (jira.pendingWorklogs > 0) {
+        print(hint('avo jira sync', 'to push pending worklogs'));
+      }
+    }
+    print(separator());
   }
 }
 
@@ -122,11 +232,19 @@ class PauseCommand extends TimerCommand {
     try {
       final timer = await timerService.pause();
       print('Timer paused: "${timer.taskTitle}"');
-      print('  Elapsed: ${timer.elapsedFormatted}');
+      print(kvRow('Elapsed:', timer.elapsedFormatted));
+      print('');
+      print(hint('avo resume', 'to continue'));
+      print(hint('avo stop', 'to log what you have'));
     } on NoTimerRunningException {
-      print('No timer running.');
+      print('No timer is running.');
+      print('');
+      print(hint('avo start <task>', 'to begin tracking'));
     } on TimerAlreadyPausedException {
       print('Timer is already paused.');
+      print('');
+      print(hint('avo resume', 'to continue'));
+      print(hint('avo stop', 'to log what you have'));
     }
   }
 }
@@ -146,11 +264,15 @@ class ResumeCommand extends TimerCommand {
     try {
       final timer = await timerService.resume();
       print('Timer resumed: "${timer.taskTitle}"');
-      print('  Elapsed: ${timer.elapsedFormatted}');
+      print(kvRow('Elapsed:', timer.elapsedFormatted));
+      print('');
+      print(hint('avo stop', 'when done'));
     } on NoTimerRunningException {
-      print('No timer running.');
+      print('No timer is running.');
+      print('');
+      print(hint('avo start <task>', 'to begin tracking'));
     } on TimerNotPausedException {
-      print('Timer is not paused.');
+      print('Timer is not paused -- it\'s already running.');
     }
   }
 }
@@ -169,12 +291,18 @@ class CancelCommand extends TimerCommand {
   Future<void> run() async {
     try {
       await timerService.cancel();
-      print('Timer cancelled. No time logged.');
+      print('Timer cancelled. No time was logged.');
+      print('');
+      print(hint('avo start <task>', 'to begin a new timer'));
     } on NoTimerRunningException {
-      print('No timer running.');
+      print('No timer is running.');
     }
   }
 }
+
+// ============================================================
+// Task Commands
+// ============================================================
 
 /// Base class for task commands that need the TaskService.
 abstract class TaskSubcommand extends Command<void> {
@@ -215,7 +343,10 @@ class TaskAddCommand extends TaskSubcommand {
     final title = args.isNotEmpty ? args.join(' ') : null;
 
     if (title == null) {
-      print('Usage: avo task add <title> [-p project]');
+      print('Missing task title.');
+      print('');
+      print('  Usage: avo task add <title> [-p project]');
+      print('  Example: avo task add "Fix login bug" -p a1b2');
       return;
     }
 
@@ -225,8 +356,12 @@ class TaskAddCommand extends TaskSubcommand {
       title: title,
       projectId: projectId,
     );
-    print('Created task: $title');
-    print('  ID: ${task.id.substring(0, 8)}');
+    final shortId = task.id.substring(0, 8);
+    print('Created task: "$title"');
+    print(kvRow('ID:', shortId));
+    print('');
+    print(hint('avo start $title', 'to start timing'));
+    print(hint('avo task show $shortId', 'to see details'));
   }
 }
 
@@ -248,17 +383,26 @@ class TaskListCommand extends TaskSubcommand {
 
     if (tasks.isEmpty) {
       print(includeCompleted ? 'No tasks.' : 'No active tasks.');
+      print('');
+      if (!includeCompleted) {
+        print(hint('avo task add <title>', 'to create one'));
+        print(hint('avo task list -a', 'to see completed tasks'));
+      }
       return;
     }
 
     final label = includeCompleted ? 'All Tasks' : 'Active Tasks';
-    print('$label:');
+    print('$label (${tasks.length}):');
     for (final task in tasks) {
       final check = task.isDone ? 'x' : ' ';
       final id = task.id.substring(0, 8);
-      final time = _formatDuration(Duration(milliseconds: task.timeSpent));
-      print('  [$check] $id  ${task.title}  ($time)');
+      final time = formatDuration(Duration(milliseconds: task.timeSpent));
+      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+      print('  [$check] $id  ${task.title}$issueTag  ($time)');
     }
+    print('');
+    print(hint('avo task show <id>', 'to see details'));
+    print(hint('avo start <task>', 'to start timing'));
   }
 }
 
@@ -277,20 +421,35 @@ class TaskDoneCommand extends TaskSubcommand {
     final taskId = args.isNotEmpty ? args.first : null;
 
     if (taskId == null) {
-      print('Usage: avo task done <id>');
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task done <id>');
+      print(hint('avo task list', 'to see task IDs'));
       return;
     }
 
     try {
       final task = await taskService.done(taskId);
-      print('Marked done: "${task.title}"');
-      print('  ID: ${task.id.substring(0, 8)}');
-    } on TaskNotFoundException catch (e) {
-      print(e);
+      final time = formatDuration(Duration(milliseconds: task.timeSpent));
+      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+      print('Marked done: "${task.title}"$issueTag');
+      print(kvRow('ID:', task.id.substring(0, 8)));
+      print(kvRow('Time spent:', time));
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
     } on AmbiguousTaskIdException catch (e) {
-      print(e);
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
     } on TaskAlreadyDoneException catch (e) {
-      print(e);
+      print('Task "${e.task.title}" is already done.');
+      print('');
+      print(hint('avo task list', 'to see active tasks'));
     }
   }
 }
@@ -310,46 +469,68 @@ class TaskShowCommand extends TaskSubcommand {
     final taskId = args.isNotEmpty ? args.first : null;
 
     if (taskId == null) {
-      print('Usage: avo task show <id>');
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task show <id>');
+      print(hint('avo task list', 'to see task IDs'));
       return;
     }
 
     try {
       final task = await taskService.show(taskId);
-      final status = task.isDone ? 'Done' : (task.isDeleted ? 'Deleted' : 'Active');
-      print('Task: ${task.title}');
-      print('  ID:       ${task.id}');
-      print('  Status:   $status');
+      final status =
+          task.isDone ? 'Done' : (task.isDeleted ? 'Deleted' : 'Active');
+      final time = formatDuration(Duration(milliseconds: task.timeSpent));
+      print('Task: "${task.title}"');
+      print(kvRow('ID:', task.id));
+      print(kvRow('Status:', status));
       if (task.projectId != null) {
-        print('  Project:  ${task.projectId}');
+        print(kvRow('Project:', task.projectId!));
       }
       if (task.description != null) {
-        print('  Desc:     ${task.description}');
+        print(kvRow('Description:', task.description!));
       }
-      print('  Created:  ${task.createdTimestamp ?? 'unknown'}');
-      print('  Spent:    ${_formatDuration(Duration(milliseconds: task.timeSpent))}');
+      print(kvRow('Created:', '${task.createdTimestamp ?? 'unknown'}'));
+      print(kvRow('Time spent:', time));
       if (task.timeEstimate > 0) {
-        print('  Estimate: ${_formatDuration(Duration(milliseconds: task.timeEstimate))}');
+        print(kvRow('Estimate:',
+            formatDuration(Duration(milliseconds: task.timeEstimate))));
       }
       if (task.dueDay != null) {
-        print('  Due:      ${task.dueDay}');
+        print(kvRow('Due:', '${task.dueDay}'));
       }
       if (task.doneOn != null) {
-        print('  Done on:  ${task.doneOn}');
+        print(kvRow('Done on:', '${task.doneOn}'));
       }
       if (task.tagIds.isNotEmpty) {
-        print('  Tags:     ${task.tagIds.join(', ')}');
+        print(kvRow('Tags:', task.tagIds.join(', ')));
       }
       if (task.hasIssueLink) {
-        print('  Issue:    ${task.issueId} (${task.issueType?.toValue()})');
+        print(kvRow('Issue:', '${task.issueId} (${task.issueType?.toValue()})'));
       }
-    } on TaskNotFoundException catch (e) {
-      print(e);
+      if (!task.isDone) {
+        print('');
+        print(hint('avo start ${task.title}', 'to start timing'));
+        print(hint('avo task done ${task.id.substring(0, 8)}', 'to mark done'));
+      }
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
     } on AmbiguousTaskIdException catch (e) {
-      print(e);
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
     }
   }
 }
+
+// ============================================================
+// Worklog Commands
+// ============================================================
 
 /// Today summary command.
 class TodayCommand extends Command<void> {
@@ -368,31 +549,27 @@ class TodayCommand extends Command<void> {
   Future<void> run() async {
     final summary = await worklogService.todaySummary();
     final now = DateTime.now();
+    final dateStr = formatDate(now);
 
-    print('Today (${_formatDate(now)}):      ${summary.formattedDuration}');
+    print('Today ($dateStr):${' ' * 6}${summary.formattedDuration}');
+    print(separator());
 
     if (summary.tasks.isEmpty) {
-      print('  No time logged today.');
+      print('  No time logged yet.');
+      print('');
+      print(hint('avo start <task>', 'to begin tracking'));
       return;
     }
 
-    // Resolve task titles
     for (final task in summary.tasks) {
-      final title = await _resolveTaskTitle(task.taskId);
-      final pad = '  $title'.padRight(30);
-      print('$pad ${task.formattedDuration}');
+      final title = await resolveTaskTitle(taskService, task.taskId);
+      final dur = task.formattedDuration;
+      final padLen = lineWidth - title.length - dur.length - 4;
+      final padding = padLen > 0 ? ' ' * padLen : ' ';
+      print('  $title$padding$dur');
     }
-  }
-
-  Future<String> _resolveTaskTitle(String taskId) async {
-    try {
-      final task = await taskService.show(taskId);
-      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
-      return '${task.title}$issueTag';
-    } catch (_) {
-      // taskId might be the title itself (from timer without linked task)
-      return taskId;
-    }
+    print('');
+    print(hint('avo week', 'to see this week\'s summary'));
   }
 }
 
@@ -411,34 +588,40 @@ class WeekCommand extends Command<void> {
   @override
   Future<void> run() async {
     final summaries = await worklogService.weekSummary();
-    final totalMs = summaries.fold<int>(
-        0, (sum, d) => sum + d.total.inMilliseconds);
+    final totalMs =
+        summaries.fold<int>(0, (sum, d) => sum + d.total.inMilliseconds);
     final total = Duration(milliseconds: totalMs);
 
-    print('This Week:      ${_formatDuration(total)}');
-    print('');
+    print('This Week:${' ' * 10}${formatDuration(total)}');
+    print(separator());
+
+    if (totalMs == 0) {
+      print('  No time logged this week.');
+      print('');
+      print(hint('avo start <task>', 'to begin tracking'));
+      return;
+    }
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final maxMs = summaries.fold<int>(
-        0, (max, d) => d.total.inMilliseconds > max ? d.total.inMilliseconds : max);
+        0,
+        (max, d) =>
+            d.total.inMilliseconds > max ? d.total.inMilliseconds : max);
 
     for (var i = 0; i < summaries.length; i++) {
       final day = summaries[i];
       final label = days[i];
-      final bar = maxMs > 0
-          ? _buildBar(day.total.inMilliseconds, maxMs)
-          : '';
-      final dur = day.total.inMilliseconds > 0 ? day.formattedDuration : '-';
+      final bar = buildBar(day.total.inMilliseconds, maxMs);
+      final dur =
+          day.total.inMilliseconds > 0 ? day.formattedDuration : '-';
       print('  $label  $bar  $dur');
     }
   }
-
-  String _buildBar(int value, int max) {
-    const width = 20;
-    final filled = max > 0 ? (value * width ~/ max) : 0;
-    return '${'#' * filled}${'.' * (width - filled)}';
-  }
 }
+
+// ============================================================
+// Project Commands
+// ============================================================
 
 /// Base class for project commands.
 abstract class ProjectSubcommand extends Command<void> {
@@ -478,7 +661,10 @@ class ProjectAddCommand extends ProjectSubcommand {
     final title = args.isNotEmpty ? args.join(' ') : null;
 
     if (title == null) {
-      print('Usage: avo project add <title> [-i icon]');
+      print('Missing project title.');
+      print('');
+      print('  Usage: avo project add <title> [-i icon]');
+      print('  Example: avo project add "Web App" -i "🌐"');
       return;
     }
 
@@ -488,8 +674,12 @@ class ProjectAddCommand extends ProjectSubcommand {
       title: title,
       icon: icon,
     );
-    print('Created project: $title');
-    print('  ID: ${project.id.substring(0, 8)}');
+    final shortId = project.id.substring(0, 8);
+    print('Created project: "$title"');
+    print(kvRow('ID:', shortId));
+    print('');
+    print(hint('avo task add -p $shortId <title>', 'to add a task'));
+    print(hint('avo project show $shortId', 'to see details'));
   }
 }
 
@@ -512,11 +702,15 @@ class ProjectListCommand extends ProjectSubcommand {
 
     if (projects.isEmpty) {
       print(includeArchived ? 'No projects.' : 'No active projects.');
+      print('');
+      if (!includeArchived) {
+        print(hint('avo project add <title>', 'to create one'));
+      }
       return;
     }
 
     final label = includeArchived ? 'All Projects' : 'Projects';
-    print('$label:');
+    print('$label (${projects.length}):');
     for (final project in projects) {
       final id = project.id.substring(0, 8);
       final archived = project.isArchived ? ' [archived]' : '';
@@ -524,6 +718,8 @@ class ProjectListCommand extends ProjectSubcommand {
       final iconStr = project.icon != null ? '${project.icon} ' : '';
       print('  $id  $iconStr${project.title}  ($count tasks)$archived');
     }
+    print('');
+    print(hint('avo project show <id>', 'to see details'));
   }
 }
 
@@ -542,28 +738,46 @@ class ProjectShowCommand extends ProjectSubcommand {
     final projectId = args.isNotEmpty ? args.first : null;
 
     if (projectId == null) {
-      print('Usage: avo project show <id>');
+      print('Missing project ID.');
+      print('');
+      print('  Usage: avo project show <id>');
+      print(hint('avo project list', 'to see project IDs'));
       return;
     }
 
     try {
       final project = await projectService.show(projectId);
       final count = await projectService.taskCount(project.id);
-      print('Project: ${project.title}');
-      print('  ID:       ${project.id}');
+      print('Project: "${project.title}"');
+      print(kvRow('ID:', project.id));
       if (project.icon != null) {
-        print('  Icon:     ${project.icon}');
+        print(kvRow('Icon:', project.icon!));
       }
-      print('  Tasks:    $count active');
-      print('  Archived: ${project.isArchived}');
-      print('  Created:  ${project.createdTimestamp ?? 'unknown'}');
-    } on ProjectNotFoundException catch (e) {
-      print(e);
+      print(kvRow('Tasks:', '$count active'));
+      print(kvRow('Archived:', '${project.isArchived}'));
+      print(kvRow('Created:', '${project.createdTimestamp ?? 'unknown'}'));
+      print('');
+      final shortId = project.id.substring(0, 8);
+      print(hint('avo task add -p $shortId <title>', 'to add a task'));
+      print(hint('avo task list', 'to see tasks'));
+    } on ProjectNotFoundException {
+      print('No project found matching "$projectId".');
+      print('');
+      print(hint('avo project list', 'to see available projects'));
     } on AmbiguousProjectIdException catch (e) {
-      print(e);
+      print('Multiple projects match "$projectId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
     }
   }
 }
+
+// ============================================================
+// Jira Commands
+// ============================================================
 
 /// Base class for Jira commands that need the JiraService.
 abstract class JiraSubcommand extends Command<void> {
@@ -573,7 +787,8 @@ abstract class JiraSubcommand extends Command<void> {
 
 /// Jira sync command group.
 class JiraCommand extends Command<void> {
-  JiraCommand(JiraService jiraService) {
+  JiraCommand(JiraService jiraService, AvodahPaths paths) {
+    addSubcommand(JiraInitCommand(paths));
     addSubcommand(JiraSyncCommand(jiraService));
     addSubcommand(JiraStatusCommand(jiraService));
     addSubcommand(JiraSetupCommand(jiraService));
@@ -586,29 +801,236 @@ class JiraCommand extends Command<void> {
   String get description => 'Jira integration';
 }
 
+/// Generate Jira credentials template file with profile format.
+class JiraInitCommand extends Command<void> {
+  final AvodahPaths paths;
+
+  JiraInitCommand(this.paths);
+
+  @override
+  String get name => 'init';
+
+  @override
+  String get description => 'Generate Jira credentials template file';
+
+  @override
+  Future<void> run() async {
+    final credPath = paths.jiraCredentialsPath;
+    final file = File(credPath);
+
+    if (await file.exists()) {
+      print('Credentials file already exists:');
+      print(kvRow('Path:', credPath));
+      print('');
+      print(hintPlain('Delete it first if you want to regenerate.'));
+      print(hint('avo jira setup', 'to configure connection'));
+      return;
+    }
+
+    // Ensure config directory exists
+    await Directory(paths.configDir).create(recursive: true);
+
+    final template = jsonEncode({
+      '_comment':
+          'Jira profiles for Avodah. Get your token at: https://id.atlassian.com/manage-profile/security/api-tokens',
+      'jira_profiles': {
+        'work': {
+          'name': 'Work JIRA',
+          'base_url': 'https://company.atlassian.net',
+          'username': 'email@company.com',
+          'api_token': 'your-api-token',
+          'project_keys': ['PROJ'],
+        },
+      },
+      'default_profiles': {
+        'jira': 'work',
+      },
+    });
+
+    // Pretty-print it
+    const encoder = JsonEncoder.withIndent('  ');
+    final decoded = jsonDecode(template);
+    await file.writeAsString('${encoder.convert(decoded)}\n');
+
+    print('Created Jira credentials template:');
+    print(kvRow('Path:', credPath));
+    print('');
+    print('Next steps:');
+    print('  1. Edit the file with your Jira profiles');
+    print('  2. Get an API token at:');
+    print('     https://id.atlassian.com/manage-profile/security/api-tokens');
+    print('  3. Run setup to connect:');
+    print('');
+    print(hint('avo jira setup', 'uses default profile'));
+    print(hint('avo jira setup --profile work', 'uses named profile'));
+  }
+}
+
 class JiraSyncCommand extends JiraSubcommand {
-  JiraSyncCommand(super.jiraService);
+  JiraSyncCommand(super.jiraService) {
+    argParser.addFlag('dry-run', help: 'Preview changes without applying');
+    argParser.addFlag('interactive', defaultsTo: true,
+        help: 'Prompt for each conflict (disable with --no-interactive)');
+  }
 
   @override
   String get name => 'sync';
 
   @override
-  String get description => 'Sync with Jira';
+  String get description => 'Sync with Jira (2-way with conflict resolution)';
 
   @override
   Future<void> run() async {
-    print('Syncing with Jira...');
+    final args = argResults?.rest ?? [];
+    final issueKey = args.isNotEmpty ? args.first : null;
+    final dryRun = argResults?['dry-run'] as bool? ?? false;
+    final interactive = argResults?['interactive'] as bool? ?? true;
+
+    print('Computing sync preview...');
+
     try {
-      final result = await jiraService.sync();
-      print('  Pull: ${result.pull.created} created, ${result.pull.updated} updated');
-      print('  Push: ${result.push.pushed} pushed, ${result.push.failed} failed');
+      final context = await jiraService.computeSyncPreview(issueKey: issueKey);
+      final preview = context.preview;
+
+      // Display preview
+      print(sectionHeader('SYNC PREVIEW'));
+      print(kvRow('New issues:', '${preview.newRemoteIssues.length}', labelWidth: 16) +
+          (preview.newRemoteIssues.isNotEmpty ? '  (will create local tasks)' : ''));
+      print(kvRow('New local logs:', '${preview.newLocalWorklogs.length}', labelWidth: 16) +
+          (preview.newLocalWorklogs.isNotEmpty ? '  (will push to Jira)' : ''));
+      print(kvRow('New remote logs:', '${preview.newRemoteWorklogs.length}', labelWidth: 16) +
+          (preview.newRemoteWorklogs.isNotEmpty ? '  (will pull from Jira)' : ''));
+      print(kvRow('Mismatches:', '${preview.worklogMismatches.length + preview.titleMismatches.length}', labelWidth: 16) +
+          (preview.hasMismatches ? '  (need resolution)' : ''));
+      print(kvRow('Up to date:', '${preview.upToDateTasks}', labelWidth: 16));
+      print(separator());
+
+      if (!preview.hasChanges) {
+        print('Already in sync.');
+        return;
+      }
+
+      if (dryRun) {
+        _printMismatchDetails(preview);
+        print('');
+        print(hintPlain('Dry run -- no changes applied.'));
+        return;
+      }
+
+      // Resolve mismatches
+      if (preview.hasMismatches) {
+        if (interactive) {
+          _printAndPromptMismatches(preview);
+        } else {
+          print('');
+          print(hintPlain('Non-interactive: skipping ${preview.worklogMismatches.length + preview.titleMismatches.length} mismatch(es).'));
+        }
+      }
+
+      // Execute
+      final result = await jiraService.executeSyncPlan(context);
+
+      print('');
+      print(sectionHeader('SYNC RESULT'));
+      if (result.tasksCreated > 0) print(kvRow('Tasks created:', '${result.tasksCreated}', labelWidth: 18));
+      if (result.worklogsPushed > 0) print(kvRow('Worklogs pushed:', '${result.worklogsPushed}', labelWidth: 18));
+      if (result.worklogsPulled > 0) print(kvRow('Worklogs pulled:', '${result.worklogsPulled}', labelWidth: 18));
+      if (result.mismatchesPushed > 0) print(kvRow('Pushed (conflict):', '${result.mismatchesPushed}', labelWidth: 18));
+      if (result.mismatchesPulled > 0) print(kvRow('Pulled (conflict):', '${result.mismatchesPulled}', labelWidth: 18));
+      if (result.titlesPushed > 0) print(kvRow('Titles pushed:', '${result.titlesPushed}', labelWidth: 18));
+      if (result.titlesPulled > 0) print(kvRow('Titles pulled:', '${result.titlesPulled}', labelWidth: 18));
+      if (result.failed > 0) print(kvRow('Failed:', '${result.failed}', labelWidth: 18));
+      if (result.tasksCreated == 0 && result.worklogsPushed == 0 &&
+          result.worklogsPulled == 0 && result.mismatchesPushed == 0 &&
+          result.mismatchesPulled == 0 && result.titlesPushed == 0 &&
+          result.titlesPulled == 0 && result.failed == 0) {
+        print('  No changes applied.');
+      }
+      print('');
+      print(hint('avo task list', 'to see synced tasks'));
+      print(hint('avo jira status', 'to see sync status'));
     } on JiraNotConfiguredException {
-      print('  Jira not configured. Run "avo jira setup" first.');
+      print('Jira is not configured.');
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
+      print(hint('avo jira setup', 'to configure connection'));
     } on JiraCredentialsNotFoundException catch (e) {
-      print('  $e');
+      print('$e');
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
     } on JiraSyncException catch (e) {
-      print('  $e');
+      print('Sync failed: $e');
+      print('');
+      print(hint('avo jira status', 'to check configuration'));
     }
+  }
+
+  void _printMismatchDetails(SyncPreview preview) {
+    if (preview.worklogMismatches.isNotEmpty) {
+      print('');
+      print('WORKLOG MISMATCHES:');
+      for (final m in preview.worklogMismatches) {
+        final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
+        final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
+        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        final diffs = <String>[];
+        if (m.durationDiffers) diffs.add('Duration differs');
+        if (m.commentDiffers) diffs.add('Comment differs');
+        print('    -> ${diffs.join(', ')}');
+      }
+    }
+
+    if (preview.titleMismatches.isNotEmpty) {
+      print('');
+      print('TITLE MISMATCHES:');
+      for (final m in preview.titleMismatches) {
+        print('  [${m.issueKey}]');
+        print('    Local:   "${m.localTask.title}"');
+        print('    Remote:  "${m.remoteTitle}"');
+      }
+    }
+  }
+
+  void _printAndPromptMismatches(SyncPreview preview) {
+    if (preview.worklogMismatches.isNotEmpty) {
+      print('');
+      print('WORKLOG MISMATCHES:');
+      for (final m in preview.worklogMismatches) {
+        final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
+        final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
+        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        final diffs = <String>[];
+        if (m.durationDiffers) diffs.add('Duration differs');
+        if (m.commentDiffers) diffs.add('Comment differs');
+        print('    -> ${diffs.join(', ')}');
+        m.resolution = _promptResolution();
+      }
+    }
+
+    if (preview.titleMismatches.isNotEmpty) {
+      print('');
+      print('TITLE MISMATCHES:');
+      for (final m in preview.titleMismatches) {
+        print('  [${m.issueKey}]');
+        print('    Local:   "${m.localTask.title}"');
+        print('    Remote:  "${m.remoteTitle}"');
+        m.resolution = _promptResolution();
+      }
+    }
+  }
+
+  SyncDirection _promptResolution() {
+    stdout.write('    [p]ush local / p[u]ll remote / [s]kip? ');
+    final input = stdin.readLineSync()?.trim().toLowerCase() ?? 's';
+    return switch (input) {
+      'p' => SyncDirection.push,
+      'u' => SyncDirection.pull,
+      _ => SyncDirection.skip,
+    };
   }
 }
 
@@ -627,84 +1049,81 @@ class JiraStatusCommand extends JiraSubcommand {
 
     if (!status.configured) {
       print('Jira: not configured');
-      print('  Run "avo jira setup" to configure.');
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
+      print(hint('avo jira setup', 'to configure connection'));
       return;
     }
 
-    print('Jira: ${status.jiraProjectKey}');
-    print('  URL:          ${status.baseUrl}');
-    print('  Linked tasks: ${status.linkedTasks}');
-    print('  Pending logs: ${status.pendingWorklogs}');
+    final displayName = status.profileName ?? 'default';
+    print('Jira: $displayName');
+    if (status.profileName != null) {
+      print(kvRow('Profile:', status.profileName!));
+    }
+    print(kvRow('Projects:', status.projectKeysList.join(', ')));
+    print(kvRow('URL:', status.baseUrl ?? '-'));
+    print(kvRow('Linked tasks:', '${status.linkedTasks}'));
+    print(kvRow('Pending logs:', '${status.pendingWorklogs}'));
     if (status.lastSyncAt != null) {
-      print('  Last sync:    ${status.lastSyncAt}');
+      print(kvRow('Last sync:', status.lastSyncAt.toString().substring(0, 16)));
     } else {
-      print('  Last sync:    never');
+      print(kvRow('Last sync:', 'never'));
     }
     if (status.lastSyncError != null) {
-      print('  Last error:   ${status.lastSyncError}');
+      print(kvRow('Last error:', status.lastSyncError!));
     }
+    print('');
+    print(hint('avo jira sync', 'to sync now'));
+    print(hint('avo jira sync PROJ-123', 'to sync specific issue'));
   }
 }
 
 class JiraSetupCommand extends JiraSubcommand {
   JiraSetupCommand(super.jiraService) {
-    argParser
-      ..addOption('url', abbr: 'u', help: 'Jira base URL (e.g., https://company.atlassian.net)')
-      ..addOption('project', abbr: 'p', help: 'Jira project key (e.g., PROJ)')
-      ..addOption('credentials', abbr: 'c', help: 'Path to credentials JSON file');
+    argParser.addOption('profile',
+        help: 'Profile name from credentials file (uses default if omitted)');
   }
 
   @override
   String get name => 'setup';
 
   @override
-  String get description => 'Configure Jira connection';
+  String get description => 'Configure Jira connection from a profile';
 
   @override
   Future<void> run() async {
-    final url = argResults?['url'] as String?;
-    final project = argResults?['project'] as String?;
-    final credentials = argResults?['credentials'] as String?;
+    final profileName = argResults?['profile'] as String?;
 
-    if (url == null || project == null || credentials == null) {
-      print('Usage: avo jira setup -u <url> -p <project> -c <credentials>');
+    try {
+      final config = await jiraService.setup(
+        profileName: profileName,
+      );
+      final keys = config.jiraProjectKey
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      print('Jira configured successfully.');
+      if (config.profileName != null) {
+        print(kvRow('Profile:', config.profileName!));
+      }
+      print(kvRow('Projects:', keys.join(', ')));
+      print(kvRow('URL:', config.baseUrl));
       print('');
-      print('  -u  Jira base URL (e.g., https://company.atlassian.net)');
-      print('  -p  Jira project key (e.g., PROJ)');
-      print('  -c  Path to credentials JSON file');
-      return;
+      print(hint('avo jira sync', 'to pull issues and push worklogs'));
+    } on JiraProfileNotFoundException {
+      if (profileName != null) {
+        print('Profile "$profileName" not found in credentials file.');
+      } else {
+        print('No default profile configured.');
+      }
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
+      print(hintPlain('Check your profiles in the credentials file.'));
+    } on FileSystemException catch (e) {
+      print('Could not read credentials file: ${e.message}');
+      print('');
+      print(hint('avo jira init', 'to generate credentials template'));
     }
-
-    final config = await jiraService.setup(
-      baseUrl: url,
-      jiraProjectKey: project,
-      credentialsPath: credentials,
-    );
-    print('Jira configured:');
-    print('  Project:     ${config.jiraProjectKey}');
-    print('  URL:         ${config.baseUrl}');
-    print('  Credentials: ${config.credentialsFilePath}');
   }
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-String _formatTime(DateTime dt) => dt.toString().substring(11, 16);
-
-String _formatDuration(Duration d) {
-  final hours = d.inHours;
-  final minutes = d.inMinutes % 60;
-  if (hours > 0) return '${hours}h ${minutes}m';
-  return '${minutes}m';
-}
-
-String _formatDate(DateTime date) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-  return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
 }

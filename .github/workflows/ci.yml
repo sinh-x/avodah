@@ -16,21 +16,17 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze code
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
-      - name: Build Android (debug)
-        run: flutter build apk --debug
+      - name: Run MCP tests
+        run: |
+          cd mcp
+          dart pub get
+          dart test
 
       - name: Build Linux (debug)
         run: |

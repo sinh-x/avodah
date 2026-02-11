@@ -60,7 +60,13 @@ Future<void> main(List<String> args) async {
     )
       ..addCommand(StartCommand(timerService))
       ..addCommand(StopCommand(timerService))
-      ..addCommand(StatusCommand(timerService))
+      ..addCommand(StatusCommand(
+        timerService: timerService,
+        taskService: taskService,
+        worklogService: worklogService,
+        projectService: projectService,
+        jiraService: jiraService,
+      ))
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))
       ..addCommand(CancelCommand(timerService))
@@ -69,7 +75,7 @@ Future<void> main(List<String> args) async {
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))
-      ..addCommand(JiraCommand(jiraService));
+      ..addCommand(JiraCommand(jiraService, paths));
 
     await runner.run(args);
   } on UsageException catch (e) {
