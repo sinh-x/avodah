@@ -176,7 +176,8 @@ class StatusCommand extends Command<void> {
         final check = task.isDone ? 'x' : ' ';
         final id = task.id.substring(0, 8);
         final time = formatDuration(Duration(milliseconds: task.timeSpent));
-        print('  [$check] $id  ${task.title}  ($time)');
+        final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+        print('  [$check] $id  ${task.title}$issueTag  ($time)');
       }
       if (tasks.length > 5) {
         print(hint('avo task list', 'to see all ${tasks.length} tasks'));
@@ -396,7 +397,8 @@ class TaskListCommand extends TaskSubcommand {
       final check = task.isDone ? 'x' : ' ';
       final id = task.id.substring(0, 8);
       final time = formatDuration(Duration(milliseconds: task.timeSpent));
-      print('  [$check] $id  ${task.title}  ($time)');
+      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+      print('  [$check] $id  ${task.title}$issueTag  ($time)');
     }
     print('');
     print(hint('avo task show <id>', 'to see details'));
@@ -429,7 +431,8 @@ class TaskDoneCommand extends TaskSubcommand {
     try {
       final task = await taskService.done(taskId);
       final time = formatDuration(Duration(milliseconds: task.timeSpent));
-      print('Marked done: "${task.title}"');
+      final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+      print('Marked done: "${task.title}"$issueTag');
       print(kvRow('ID:', task.id.substring(0, 8)));
       print(kvRow('Time spent:', time));
     } on TaskNotFoundException {
@@ -864,29 +867,85 @@ class JiraInitCommand extends Command<void> {
 }
 
 class JiraSyncCommand extends JiraSubcommand {
-  JiraSyncCommand(super.jiraService);
+  JiraSyncCommand(super.jiraService) {
+    argParser.addFlag('dry-run', help: 'Preview changes without applying');
+    argParser.addFlag('interactive', defaultsTo: true,
+        help: 'Prompt for each conflict (disable with --no-interactive)');
+  }
 
   @override
   String get name => 'sync';
 
   @override
-  String get description => 'Sync with Jira (optionally a specific issue)';
+  String get description => 'Sync with Jira (2-way with conflict resolution)';
 
   @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     final issueKey = args.isNotEmpty ? args.first : null;
+    final dryRun = argResults?['dry-run'] as bool? ?? false;
+    final interactive = argResults?['interactive'] as bool? ?? true;
 
-    if (issueKey != null) {
-      print('Syncing issue $issueKey...');
-    } else {
-      print('Syncing with Jira...');
-    }
+    print('Computing sync preview...');
 
     try {
-      final result = await jiraService.sync(issueKey: issueKey);
-      print(kvRow('Pull:', '${result.pull.created} created, ${result.pull.updated} updated'));
-      print(kvRow('Push:', '${result.push.pushed} pushed, ${result.push.failed} failed'));
+      final context = await jiraService.computeSyncPreview(issueKey: issueKey);
+      final preview = context.preview;
+
+      // Display preview
+      print(sectionHeader('SYNC PREVIEW'));
+      print(kvRow('New issues:', '${preview.newRemoteIssues.length}', labelWidth: 16) +
+          (preview.newRemoteIssues.isNotEmpty ? '  (will create local tasks)' : ''));
+      print(kvRow('New local logs:', '${preview.newLocalWorklogs.length}', labelWidth: 16) +
+          (preview.newLocalWorklogs.isNotEmpty ? '  (will push to Jira)' : ''));
+      print(kvRow('New remote logs:', '${preview.newRemoteWorklogs.length}', labelWidth: 16) +
+          (preview.newRemoteWorklogs.isNotEmpty ? '  (will pull from Jira)' : ''));
+      print(kvRow('Mismatches:', '${preview.worklogMismatches.length + preview.titleMismatches.length}', labelWidth: 16) +
+          (preview.hasMismatches ? '  (need resolution)' : ''));
+      print(kvRow('Up to date:', '${preview.upToDateTasks}', labelWidth: 16));
+      print(separator());
+
+      if (!preview.hasChanges) {
+        print('Already in sync.');
+        return;
+      }
+
+      if (dryRun) {
+        _printMismatchDetails(preview);
+        print('');
+        print(hintPlain('Dry run -- no changes applied.'));
+        return;
+      }
+
+      // Resolve mismatches
+      if (preview.hasMismatches) {
+        if (interactive) {
+          _printAndPromptMismatches(preview);
+        } else {
+          print('');
+          print(hintPlain('Non-interactive: skipping ${preview.worklogMismatches.length + preview.titleMismatches.length} mismatch(es).'));
+        }
+      }
+
+      // Execute
+      final result = await jiraService.executeSyncPlan(context);
+
+      print('');
+      print(sectionHeader('SYNC RESULT'));
+      if (result.tasksCreated > 0) print(kvRow('Tasks created:', '${result.tasksCreated}', labelWidth: 18));
+      if (result.worklogsPushed > 0) print(kvRow('Worklogs pushed:', '${result.worklogsPushed}', labelWidth: 18));
+      if (result.worklogsPulled > 0) print(kvRow('Worklogs pulled:', '${result.worklogsPulled}', labelWidth: 18));
+      if (result.mismatchesPushed > 0) print(kvRow('Pushed (conflict):', '${result.mismatchesPushed}', labelWidth: 18));
+      if (result.mismatchesPulled > 0) print(kvRow('Pulled (conflict):', '${result.mismatchesPulled}', labelWidth: 18));
+      if (result.titlesPushed > 0) print(kvRow('Titles pushed:', '${result.titlesPushed}', labelWidth: 18));
+      if (result.titlesPulled > 0) print(kvRow('Titles pulled:', '${result.titlesPulled}', labelWidth: 18));
+      if (result.failed > 0) print(kvRow('Failed:', '${result.failed}', labelWidth: 18));
+      if (result.tasksCreated == 0 && result.worklogsPushed == 0 &&
+          result.worklogsPulled == 0 && result.mismatchesPushed == 0 &&
+          result.mismatchesPulled == 0 && result.titlesPushed == 0 &&
+          result.titlesPulled == 0 && result.failed == 0) {
+        print('  No changes applied.');
+      }
       print('');
       print(hint('avo task list', 'to see synced tasks'));
       print(hint('avo jira status', 'to see sync status'));
@@ -904,6 +963,74 @@ class JiraSyncCommand extends JiraSubcommand {
       print('');
       print(hint('avo jira status', 'to check configuration'));
     }
+  }
+
+  void _printMismatchDetails(SyncPreview preview) {
+    if (preview.worklogMismatches.isNotEmpty) {
+      print('');
+      print('WORKLOG MISMATCHES:');
+      for (final m in preview.worklogMismatches) {
+        final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
+        final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
+        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        final diffs = <String>[];
+        if (m.durationDiffers) diffs.add('Duration differs');
+        if (m.commentDiffers) diffs.add('Comment differs');
+        print('    -> ${diffs.join(', ')}');
+      }
+    }
+
+    if (preview.titleMismatches.isNotEmpty) {
+      print('');
+      print('TITLE MISMATCHES:');
+      for (final m in preview.titleMismatches) {
+        print('  [${m.issueKey}]');
+        print('    Local:   "${m.localTask.title}"');
+        print('    Remote:  "${m.remoteTitle}"');
+      }
+    }
+  }
+
+  void _printAndPromptMismatches(SyncPreview preview) {
+    if (preview.worklogMismatches.isNotEmpty) {
+      print('');
+      print('WORKLOG MISMATCHES:');
+      for (final m in preview.worklogMismatches) {
+        final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
+        final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
+        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        final diffs = <String>[];
+        if (m.durationDiffers) diffs.add('Duration differs');
+        if (m.commentDiffers) diffs.add('Comment differs');
+        print('    -> ${diffs.join(', ')}');
+        m.resolution = _promptResolution();
+      }
+    }
+
+    if (preview.titleMismatches.isNotEmpty) {
+      print('');
+      print('TITLE MISMATCHES:');
+      for (final m in preview.titleMismatches) {
+        print('  [${m.issueKey}]');
+        print('    Local:   "${m.localTask.title}"');
+        print('    Remote:  "${m.remoteTitle}"');
+        m.resolution = _promptResolution();
+      }
+    }
+  }
+
+  SyncDirection _promptResolution() {
+    stdout.write('    [p]ush local / p[u]ll remote / [s]kip? ');
+    final input = stdin.readLineSync()?.trim().toLowerCase() ?? 's';
+    return switch (input) {
+      'p' => SyncDirection.push,
+      'u' => SyncDirection.pull,
+      _ => SyncDirection.skip,
+    };
   }
 }
 
