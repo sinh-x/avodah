@@ -77,7 +77,20 @@ Future<void> main(List<String> args) async {
       ..addCommand(WeekCommand(worklogService: worklogService))
       ..addCommand(JiraCommand(jiraService, paths));
 
-    await runner.run(args);
+    // No args → run status + hint
+    if (args.isEmpty) {
+      await runner.run(['status']);
+      print('');
+      print('  -> avo --help              for all commands');
+    }
+    // `avo jira` with no subcommand → run jira status + hint
+    else if (args.length == 1 && args.first == 'jira') {
+      await runner.run(['jira', 'status']);
+      print('');
+      print('  -> avo jira --help         for all subcommands');
+    } else {
+      await runner.run(args);
+    }
   } on UsageException catch (e) {
     print(e);
     exit(64);

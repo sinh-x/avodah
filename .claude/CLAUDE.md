@@ -2,48 +2,66 @@
 
 ## Build Commands
 
-**IMPORTANT**: This is a Flutter project. Always use `flutter` commands, NOT `dart` commands.
+This is a **multi-package** project:
 
 ```bash
-# ✅ CORRECT - Use these commands
+# Flutter app (root)
 flutter pub get
 flutter pub run build_runner build --delete-conflicting-outputs
 flutter test
-flutter run
 
-# ❌ WRONG - These will fail
-dart pub get          # ERROR: Flutter SDK not available
-dart run build_runner # ERROR: Flutter SDK not available
+# MCP/CLI subpackage (uses dart, NOT flutter)
+cd mcp && dart pub get
+cd mcp && dart test
+dart run mcp/bin/avo.dart       # CLI entry point
+dart run mcp/bin/server.dart    # MCP server entry point
 ```
 
 ## Project Structure
 
-- `lib/core/` - Core utilities (CRDT, storage, etc.)
-- `lib/features/` - Feature modules (tasks, projects, tags, etc.)
-- `test/` - Mirrors lib/ structure
+```
+avodah/
+├── lib/                        # Flutter app
+│   ├── core/                   # CRDT, storage utilities
+│   └── features/               # Feature modules (tasks, projects, tags, timer, settings)
+├── packages/avodah_core/       # Shared core package (documents, CRDT)
+├── mcp/                        # CLI + MCP server (pure Dart)
+│   ├── bin/                    # Entry points (avo.dart, server.dart)
+│   ├── lib/cli/                # CLI command classes
+│   ├── lib/services/           # Business logic (Timer, Task, Worklog, Project, Jira)
+│   ├── lib/storage/            # Drift database
+│   ├── lib/config/             # Jira profile config
+│   └── lib/tools/              # MCP server tool handlers
+├── test/                       # Flutter app tests (mirrors lib/)
+└── docs/design/                # Design specs
+```
 
 ## CRDT Document Pattern
 
-When creating new CRDT documents, follow the existing pattern:
-
 1. **Fields class** - Constants for field keys
-2. **Document class** - Extends `CrdtDocument<T>`
+2. **Document class** - Extends `CrdtDocument<T>` with `.create()`, `.fromDrift()`, `.fromState()`
 3. **Model class** - Immutable UI model
 
 Reference: `lib/features/tasks/models/task_document.dart`
 
+## Service Pattern (mcp/)
+
+- Thin wrappers with `db` + `clock` injection
+- Upsert via `insertOnConflictUpdate`
+- ID prefix matching: exact first, then prefix, throw on ambiguous
+
 ## Testing
 
-- Run all tests: `flutter test`
-- Run specific test: `flutter test test/path/to/test.dart`
-- Tests should cover: creation, fields, conversion, soft delete, CRDT merge
+- Flutter app: `flutter test`
+- MCP/CLI: `cd mcp && dart test`
+- 92 tests across 5 service suites (Timer, Task, Worklog, Project, Jira)
 
 ## Current Phase
 
-Phase 2 (CRDT Foundation) complete. Phase 3 (Core Features) next.
+Phase 3 (Core Features) complete. Current focus: CLI polish and E2E validation.
 
 ## Scope (MVP)
 
 - **Platform**: Linux/NixOS only
-- **Integration**: Jira only (external credentials file)
-- **Deferred**: GitHub, TaskRepeatCfg, Note, Android/iOS
+- **Integration**: Jira only (profile-based credentials)
+- **Deferred**: GitHub, TaskRepeatCfg, Note, Android/iOS, Flutter UI

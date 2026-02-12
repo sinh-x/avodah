@@ -127,8 +127,20 @@
           av-test = pkgs.writeShellScriptBin "av-test" "flutter test";
           av-analyze = pkgs.writeShellScriptBin "av-analyze" "flutter analyze";
           av-clean = pkgs.writeShellScriptBin "av-clean" "flutter clean && flutter pub get";
+          av-build-cli = pkgs.writeShellScriptBin "av-build-cli" ''
+            cd "$(git rev-parse --show-toplevel)/mcp" && dart compile exe bin/avo.dart -o bin/avo
+          '';
           avo = pkgs.writeShellScriptBin "avo" ''
-            cd "$(git rev-parse --show-toplevel)/mcp" && dart run bin/avo.dart "$@"
+            MCP_DIR="$(git rev-parse --show-toplevel)/mcp"
+            BIN="$MCP_DIR/bin/avo"
+
+            # Recompile if binary is missing or any dart source is newer
+            if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/avo.dart" -newer "$BIN" 2>/dev/null | head -1)" ]; then
+              echo "Compiling avo..." >&2
+              (cd "$MCP_DIR" && dart compile exe bin/avo.dart -o bin/avo) >&2
+            fi
+
+            exec "$BIN" "$@"
           '';
         in
         {
@@ -151,6 +163,7 @@
               av-test
               av-analyze
               av-clean
+              av-build-cli
               avo
             ] ++ deps;
 
@@ -175,8 +188,9 @@
               echo "  av-test          - Run tests"
               echo "  av-analyze       - Run analyzer"
               echo "  av-clean         - Clean and get deps"
+              echo "  av-build-cli     - Compile native avo binary"
               echo ""
-              echo "  avo <command>    - Run Avodah CLI (start, stop, status, ...)"
+              echo "  avo <command>    - Run Avodah CLI (native, auto-compiles)"
               echo ""
             '';
 
