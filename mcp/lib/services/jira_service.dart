@@ -918,6 +918,22 @@ class JiraService {
     return map;
   }
 
+  /// Loads the username from the credentials file for the current profile.
+  ///
+  /// Returns null if not configured or credentials can't be loaded.
+  Future<String?> getProfileUsername() async {
+    final config = await getConfig();
+    if (config == null) return null;
+
+    try {
+      final profileConfig = await JiraProfileConfig.load(config.credentialsFilePath);
+      final profile = profileConfig.getProfile(config.profileName);
+      return profile?.username;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Returns the current Jira integration status.
   Future<JiraStatus> status() async {
     final config = await getConfig();

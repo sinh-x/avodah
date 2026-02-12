@@ -222,15 +222,17 @@ class StatusCommand extends Command<void> {
       print(hint('avo jira init', 'to generate credentials template'));
       print(hint('avo jira setup', 'to configure connection'));
     } else {
-      if (jira.profileName != null) {
-        print(kvRow('Profile:', jira.profileName!));
-      }
-      print(kvRow('Projects:', jira.projectKeysList.join(', ')));
-      print(kvRow('URL:', jira.baseUrl ?? '-'));
+      final username = await jiraService.getProfileUsername();
+      print(formatJiraProfile(
+        profileName: jira.profileName ?? 'default',
+        baseUrl: jira.baseUrl ?? '-',
+        projectKeys: jira.projectKeysList,
+        username: username,
+      ));
       print(kvRow('Linked tasks:', '${jira.linkedTasks}'));
       print(kvRow('Pending logs:', '${jira.pendingWorklogs}'));
       if (jira.lastSyncAt != null) {
-        print(kvRow('Last sync:', jira.lastSyncAt.toString().substring(0, 16)));
+        print(kvRow('Last sync:', formatRelativeDate(jira.lastSyncAt!)));
       } else {
         print(kvRow('Last sync:', 'never'));
       }
@@ -1195,7 +1197,7 @@ class JiraCommand extends Command<void> {
     addSubcommand(JiraInitCommand(paths));
     addSubcommand(JiraSyncCommand(jiraService));
     addSubcommand(JiraStatusCommand(jiraService));
-    addSubcommand(JiraSetupCommand(jiraService));
+    addSubcommand(JiraSetupCommand(jiraService, paths));
   }
 
   @override
@@ -1220,6 +1222,7 @@ class JiraInitCommand extends Command<void> {
   @override
   Future<void> run() async {
     final credPath = paths.jiraCredentialsPath;
+    final examplePath = '${credPath}.example';
     final file = File(credPath);
 
     if (await file.exists()) {
@@ -1234,7 +1237,7 @@ class JiraInitCommand extends Command<void> {
     // Ensure config directory exists
     await Directory(paths.configDir).create(recursive: true);
 
-    final template = jsonEncode({
+    final templateData = {
       '_comment':
           'Jira profiles for Avodah. Get your token at: https://id.atlassian.com/manage-profile/security/api-tokens',
       'jira_profiles': {
@@ -1249,22 +1252,27 @@ class JiraInitCommand extends Command<void> {
       'default_profiles': {
         'jira': 'work',
       },
-    });
+    };
 
     // Pretty-print it
     const encoder = JsonEncoder.withIndent('  ');
-    final decoded = jsonDecode(template);
-    await file.writeAsString('${encoder.convert(decoded)}\n');
+    final content = '${encoder.convert(templateData)}\n';
+    await file.writeAsString(content);
 
-    print('Created Jira credentials template:');
-    print(kvRow('Path:', credPath));
+    // Also create .example file (safe to commit)
+    await File(examplePath).writeAsString(content);
+
+    print('Created Jira credentials files:');
+    print(kvRow('Credentials:', credPath));
+    print(kvRow('Example:', examplePath));
     print('');
     print('Next steps:');
-    print('  1. Edit the file with your Jira profiles');
+    print('  1. Edit the credentials file with your Jira details');
     print('  2. Get an API token at:');
     print('     https://id.atlassian.com/manage-profile/security/api-tokens');
     print('  3. Run setup to connect:');
     print('');
+    print(hintPlain('The .example file is safe to commit to version control.'));
     print(hint('avo jira setup', 'uses default profile'));
     print(hint('avo jira setup --profile work', 'uses named profile'));
   }
@@ -1461,15 +1469,19 @@ class JiraStatusCommand extends JiraSubcommand {
 
     final displayName = status.profileName ?? 'default';
     print('Jira: $displayName');
-    if (status.profileName != null) {
-      print(kvRow('Profile:', status.profileName!));
-    }
-    print(kvRow('Projects:', status.projectKeysList.join(', ')));
-    print(kvRow('URL:', status.baseUrl ?? '-'));
+
+    // Load username from credentials file
+    final username = await jiraService.getProfileUsername();
+    print(formatJiraProfile(
+      profileName: status.profileName ?? 'default',
+      baseUrl: status.baseUrl ?? '-',
+      projectKeys: status.projectKeysList,
+      username: username,
+    ));
     print(kvRow('Linked tasks:', '${status.linkedTasks}'));
     print(kvRow('Pending logs:', '${status.pendingWorklogs}'));
     if (status.lastSyncAt != null) {
-      print(kvRow('Last sync:', status.lastSyncAt.toString().substring(0, 16)));
+      print(kvRow('Last sync:', formatRelativeDate(status.lastSyncAt!)));
     } else {
       print(kvRow('Last sync:', 'never'));
     }
@@ -1483,7 +1495,9 @@ class JiraStatusCommand extends JiraSubcommand {
 }
 
 class JiraSetupCommand extends JiraSubcommand {
-  JiraSetupCommand(super.jiraService) {
+  final AvodahPaths paths;
+
+  JiraSetupCommand(super.jiraService, this.paths) {
     argParser.addOption('profile',
         help: 'Profile name from credentials file (uses default if omitted)');
   }
@@ -1492,27 +1506,50 @@ class JiraSetupCommand extends JiraSubcommand {
   String get name => 'setup';
 
   @override
-  String get description => 'Configure Jira connection from a profile';
+  String get description => 'Configure Jira connection (interactive or from profile)';
 
   @override
   Future<void> run() async {
     final profileName = argResults?['profile'] as String?;
 
+    // If --profile given, use existing file-based flow
+    if (profileName != null) {
+      await _setupFromProfile(profileName);
+      return;
+    }
+
+    // Check if credentials file exists
+    final credFile = File(paths.jiraCredentialsPath);
+    if (await credFile.exists()) {
+      // File exists — try default profile, or offer interactive
+      try {
+        await _setupFromProfile(null);
+        return;
+      } on JiraProfileNotFoundException {
+        // No default profile — fall through to interactive
+      }
+    }
+
+    // Interactive wizard
+    await _interactiveSetup();
+  }
+
+  Future<void> _setupFromProfile(String? profileName) async {
     try {
-      final config = await jiraService.setup(
-        profileName: profileName,
-      );
+      final config = await jiraService.setup(profileName: profileName);
       final keys = config.jiraProjectKey
           .split(',')
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
+      final username = await jiraService.getProfileUsername();
       print('Jira configured successfully.');
-      if (config.profileName != null) {
-        print(kvRow('Profile:', config.profileName!));
-      }
-      print(kvRow('Projects:', keys.join(', ')));
-      print(kvRow('URL:', config.baseUrl));
+      print(formatJiraProfile(
+        profileName: config.profileName ?? 'default',
+        baseUrl: config.baseUrl,
+        projectKeys: keys,
+        username: username,
+      ));
       print('');
       print(hint('avo jira sync', 'to pull issues and push worklogs'));
     } on JiraProfileNotFoundException {
@@ -1524,10 +1561,101 @@ class JiraSetupCommand extends JiraSubcommand {
       print('');
       print(hint('avo jira init', 'to generate credentials template'));
       print(hintPlain('Check your profiles in the credentials file.'));
+      rethrow;
     } on FileSystemException catch (e) {
       print('Could not read credentials file: ${e.message}');
       print('');
       print(hint('avo jira init', 'to generate credentials template'));
     }
+  }
+
+  Future<void> _interactiveSetup() async {
+    print('Jira Setup Wizard');
+    print(separator());
+    print('');
+
+    stdout.write('  Profile name [work]: ');
+    final profileKey = stdin.readLineSync()?.trim();
+    final key = (profileKey == null || profileKey.isEmpty) ? 'work' : profileKey;
+
+    stdout.write('  Jira base URL (e.g., https://company.atlassian.net): ');
+    final baseUrl = stdin.readLineSync()?.trim() ?? '';
+    if (baseUrl.isEmpty) {
+      print('Base URL is required.');
+      return;
+    }
+
+    stdout.write('  Username/email: ');
+    final username = stdin.readLineSync()?.trim() ?? '';
+    if (username.isEmpty) {
+      print('Username is required.');
+      return;
+    }
+
+    stdout.write('  API token: ');
+    final apiToken = stdin.readLineSync()?.trim() ?? '';
+    if (apiToken.isEmpty) {
+      print('API token is required.');
+      return;
+    }
+
+    stdout.write('  Project keys (comma-separated, e.g., PROJ,TEAM): ');
+    final keysInput = stdin.readLineSync()?.trim() ?? '';
+    if (keysInput.isEmpty) {
+      print('At least one project key is required.');
+      return;
+    }
+    final projectKeys =
+        keysInput.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
+    // Build credentials JSON
+    final credPath = paths.jiraCredentialsPath;
+    final credFile = File(credPath);
+    Map<String, dynamic> existingJson = {};
+
+    if (await credFile.exists()) {
+      try {
+        existingJson = jsonDecode(await credFile.readAsString()) as Map<String, dynamic>;
+      } catch (_) {
+        // Ignore parse errors, start fresh
+      }
+    }
+
+    // Add/update profile
+    final profiles = (existingJson['jira_profiles'] as Map<String, dynamic>?) ?? {};
+    profiles[key] = {
+      'name': key,
+      'base_url': baseUrl,
+      'username': username,
+      'api_token': apiToken,
+      'project_keys': projectKeys,
+    };
+    existingJson['jira_profiles'] = profiles;
+    existingJson['default_profiles'] = {'jira': key};
+
+    // Write credentials file
+    await Directory(paths.configDir).create(recursive: true);
+    const encoder = JsonEncoder.withIndent('  ');
+    await credFile.writeAsString('${encoder.convert(existingJson)}\n');
+
+    // Now run setup from the newly created profile
+    final config = await jiraService.setup(profileName: key);
+    final configKeys = config.jiraProjectKey
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    print('');
+    print('Jira configured successfully.');
+    print(formatJiraProfile(
+      profileName: key,
+      baseUrl: baseUrl,
+      projectKeys: configKeys,
+      username: username,
+    ));
+    print('');
+    print(hintPlain('Credentials saved to: $credPath'));
+    print(hint('avo jira sync', 'to pull issues and push worklogs'));
   }
 }
