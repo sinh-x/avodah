@@ -76,6 +76,39 @@ String formatDate(DateTime date) {
   return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
 }
 
+/// Formats a DateTime as a relative string like "2 days ago" or "just now".
+String formatRelativeDate(DateTime date) {
+  final now = DateTime.now();
+  final diff = now.difference(date);
+
+  if (diff.inSeconds < 60) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays == 1) return 'yesterday';
+  if (diff.inDays < 7) return '${diff.inDays} days ago';
+  return formatDate(date);
+}
+
+/// Formats a DateTime as "Mon, Feb 10 14:30" for display.
+String formatDateTime(DateTime date) {
+  return '${formatDate(date)} ${formatTime(date)}';
+}
+
+/// Parses human-friendly duration strings like "1h30m", "2h 15m", "30m".
+/// Returns null if the string can't be parsed.
+Duration? parseDuration(String input) {
+  final normalized = input.replaceAll(' ', '');
+  final regex = RegExp(r'^(?:(\d+)h)?(?:(\d+)m)?$');
+  final match = regex.firstMatch(normalized);
+  if (match == null) return null;
+
+  final hours = int.tryParse(match.group(1) ?? '') ?? 0;
+  final minutes = int.tryParse(match.group(2) ?? '') ?? 0;
+
+  if (hours == 0 && minutes == 0) return null;
+  return Duration(hours: hours, minutes: minutes);
+}
+
 /// Horizontal bar chart segment.
 String buildBar(int value, int max, {int width = 20}) {
   final filled = max > 0 ? (value * width ~/ max) : 0;

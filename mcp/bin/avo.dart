@@ -14,6 +14,8 @@
 ///   avo task list             List tasks
 ///   avo task done <id>        Mark task done
 ///
+///   avo log <task> <dur>       Log time manually
+///   avo recent                Recent worklogs
 ///   avo today                 Today's summary
 ///   avo week                  This week's summary
 ///
@@ -70,9 +72,11 @@ Future<void> main(List<String> args) async {
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))
       ..addCommand(CancelCommand(timerService))
-      ..addCommand(TaskCommand(taskService, worklogService))
+      ..addCommand(TaskCommand(taskService, worklogService, projectService))
       ..addCommand(ProjectCommand(projectService))
       ..addCommand(WorklogCommand(worklogService, taskService))
+      ..addCommand(LogCommand(worklogService, taskService))
+      ..addCommand(RecentCommand(worklogService, taskService))
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))
