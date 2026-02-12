@@ -172,6 +172,10 @@
               echo ""
               echo "  avo <command>     - Run Avodah CLI (native, auto-compiles)"
               echo ""
+
+              # Clear leaked terminal escape sequences (fish + direnv timing issue)
+              sleep 0.1
+              printf '\r\033[K'
             '';
 
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath deps;
