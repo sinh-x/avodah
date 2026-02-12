@@ -120,14 +120,14 @@
           deps = linuxDeps pkgs;
 
           # Dev command scripts
-          av-run = pkgs.writeShellScriptBin "av-run" "flutter run -d linux";
-          av-run-android = pkgs.writeShellScriptBin "av-run-android" "flutter run -d android";
-          av-build = pkgs.writeShellScriptBin "av-build" "flutter build linux --release";
-          av-build-android = pkgs.writeShellScriptBin "av-build-android" "flutter build apk --release";
-          av-test = pkgs.writeShellScriptBin "av-test" "flutter test";
-          av-analyze = pkgs.writeShellScriptBin "av-analyze" "flutter analyze";
-          av-clean = pkgs.writeShellScriptBin "av-clean" "flutter clean && flutter pub get";
-          av-build-cli = pkgs.writeShellScriptBin "av-build-cli" ''
+          avo-run = pkgs.writeShellScriptBin "avo-run" "flutter run -d linux";
+          avo-run-android = pkgs.writeShellScriptBin "avo-run-android" "flutter run -d android";
+          avo-build = pkgs.writeShellScriptBin "avo-build" "flutter build linux --release";
+          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "flutter build apk --release";
+          avo-test = pkgs.writeShellScriptBin "avo-test" "flutter test";
+          avo-analyze = pkgs.writeShellScriptBin "avo-analyze" "flutter analyze";
+          avo-clean = pkgs.writeShellScriptBin "avo-clean" "flutter clean && flutter pub get";
+          avo-build-cli = pkgs.writeShellScriptBin "avo-build-cli" ''
             cd "$(git rev-parse --show-toplevel)/mcp" && dart compile exe bin/avo.dart -o bin/avo
           '';
           avo = pkgs.writeShellScriptBin "avo" ''
@@ -156,14 +156,14 @@
               pkgs.pkg-config
               pkgs.clang
               # Dev commands
-              av-run
-              av-run-android
-              av-build
-              av-build-android
-              av-test
-              av-analyze
-              av-clean
-              av-build-cli
+              avo-run
+              avo-run-android
+              avo-build
+              avo-build-android
+              avo-test
+              avo-analyze
+              avo-clean
+              avo-build-cli
               avo
             ] ++ deps;
 
@@ -177,20 +177,20 @@
             shellHook = ''
               echo "Avodah Development Environment"
               echo ""
-              echo "Flutter: $(flutter --version --machine 2>/dev/null | grep -o '"frameworkVersion":"[^"]*"' | cut -d'"' -f4)"
-              echo "Dart: $(dart --version 2>&1 | head -1)"
+              echo "Flutter: $(flutter --version --machine 2>/dev/null | ${pkgs.jq}/bin/jq -r '.frameworkVersion // "unknown"')"
+              echo "Dart:    $(dart --version 2>&1 | head -1)"
               echo ""
               echo "Commands:"
-              echo "  av-run           - Run on Linux desktop"
-              echo "  av-run-android   - Run on Android device/emulator"
-              echo "  av-build         - Build Linux release"
-              echo "  av-build-android - Build Android APK"
-              echo "  av-test          - Run tests"
-              echo "  av-analyze       - Run analyzer"
-              echo "  av-clean         - Clean and get deps"
-              echo "  av-build-cli     - Compile native avo binary"
+              echo "  avo-run           - Run on Linux desktop"
+              echo "  avo-run-android   - Run on Android device/emulator"
+              echo "  avo-build         - Build Linux release"
+              echo "  avo-build-android - Build Android APK"
+              echo "  avo-test          - Run tests"
+              echo "  avo-analyze       - Run analyzer"
+              echo "  avo-clean         - Clean and get deps"
+              echo "  avo-build-cli     - Compile native avo binary"
               echo ""
-              echo "  avo <command>    - Run Avodah CLI (native, auto-compiles)"
+              echo "  avo <command>     - Run Avodah CLI (native, auto-compiles)"
               echo ""
             '';
 
