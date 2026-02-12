@@ -403,6 +403,13 @@ class TaskListCommand extends TaskSubcommand {
 
   TaskListCommand(super.taskService, this.worklogService) {
     argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
+    argParser.addFlag('local', abbr: 'l',
+        help: 'Show only local tasks (no external link)');
+    argParser.addOption('source', abbr: 's',
+        help: 'Filter by integration source (jira, github)',
+        allowed: ['jira', 'github']);
+    argParser.addOption('profile',
+        help: 'Filter by Jira profile (project key prefix, e.g. AG)');
   }
 
   @override
@@ -414,10 +421,33 @@ class TaskListCommand extends TaskSubcommand {
   @override
   Future<void> run() async {
     final includeCompleted = argResults?['all'] as bool? ?? false;
-    final tasks = await taskService.list(includeCompleted: includeCompleted);
+    final localOnly = argResults?['local'] as bool? ?? false;
+    final source = argResults?['source'] as String?;
+    final profile = argResults?['profile'] as String?;
+    var tasks = await taskService.list(includeCompleted: includeCompleted);
+
+    // Apply filters (use issueId directly — hasIssueLink requires issueProviderId too)
+    if (localOnly) {
+      tasks = tasks.where((t) => t.issueId == null).toList();
+    } else if (source != null) {
+      final type = IssueType.fromValue(source);
+      tasks = tasks.where((t) => t.issueType == type).toList();
+    }
+    if (profile != null) {
+      final prefix = profile.toUpperCase();
+      tasks = tasks.where((t) =>
+          t.issueId != null && t.issueId!.toUpperCase().startsWith(prefix)).toList();
+    }
 
     if (tasks.isEmpty) {
-      print(includeCompleted ? 'No tasks.' : 'No active tasks.');
+      final filterDesc = localOnly
+          ? 'local '
+          : source != null
+              ? '$source '
+              : '';
+      print(includeCompleted
+          ? 'No ${filterDesc}tasks.'
+          : 'No active ${filterDesc}tasks.');
       print('');
       if (!includeCompleted) {
         print(hint('avo task add <title>', 'to create one'));
@@ -427,8 +457,16 @@ class TaskListCommand extends TaskSubcommand {
     }
 
     final timeByTask = await worklogService.timeByTask();
-    final label = includeCompleted ? 'All Tasks' : 'Active Tasks';
-    print('$label (${tasks.length}):');
+    final filterLabel = localOnly
+        ? 'Local'
+        : source != null
+            ? source[0].toUpperCase() + source.substring(1)
+            : profile != null
+                ? 'Profile: $profile'
+                : includeCompleted
+                    ? 'All'
+                    : 'Active';
+    print('$filterLabel Tasks (${tasks.length}):');
     for (final task in tasks) {
       final check = task.isDone ? 'x' : ' ';
       final id = task.id.substring(0, 8);
@@ -596,7 +634,7 @@ class TaskShowCommand extends TaskSubcommand {
 
       print('Task: "${task.title}"');
       print(kvRow('ID:', task.id));
-      if (task.hasIssueLink && task.issueStatus != null) {
+      if (task.issueId != null && task.issueStatus != null) {
         print(kvRow('Status:', '$status (Jira: ${task.issueStatus})'));
       } else {
         print(kvRow('Status:', status));
@@ -607,8 +645,9 @@ class TaskShowCommand extends TaskSubcommand {
       if (task.description != null) {
         print(kvRow('Description:', task.description!));
       }
-      // Use Jira created time for Jira-linked tasks, fall back to local
-      final created = task.issueCreated ?? task.createdTimestamp;
+      // Use Jira created time for linked tasks, fall back to local
+      final created = (task.issueId != null ? task.issueCreated : null)
+          ?? task.createdTimestamp;
       print(kvRow('Created:', created != null
           ? formatRelativeDate(created)
           : 'unknown'));
@@ -623,7 +662,7 @@ class TaskShowCommand extends TaskSubcommand {
       if (task.tagIds.isNotEmpty) {
         print(kvRow('Tags:', task.tagIds.join(', ')));
       }
-      if (task.hasIssueLink) {
+      if (task.issueId != null) {
         print(kvRow('Issue:', task.issueId!));
         final syncStatus = task.issueLastUpdated != null
             ? 'synced ${formatRelativeDate(task.issueLastUpdated!)}'
