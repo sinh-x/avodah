@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:dart_console/dart_console.dart';
 import 'package:avodah_core/avodah_core.dart';
 
 import '../config/paths.dart';
@@ -1280,6 +1281,8 @@ class JiraInitCommand extends Command<void> {
 
 class JiraSyncCommand extends JiraSubcommand {
   JiraSyncCommand(super.jiraService) {
+    argParser.addOption('profile',
+        help: 'Switch to a named profile before syncing');
     argParser.addFlag('dry-run', help: 'Preview changes without applying');
     argParser.addFlag('interactive', defaultsTo: true,
         help: 'Prompt for each conflict (disable with --no-interactive)');
@@ -1293,6 +1296,11 @@ class JiraSyncCommand extends JiraSubcommand {
 
   @override
   Future<void> run() async {
+    final profileName = argResults?['profile'] as String?;
+    if (profileName != null) {
+      await jiraService.setup(profileName: profileName);
+    }
+
     final args = argResults?.rest ?? [];
     final issueKey = args.isNotEmpty ? args.first : null;
     final dryRun = argResults?['dry-run'] as bool? ?? false;
@@ -1457,9 +1465,9 @@ class JiraStatusCommand extends JiraSubcommand {
 
   @override
   Future<void> run() async {
-    final status = await jiraService.status();
+    final statuses = await jiraService.statusAll();
 
-    if (!status.configured) {
+    if (statuses.isEmpty) {
       print('Jira: not configured');
       print('');
       print(hint('avo jira init', 'to generate credentials template'));
@@ -1467,30 +1475,29 @@ class JiraStatusCommand extends JiraSubcommand {
       return;
     }
 
-    final displayName = status.profileName ?? 'default';
-    print('Jira: $displayName');
+    for (var i = 0; i < statuses.length; i++) {
+      final status = statuses[i];
+      if (i > 0) print('');
 
-    // Load username from credentials file
-    final username = await jiraService.getProfileUsername();
-    print(formatJiraProfile(
-      profileName: status.profileName ?? 'default',
-      baseUrl: status.baseUrl ?? '-',
-      projectKeys: status.projectKeysList,
-      username: username,
-    ));
-    print(kvRow('Linked tasks:', '${status.linkedTasks}'));
-    print(kvRow('Pending logs:', '${status.pendingWorklogs}'));
-    if (status.lastSyncAt != null) {
-      print(kvRow('Last sync:', formatRelativeDate(status.lastSyncAt!)));
-    } else {
-      print(kvRow('Last sync:', 'never'));
-    }
-    if (status.lastSyncError != null) {
-      print(kvRow('Last error:', status.lastSyncError!));
+      print(formatJiraProfile(
+        profileName: status.profileName ?? 'default',
+        baseUrl: status.baseUrl ?? '-',
+        projectKeys: status.projectKeysList,
+      ));
+      print(kvRow('Linked tasks:', '${status.linkedTasks}'));
+      print(kvRow('Pending logs:', '${status.pendingWorklogs}'));
+      if (status.lastSyncAt != null) {
+        print(kvRow('Last sync:', formatRelativeDate(status.lastSyncAt!)));
+      } else {
+        print(kvRow('Last sync:', 'never'));
+      }
+      if (status.lastSyncError != null) {
+        print(kvRow('Last error:', status.lastSyncError!));
+      }
     }
     print('');
     print(hint('avo jira sync', 'to sync now'));
-    print(hint('avo jira sync PROJ-123', 'to sync specific issue'));
+    print(hint('avo jira sync --profile X', 'to sync a specific profile'));
   }
 }
 
@@ -1510,119 +1517,212 @@ class JiraSetupCommand extends JiraSubcommand {
 
   @override
   Future<void> run() async {
-    final profileName = argResults?['profile'] as String?;
+    final profileArg = argResults?['profile'] as String?;
+    await _interactiveSetup(profileArg);
+  }
 
-    // If --profile given, use existing file-based flow
-    if (profileName != null) {
-      await _setupFromProfile(profileName);
-      return;
-    }
-
-    // Check if credentials file exists
+  /// Loads an existing profile from the credentials file, returning null
+  /// if the file doesn't exist or the profile isn't found.
+  Future<JiraProfile?> _loadExistingProfile(String profileName) async {
     final credFile = File(paths.jiraCredentialsPath);
-    if (await credFile.exists()) {
-      // File exists — try default profile, or offer interactive
-      try {
-        await _setupFromProfile(null);
-        return;
-      } on JiraProfileNotFoundException {
-        // No default profile — fall through to interactive
-      }
-    }
-
-    // Interactive wizard
-    await _interactiveSetup();
-  }
-
-  Future<void> _setupFromProfile(String? profileName) async {
+    if (!await credFile.exists()) return null;
     try {
-      final config = await jiraService.setup(profileName: profileName);
-      final keys = config.jiraProjectKey
-          .split(',')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      final username = await jiraService.getProfileUsername();
-      print('Jira configured successfully.');
-      print(formatJiraProfile(
-        profileName: config.profileName ?? 'default',
-        baseUrl: config.baseUrl,
-        projectKeys: keys,
-        username: username,
-      ));
-      print('');
-      print(hint('avo jira sync', 'to pull issues and push worklogs'));
-    } on JiraProfileNotFoundException {
-      if (profileName != null) {
-        print('Profile "$profileName" not found in credentials file.');
-      } else {
-        print('No default profile configured.');
-      }
-      print('');
-      print(hint('avo jira init', 'to generate credentials template'));
-      print(hintPlain('Check your profiles in the credentials file.'));
-      rethrow;
-    } on FileSystemException catch (e) {
-      print('Could not read credentials file: ${e.message}');
-      print('');
-      print(hint('avo jira init', 'to generate credentials template'));
+      final json = jsonDecode(await credFile.readAsString()) as Map<String, dynamic>;
+      final config = JiraProfileConfig.fromJson(json);
+      return config.getProfile(profileName);
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<void> _interactiveSetup() async {
+  final _console = Console();
+
+  /// Reads a line with arrow key / Home / End / backspace / delete support.
+  /// Handles wrapping when input exceeds terminal width using ANSI escapes
+  /// for cursor positioning. Uses dart_console's readKey() for keystrokes.
+  String? _readLine(String prompt) {
+    stdout.write(prompt);
+    final width = _console.windowWidth;
+    final buf = <int>[];
+    var cursor = 0;
+    // Logical position of the screen cursor (chars from prompt-start row col 0).
+    // After writing the prompt the cursor sits at promptLen.
+    var screenPos = prompt.length;
+
+    stdin.echoMode = false;
+    stdin.lineMode = false;
+
+    try {
+      while (true) {
+        final key = _console.readKey();
+
+        if (key.controlChar == ControlCharacter.enter) {
+          stdout.writeln();
+          return String.fromCharCodes(buf);
+        } else if (key.controlChar == ControlCharacter.ctrlC) {
+          stdout.writeln();
+          return null;
+        } else if (key.controlChar == ControlCharacter.backspace) {
+          if (cursor > 0) {
+            buf.removeAt(cursor - 1);
+            cursor--;
+            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+          }
+        } else if (key.controlChar == ControlCharacter.delete) {
+          if (cursor < buf.length) {
+            buf.removeAt(cursor);
+            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+          }
+        } else if (key.controlChar == ControlCharacter.arrowLeft) {
+          if (cursor > 0) {
+            cursor--;
+            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+          }
+        } else if (key.controlChar == ControlCharacter.arrowRight) {
+          if (cursor < buf.length) {
+            cursor++;
+            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+          }
+        } else if (key.controlChar == ControlCharacter.home) {
+          cursor = 0;
+          screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+        } else if (key.controlChar == ControlCharacter.end) {
+          cursor = buf.length;
+          screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+        } else if (key.controlChar == ControlCharacter.none &&
+            key.char.isNotEmpty) {
+          final code = key.char.codeUnitAt(0);
+          if (code >= 32) {
+            buf.insert(cursor, code);
+            cursor++;
+            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
+          }
+        }
+      }
+    } finally {
+      stdin.echoMode = true;
+      stdin.lineMode = true;
+    }
+  }
+
+  /// Clears display, rewrites prompt + buffer, positions cursor.
+  /// [screenPos] is where the terminal cursor currently sits (logical chars
+  /// from prompt-start row, col 0). Returns the new screenPos.
+  int _rlRedraw(
+      String prompt, List<int> buf, int cursor, int width, int screenPos) {
+    // 1. Move back to start of prompt from current screen position
+    final rowsUp = screenPos ~/ width;
+    if (rowsUp > 0) stdout.write('\x1B[${rowsUp}A');
+    stdout.write('\r');
+
+    // 2. Clear everything and rewrite
+    stdout.write('\x1B[J');
+    stdout.write(prompt);
+    stdout.write(String.fromCharCodes(buf));
+
+    // 3. Position cursor: move from end-of-text back to target
+    final endPos = prompt.length + buf.length;
+    final targetPos = prompt.length + cursor;
+    final rowsBack = (endPos ~/ width) - (targetPos ~/ width);
+    if (rowsBack > 0) stdout.write('\x1B[${rowsBack}A');
+    stdout.write('\x1B[${(targetPos % width) + 1}G');
+
+    return targetPos;
+  }
+
+  /// Prompts for a value with an optional current default shown in brackets.
+  /// Returns the current value if the user presses Enter on a non-empty default.
+  String? _prompt(String label, {String? current, bool mask = false}) {
+    final display = current != null && current.isNotEmpty
+        ? (mask
+            ? '****${current.substring((current.length - 4).clamp(0, current.length))}'
+            : current)
+        : null;
+    final suffix = display != null ? ' [$display]' : '';
+    final input = _readLine('  $label$suffix: ')?.trim();
+    if (input == null || input.isEmpty) return current;
+    return input;
+  }
+
+  /// Prompts for a required value, re-prompting until non-empty.
+  String _promptRequired(String label, {String? current, bool mask = false}) {
+    while (true) {
+      final result = _prompt(label, current: current, mask: mask);
+      if (result != null && result.isNotEmpty) return result;
+      print('  $label is required.');
+    }
+  }
+
+  Future<void> _interactiveSetup(String? presetProfile) async {
     print('Jira Setup Wizard');
     print(separator());
     print('');
 
-    stdout.write('  Profile name [work]: ');
-    final profileKey = stdin.readLineSync()?.trim();
-    final key = (profileKey == null || profileKey.isEmpty) ? 'work' : profileKey;
-
-    stdout.write('  Jira base URL (e.g., https://company.atlassian.net): ');
-    final baseUrl = stdin.readLineSync()?.trim() ?? '';
-    if (baseUrl.isEmpty) {
-      print('Base URL is required.');
-      return;
+    // 1. Determine profile name
+    final String key;
+    if (presetProfile != null) {
+      key = presetProfile;
+      print('  Profile: $key');
+    } else {
+      key = _promptRequired('Profile name', current: 'work');
     }
 
-    stdout.write('  Username/email: ');
-    final username = stdin.readLineSync()?.trim() ?? '';
-    if (username.isEmpty) {
-      print('Username is required.');
-      return;
+    // 2. Try to load existing profile for pre-fill
+    final existing = await _loadExistingProfile(key);
+    if (existing != null) {
+      print('  Editing existing profile "$key".');
     }
+    print('');
 
-    stdout.write('  API token: ');
-    final apiToken = stdin.readLineSync()?.trim() ?? '';
-    if (apiToken.isEmpty) {
-      print('API token is required.');
-      return;
-    }
-
-    stdout.write('  Project keys (comma-separated, e.g., PROJ,TEAM): ');
-    final keysInput = stdin.readLineSync()?.trim() ?? '';
-    if (keysInput.isEmpty) {
-      print('At least one project key is required.');
-      return;
-    }
+    // 3. Prompt each field (rclone-style: Enter keeps current value)
+    final baseUrl =
+        _promptRequired('Jira base URL', current: existing?.baseUrl);
+    final username =
+        _promptRequired('Username/email', current: existing?.username);
+    final apiToken =
+        _promptRequired('API token', current: existing?.apiToken, mask: true);
+    final currentKeys = existing?.projectKeys.isNotEmpty == true
+        ? existing!.projectKeys.join(',')
+        : null;
+    final keysInput =
+        _promptRequired('Project keys (comma-separated)', current: currentKeys);
     final projectKeys =
         keysInput.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
-    // Build credentials JSON
+    // 4. Show summary and confirm
+    final maskedToken = apiToken.length > 4
+        ? '****${apiToken.substring(apiToken.length - 4)}'
+        : '****';
+    print('');
+    print('  Review:');
+    print(kvRow('Profile:', key));
+    print(kvRow('URL:', baseUrl));
+    print(kvRow('Username:', username));
+    print(kvRow('API Token:', maskedToken));
+    print(kvRow('Projects:', projectKeys.join(', ')));
+    print('');
+    final confirm = _readLine('  Save? (y/n) [y]: ')?.trim().toLowerCase();
+    if (confirm == 'n' || confirm == 'no') {
+      print('  Setup cancelled.');
+      return;
+    }
+
+    // 5. Write credentials file
     final credPath = paths.jiraCredentialsPath;
     final credFile = File(credPath);
     Map<String, dynamic> existingJson = {};
 
     if (await credFile.exists()) {
       try {
-        existingJson = jsonDecode(await credFile.readAsString()) as Map<String, dynamic>;
+        existingJson =
+            jsonDecode(await credFile.readAsString()) as Map<String, dynamic>;
       } catch (_) {
         // Ignore parse errors, start fresh
       }
     }
 
-    // Add/update profile
-    final profiles = (existingJson['jira_profiles'] as Map<String, dynamic>?) ?? {};
+    final profiles =
+        (existingJson['jira_profiles'] as Map<String, dynamic>?) ?? {};
     profiles[key] = {
       'name': key,
       'base_url': baseUrl,
@@ -1633,12 +1733,11 @@ class JiraSetupCommand extends JiraSubcommand {
     existingJson['jira_profiles'] = profiles;
     existingJson['default_profiles'] = {'jira': key};
 
-    // Write credentials file
     await Directory(paths.configDir).create(recursive: true);
     const encoder = JsonEncoder.withIndent('  ');
     await credFile.writeAsString('${encoder.convert(existingJson)}\n');
 
-    // Now run setup from the newly created profile
+    // 6. Run setup from the newly saved profile
     final config = await jiraService.setup(profileName: key);
     final configKeys = config.jiraProjectKey
         .split(',')

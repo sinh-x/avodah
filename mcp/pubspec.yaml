@@ -17,6 +17,9 @@ dependencies:
   # CLI argument parsing
   args: ^2.4.0
 
+  # Console readline with arrow key support
+  dart_console: ^4.1.2
+
   # Configuration
   toml: ^0.15.0
 

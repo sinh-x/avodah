@@ -212,6 +212,9 @@ class JiraService {
     http.Client? httpClient,
   }) : httpClient = httpClient ?? http.Client();
 
+  /// Closes the underlying HTTP client so the process can exit cleanly.
+  void close() => httpClient.close();
+
   /// Saves a Jira integration document via upsert.
   Future<void> _saveConfig(JiraIntegrationDocument config) async {
     await db
@@ -245,8 +248,8 @@ class JiraService {
 
     final projectKeysJoined = profile.projectKeys.join(',');
 
-    // Check if config already exists, update it
-    final existing = await getConfig();
+    // Find existing config for this profile, or create a new row
+    final existing = await getConfig(profileName: profile.key);
     if (existing != null) {
       existing.baseUrl = profile.baseUrl;
       existing.jiraProjectKey = projectKeysJoined;
@@ -267,16 +270,41 @@ class JiraService {
     return config;
   }
 
-  /// Loads the Jira integration config from DB (null if not configured).
-  Future<JiraIntegrationDocument?> getConfig() async {
+  /// Loads a Jira integration config from DB.
+  ///
+  /// If [profileName] is given, returns the config for that profile.
+  /// Otherwise returns the most recently modified config.
+  Future<JiraIntegrationDocument?> getConfig({String? profileName}) async {
     final rows = await db.select(db.jiraIntegrations).get();
     if (rows.isEmpty) return null;
 
-    final doc = JiraIntegrationDocument.fromDrift(
-      integration: rows.first,
-      clock: clock,
-    );
-    return doc.isDeleted ? null : doc;
+    final docs = rows
+        .map((row) =>
+            JiraIntegrationDocument.fromDrift(integration: row, clock: clock))
+        .where((d) => !d.isDeleted)
+        .toList();
+    if (docs.isEmpty) return null;
+
+    if (profileName != null) {
+      return docs.cast<JiraIntegrationDocument?>().firstWhere(
+          (d) => d!.profileName == profileName,
+          orElse: () => null);
+    }
+
+    // Return the most recently synced, or most recently created
+    docs.sort((a, b) =>
+        (b.lastSyncAtMs ?? b.createdMs).compareTo(a.lastSyncAtMs ?? a.createdMs));
+    return docs.first;
+  }
+
+  /// Returns all non-deleted Jira integration configs.
+  Future<List<JiraIntegrationDocument>> getAllConfigs() async {
+    final rows = await db.select(db.jiraIntegrations).get();
+    return rows
+        .map((row) =>
+            JiraIntegrationDocument.fromDrift(integration: row, clock: clock))
+        .where((d) => !d.isDeleted)
+        .toList();
   }
 
   /// Gets the current Jira user's account ID.
@@ -310,6 +338,16 @@ class JiraService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Returns true if the Jira issue status category is "done".
+  static bool _isJiraDone(Map<String, dynamic> fields) {
+    final status = fields['status'] as Map<String, dynamic>?;
+    if (status == null) return false;
+    final category = status['statusCategory'] as Map<String, dynamic>?;
+    if (category == null) return false;
+    final key = category['key'] as String?;
+    return key == 'done';
   }
 
   /// Builds a JQL string for the given config and optional issue key.
@@ -396,12 +434,19 @@ class JiraService {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
+      final jiraDone = _isJiraDone(fields);
 
       final existing = existingByIssueId[key];
       if (existing != null) {
         final doc = TaskDocument.fromDrift(task: existing, clock: clock);
         doc.title = summary;
         doc.issueLastUpdated = DateTime.now();
+        // Sync done status from Jira
+        if (jiraDone && !doc.isDone) {
+          doc.markDone();
+        } else if (!jiraDone && doc.isDone) {
+          doc.markUndone();
+        }
         await _saveTask(doc);
         issueKeyToTaskId[key] = existing.id;
         updated++;
@@ -409,6 +454,7 @@ class JiraService {
         final doc = TaskDocument.create(clock: clock, title: summary);
         doc.issueId = key;
         doc.issueType = IssueType.jira;
+        if (jiraDone) doc.markDone();
         await _saveTask(doc);
         issueKeyToTaskId[key] = doc.id;
         created++;
@@ -934,45 +980,84 @@ class JiraService {
     }
   }
 
-  /// Returns the current Jira integration status.
+  /// Returns the Jira integration status for the active (most recent) profile.
   Future<JiraStatus> status() async {
-    final config = await getConfig();
-    if (config == null) {
+    final all = await statusAll();
+    if (all.isEmpty) {
       return const JiraStatus(
         configured: false,
         pendingWorklogs: 0,
         linkedTasks: 0,
       );
     }
+    return all.first;
+  }
 
-    // Count linked tasks
+  /// Returns Jira integration status for all configured profiles.
+  Future<List<JiraStatus>> statusAll() async {
+    final configs = await getAllConfigs();
+    if (configs.isEmpty) return [];
+
+    // Load all tasks and worklogs once
     final allTasks = await db.select(db.tasks).get();
-    final linkedTasks = allTasks
+    final taskDocs = allTasks
         .map((row) => TaskDocument.fromDrift(task: row, clock: clock))
-        .where((t) => !t.isDeleted && t.issueId != null)
-        .length;
+        .where((t) => !t.isDeleted)
+        .toList();
+    final allWorklogs = await db.select(db.worklogEntries).get();
 
-    // Count unsynced worklogs
-    final taskIssueIds = <String>{};
-    for (final task in allTasks) {
-      if (task.issueId != null) taskIssueIds.add(task.id);
+    // Build a map of taskId → issueId for linked tasks
+    final taskIssueMap = <String, String?>{};
+    for (final t in taskDocs) {
+      taskIssueMap[t.id] = t.issueId;
     }
 
-    final allWorklogs = await db.select(db.worklogEntries).get();
-    final pendingWorklogs = allWorklogs.where((w) {
-      return w.jiraWorklogId == null && taskIssueIds.contains(w.taskId);
-    }).length;
+    final results = <JiraStatus>[];
+    for (final config in configs) {
+      final projectKeys = config.jiraProjectKey
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
 
-    return JiraStatus(
-      configured: true,
-      jiraProjectKey: config.jiraProjectKey,
-      profileName: config.profileName,
-      baseUrl: config.baseUrl,
-      lastSyncAt: config.lastSyncAt,
-      lastSyncError: config.lastSyncError,
-      pendingWorklogs: pendingWorklogs,
-      linkedTasks: linkedTasks,
-    );
+      // Count tasks whose issueId matches this profile's project keys
+      final linkedTasks = taskDocs.where((t) {
+        final issue = t.issueId;
+        if (issue == null) return false;
+        return projectKeys.any((key) => issue.startsWith('$key-'));
+      }).length;
+
+      // Count unsynced worklogs for those tasks
+      final linkedTaskIds = taskDocs
+          .where((t) {
+            final issue = t.issueId;
+            if (issue == null) return false;
+            return projectKeys.any((key) => issue.startsWith('$key-'));
+          })
+          .map((t) => t.id)
+          .toSet();
+
+      final pendingWorklogs = allWorklogs.where((w) {
+        return w.jiraWorklogId == null && linkedTaskIds.contains(w.taskId);
+      }).length;
+
+      results.add(JiraStatus(
+        configured: true,
+        jiraProjectKey: config.jiraProjectKey,
+        profileName: config.profileName,
+        baseUrl: config.baseUrl,
+        lastSyncAt: config.lastSyncAt,
+        lastSyncError: config.lastSyncError,
+        pendingWorklogs: pendingWorklogs,
+        linkedTasks: linkedTasks,
+      ));
+    }
+
+    // Sort: most recently synced first
+    results.sort((a, b) =>
+        (b.lastSyncAt?.millisecondsSinceEpoch ?? 0)
+            .compareTo(a.lastSyncAt?.millisecondsSinceEpoch ?? 0));
+    return results;
   }
 
   /// Makes an authenticated request to the Jira REST API.
