@@ -27,7 +27,9 @@ abstract class TimerCommand extends Command<void> {
 
 /// Start timer command.
 class StartCommand extends TimerCommand {
-  StartCommand(super.timerService) {
+  final TaskService taskService;
+
+  StartCommand(super.timerService, this.taskService) {
     argParser.addOption('note', abbr: 'n', help: 'Note about current work');
   }
 
@@ -40,21 +42,42 @@ class StartCommand extends TimerCommand {
   @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
-    final taskTitle = args.isNotEmpty ? args.join(' ') : null;
+    final input = args.isNotEmpty ? args.join(' ') : null;
 
-    if (taskTitle == null) {
-      print('Missing task title.');
+    if (input == null) {
+      print('Missing task title or ID.');
       print('');
-      print('  Usage: avo start <task title> [-n note]');
+      print('  Usage: avo start <task title or id> [-n note]');
       print('  Example: avo start "Fix login bug" -n "auth flow"');
+      print('  Example: avo start a1b2c3');
       return;
     }
 
     final note = argResults?['note'] as String?;
 
+    // Try to resolve input as a task ID/prefix first
+    String? taskId;
+    String taskTitle = input;
+    try {
+      final task = await taskService.show(input);
+      taskId = task.id;
+      taskTitle = task.title;
+    } on TaskNotFoundException {
+      // Not an ID — treat as title
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$input":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
     try {
       final timer = await timerService.start(
         taskTitle: taskTitle,
+        taskId: taskId,
         note: note,
       );
       print('Timer started: "$taskTitle"');
