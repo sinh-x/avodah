@@ -175,4 +175,24 @@ void main() {
       expect(count, equals(0));
     });
   });
+
+  group('delete', () {
+    test('soft-deletes project', () async {
+      final created = await service.add(title: 'Delete me');
+
+      final deleted = await service.delete(created.id);
+
+      expect(deleted.isDeleted, isTrue);
+    });
+
+    test('deleted project excluded from list', () async {
+      await service.add(title: 'Keep me');
+      final toDelete = await service.add(title: 'Delete me');
+      await service.delete(toDelete.id);
+
+      final projects = await service.list();
+      expect(projects, hasLength(1));
+      expect(projects.first.title, equals('Keep me'));
+    });
+  });
 }

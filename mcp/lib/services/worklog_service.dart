@@ -114,6 +114,47 @@ class WorklogService {
     return worklog;
   }
 
+  /// Finds a worklog by exact ID or unique prefix match.
+  ///
+  /// Throws [WorklogNotFoundException] if no worklog matches.
+  /// Throws [AmbiguousWorklogIdException] if multiple worklogs match.
+  Future<WorklogDocument> show(String idOrPrefix) async {
+    final exactRows = await (db.select(db.worklogEntries)
+          ..where((w) => w.id.equals(idOrPrefix)))
+        .get();
+
+    if (exactRows.isNotEmpty) {
+      return WorklogDocument.fromDrift(worklog: exactRows.first, clock: clock);
+    }
+
+    final allRows = await db.select(db.worklogEntries).get();
+    final matches =
+        allRows.where((row) => row.id.startsWith(idOrPrefix)).toList();
+
+    if (matches.isEmpty) {
+      throw WorklogNotFoundException(idOrPrefix);
+    }
+    if (matches.length > 1) {
+      throw AmbiguousWorklogIdException(
+        idOrPrefix,
+        matches.map((r) => r.id).toList(),
+      );
+    }
+
+    return WorklogDocument.fromDrift(worklog: matches.first, clock: clock);
+  }
+
+  /// Soft-deletes a worklog by exact ID or prefix match.
+  ///
+  /// Throws [WorklogNotFoundException] if no worklog matches.
+  /// Throws [AmbiguousWorklogIdException] if multiple worklogs match.
+  Future<WorklogDocument> deleteWorklog(String idOrPrefix) async {
+    final worklog = await show(idOrPrefix);
+    worklog.delete();
+    await _saveWorklog(worklog);
+    return worklog;
+  }
+
   /// Returns the most recent worklogs.
   Future<List<WorklogDocument>> listRecent({int limit = 10}) async {
     final rows = await db.select(db.worklogEntries).get();
@@ -125,6 +166,20 @@ class WorklogService {
       ..sort((a, b) => b.createdMs.compareTo(a.createdMs));
 
     return docs.take(limit).toList();
+  }
+
+  /// Returns total logged time per task as a map of taskId → Duration.
+  Future<Map<String, Duration>> timeByTask() async {
+    final rows = await db.select(db.worklogEntries).get();
+    final result = <String, int>{};
+
+    for (final row in rows) {
+      final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      if (doc.isDeleted) continue;
+      result[doc.taskId] = (result[doc.taskId] ?? 0) + doc.durationMs;
+    }
+
+    return result.map((k, v) => MapEntry(k, Duration(milliseconds: v)));
   }
 
   /// Builds a DaySummary from worklog rows.
@@ -172,4 +227,16 @@ class WorklogNotFoundException implements Exception {
 
   @override
   String toString() => 'No worklog found matching "$id".';
+}
+
+/// Thrown when multiple worklogs match a prefix.
+class AmbiguousWorklogIdException implements Exception {
+  final String prefix;
+  final List<String> matchingIds;
+  AmbiguousWorklogIdException(this.prefix, this.matchingIds);
+
+  @override
+  String toString() =>
+      'Multiple worklogs match "$prefix": ${matchingIds.map((id) => id.substring(0, 8)).join(', ')}. '
+      'Use a longer prefix.';
 }

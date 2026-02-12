@@ -70,8 +70,9 @@ Future<void> main(List<String> args) async {
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))
       ..addCommand(CancelCommand(timerService))
-      ..addCommand(TaskCommand(taskService))
+      ..addCommand(TaskCommand(taskService, worklogService))
       ..addCommand(ProjectCommand(projectService))
+      ..addCommand(WorklogCommand(worklogService, taskService))
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))

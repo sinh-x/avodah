@@ -193,12 +193,17 @@ class StatusCommand extends Command<void> {
       print('  No active tasks.');
       print(hint('avo task add <title>', 'to create one'));
     } else {
+      final timeByTask = await worklogService.timeByTask();
       print('  ${tasks.length} active task${tasks.length == 1 ? '' : 's'}');
       final showTasks = tasks.take(5).toList();
       for (final task in showTasks) {
         final check = task.isDone ? 'x' : ' ';
         final id = task.id.substring(0, 8);
-        final time = formatDuration(Duration(milliseconds: task.timeSpent));
+        final worked = timeByTask[task.id] ?? Duration.zero;
+        final estimate = task.timeEstimate > 0
+            ? Duration(milliseconds: task.timeEstimate)
+            : null;
+        final time = formatTimeWithEstimate(worked, estimate);
         final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
         print('  [$check] $id  ${task.title}$issueTag  ($time)');
       }
@@ -335,11 +340,12 @@ abstract class TaskSubcommand extends Command<void> {
 
 /// Task management command group.
 class TaskCommand extends Command<void> {
-  TaskCommand(TaskService taskService) {
+  TaskCommand(TaskService taskService, WorklogService worklogService) {
     addSubcommand(TaskAddCommand(taskService));
-    addSubcommand(TaskListCommand(taskService));
+    addSubcommand(TaskListCommand(taskService, worklogService));
     addSubcommand(TaskDoneCommand(taskService));
-    addSubcommand(TaskShowCommand(taskService));
+    addSubcommand(TaskShowCommand(taskService, worklogService));
+    addSubcommand(TaskDeleteCommand(taskService));
   }
 
   @override
@@ -389,7 +395,9 @@ class TaskAddCommand extends TaskSubcommand {
 }
 
 class TaskListCommand extends TaskSubcommand {
-  TaskListCommand(super.taskService) {
+  final WorklogService worklogService;
+
+  TaskListCommand(super.taskService, this.worklogService) {
     argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
   }
 
@@ -414,12 +422,17 @@ class TaskListCommand extends TaskSubcommand {
       return;
     }
 
+    final timeByTask = await worklogService.timeByTask();
     final label = includeCompleted ? 'All Tasks' : 'Active Tasks';
     print('$label (${tasks.length}):');
     for (final task in tasks) {
       final check = task.isDone ? 'x' : ' ';
       final id = task.id.substring(0, 8);
-      final time = formatDuration(Duration(milliseconds: task.timeSpent));
+      final worked = timeByTask[task.id] ?? Duration.zero;
+      final estimate = task.timeEstimate > 0
+          ? Duration(milliseconds: task.timeEstimate)
+          : null;
+      final time = formatTimeWithEstimate(worked, estimate);
       final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
       print('  [$check] $id  ${task.title}$issueTag  ($time)');
     }
@@ -477,8 +490,59 @@ class TaskDoneCommand extends TaskSubcommand {
   }
 }
 
+class TaskDeleteCommand extends TaskSubcommand {
+  TaskDeleteCommand(super.taskService);
+
+  @override
+  String get name => 'delete';
+
+  @override
+  String get description => 'Delete a task';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskId = args.isNotEmpty ? args.first : null;
+
+    if (taskId == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task delete <id>');
+      print(hint('avo task list', 'to see task IDs'));
+      return;
+    }
+
+    try {
+      // Show task first for confirmation
+      final task = await taskService.show(taskId);
+      stdout.write('Delete "${task.title}" (${task.id.substring(0, 8)})? [y/N] ');
+      final input = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
+      if (input != 'y') {
+        print('Cancelled.');
+        return;
+      }
+
+      await taskService.delete(taskId);
+      print('Deleted: "${task.title}"');
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
 class TaskShowCommand extends TaskSubcommand {
-  TaskShowCommand(super.taskService);
+  final WorklogService worklogService;
+
+  TaskShowCommand(super.taskService, this.worklogService);
 
   @override
   String get name => 'show';
@@ -503,7 +567,11 @@ class TaskShowCommand extends TaskSubcommand {
       final task = await taskService.show(taskId);
       final status =
           task.isDone ? 'Done' : (task.isDeleted ? 'Deleted' : 'Active');
-      final time = formatDuration(Duration(milliseconds: task.timeSpent));
+      final timeByTask = await worklogService.timeByTask();
+      final worked = timeByTask[task.id] ?? Duration.zero;
+      final estimate = task.timeEstimate > 0
+          ? Duration(milliseconds: task.timeEstimate)
+          : null;
       print('Task: "${task.title}"');
       print(kvRow('ID:', task.id));
       print(kvRow('Status:', status));
@@ -514,11 +582,7 @@ class TaskShowCommand extends TaskSubcommand {
         print(kvRow('Description:', task.description!));
       }
       print(kvRow('Created:', '${task.createdTimestamp ?? 'unknown'}'));
-      print(kvRow('Time spent:', time));
-      if (task.timeEstimate > 0) {
-        print(kvRow('Estimate:',
-            formatDuration(Duration(milliseconds: task.timeEstimate))));
-      }
+      print(kvRow('Time spent:', formatTimeWithEstimate(worked, estimate)));
       if (task.dueDay != null) {
         print(kvRow('Due:', '${task.dueDay}'));
       }
@@ -533,7 +597,7 @@ class TaskShowCommand extends TaskSubcommand {
       }
       if (!task.isDone) {
         print('');
-        print(hint('avo start ${task.title}', 'to start timing'));
+        print(hint('avo start ${task.id.substring(0, 8)}', 'to start timing'));
         print(hint('avo task done ${task.id.substring(0, 8)}', 'to mark done'));
       }
     } on TaskNotFoundException {
@@ -658,6 +722,7 @@ class ProjectCommand extends Command<void> {
     addSubcommand(ProjectAddCommand(projectService));
     addSubcommand(ProjectListCommand(projectService));
     addSubcommand(ProjectShowCommand(projectService));
+    addSubcommand(ProjectDeleteCommand(projectService));
   }
 
   @override
@@ -789,6 +854,128 @@ class ProjectShowCommand extends ProjectSubcommand {
       print(hint('avo project list', 'to see available projects'));
     } on AmbiguousProjectIdException catch (e) {
       print('Multiple projects match "$projectId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
+class ProjectDeleteCommand extends ProjectSubcommand {
+  ProjectDeleteCommand(super.projectService);
+
+  @override
+  String get name => 'delete';
+
+  @override
+  String get description => 'Delete a project';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final projectId = args.isNotEmpty ? args.first : null;
+
+    if (projectId == null) {
+      print('Missing project ID.');
+      print('');
+      print('  Usage: avo project delete <id>');
+      print(hint('avo project list', 'to see project IDs'));
+      return;
+    }
+
+    try {
+      final project = await projectService.show(projectId);
+      stdout.write('Delete "${project.title}" (${project.id.substring(0, 8)})? [y/N] ');
+      final input = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
+      if (input != 'y') {
+        print('Cancelled.');
+        return;
+      }
+
+      await projectService.delete(projectId);
+      print('Deleted: "${project.title}"');
+    } on ProjectNotFoundException {
+      print('No project found matching "$projectId".');
+      print('');
+      print(hint('avo project list', 'to see available projects'));
+    } on AmbiguousProjectIdException catch (e) {
+      print('Multiple projects match "$projectId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
+// ============================================================
+// Worklog Commands
+// ============================================================
+
+/// Base class for worklog subcommands.
+abstract class WorklogSubcommand extends Command<void> {
+  final WorklogService worklogService;
+  final TaskService taskService;
+  WorklogSubcommand(this.worklogService, this.taskService);
+}
+
+/// Worklog management command group.
+class WorklogCommand extends Command<void> {
+  WorklogCommand(WorklogService worklogService, TaskService taskService) {
+    addSubcommand(WorklogDeleteCommand(worklogService, taskService));
+  }
+
+  @override
+  String get name => 'worklog';
+
+  @override
+  String get description => 'Worklog management';
+}
+
+class WorklogDeleteCommand extends WorklogSubcommand {
+  WorklogDeleteCommand(super.worklogService, super.taskService);
+
+  @override
+  String get name => 'delete';
+
+  @override
+  String get description => 'Delete a worklog';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final worklogId = args.isNotEmpty ? args.first : null;
+
+    if (worklogId == null) {
+      print('Missing worklog ID.');
+      print('');
+      print('  Usage: avo worklog delete <id>');
+      print(hint('avo recent', 'to see recent worklogs'));
+      return;
+    }
+
+    try {
+      final worklog = await worklogService.show(worklogId);
+      final taskTitle = await resolveTaskTitle(taskService, worklog.taskId);
+      final dur = formatDuration(Duration(milliseconds: worklog.durationMs));
+      stdout.write('Delete worklog "$taskTitle" ($dur, ${worklog.id.substring(0, 8)})? [y/N] ');
+      final input = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
+      if (input != 'y') {
+        print('Cancelled.');
+        return;
+      }
+
+      await worklogService.deleteWorklog(worklogId);
+      print('Deleted worklog: "$taskTitle" ($dur)');
+    } on WorklogNotFoundException {
+      print('No worklog found matching "$worklogId".');
+      print('');
+      print(hint('avo recent', 'to see recent worklogs'));
+    } on AmbiguousWorklogIdException catch (e) {
+      print('Multiple worklogs match "$worklogId":');
       for (final id in e.matchingIds) {
         print('  ${id.substring(0, 8)}');
       }

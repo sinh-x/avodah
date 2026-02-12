@@ -183,4 +183,37 @@ void main() {
       );
     });
   });
+
+  group('delete', () {
+    test('soft-deletes task', () async {
+      final created = await service.add(title: 'Delete me');
+
+      final deleted = await service.delete(created.id);
+
+      expect(deleted.isDeleted, isTrue);
+    });
+
+    test('deleted task excluded from list', () async {
+      final created = await service.add(title: 'Delete me');
+      await service.delete(created.id);
+
+      final tasks = await service.list();
+      expect(tasks, isEmpty);
+    });
+
+    test('works with prefix', () async {
+      final created = await service.add(title: 'Delete by prefix');
+
+      final deleted = await service.delete(created.id.substring(0, 8));
+
+      expect(deleted.isDeleted, isTrue);
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.delete('nonexistent'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
 }

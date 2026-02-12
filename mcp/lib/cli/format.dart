@@ -44,10 +44,27 @@ String hintPlain(String text) => '  -> $text';
 String formatTime(DateTime dt) => dt.toString().substring(11, 16);
 
 String formatDuration(Duration d) {
-  final hours = d.inHours;
-  final minutes = d.inMinutes % 60;
-  if (hours > 0) return '${hours}h ${minutes}m';
-  return '${minutes}m';
+  final totalMinutes = d.inMinutes;
+  if (totalMinutes == 0) return '0m';
+
+  final weeks = totalMinutes ~/ (5 * 8 * 60); // 5 days * 8 hours
+  final days = (totalMinutes % (5 * 8 * 60)) ~/ (8 * 60); // 8-hour days
+  final hours = (totalMinutes % (8 * 60)) ~/ 60;
+  final minutes = totalMinutes % 60;
+
+  final parts = <String>[];
+  if (weeks > 0) parts.add('${weeks}w');
+  if (days > 0) parts.add('${days}d');
+  if (hours > 0) parts.add('${hours}h');
+  if (minutes > 0) parts.add('${minutes}m');
+  return parts.join(' ');
+}
+
+/// Formats worked time with optional estimate: "2h 30m / 8h"
+String formatTimeWithEstimate(Duration worked, Duration? estimate) {
+  final w = formatDuration(worked);
+  if (estimate == null || estimate.inMinutes == 0) return w;
+  return '$w / ${formatDuration(estimate)}';
 }
 
 String formatDate(DateTime date) {
