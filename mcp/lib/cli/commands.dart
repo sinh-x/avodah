@@ -596,14 +596,19 @@ class TaskShowCommand extends TaskSubcommand {
 
       print('Task: "${task.title}"');
       print(kvRow('ID:', task.id));
-      print(kvRow('Status:', status));
+      if (task.hasIssueLink && task.issueStatus != null) {
+        print(kvRow('Status:', '$status (Jira: ${task.issueStatus})'));
+      } else {
+        print(kvRow('Status:', status));
+      }
       if (projectName != null) {
         print(kvRow('Project:', projectName));
       }
       if (task.description != null) {
         print(kvRow('Description:', task.description!));
       }
-      final created = task.createdTimestamp;
+      // Use Jira created time for Jira-linked tasks, fall back to local
+      final created = task.issueCreated ?? task.createdTimestamp;
       print(kvRow('Created:', created != null
           ? formatRelativeDate(created)
           : 'unknown'));
@@ -619,10 +624,7 @@ class TaskShowCommand extends TaskSubcommand {
         print(kvRow('Tags:', task.tagIds.join(', ')));
       }
       if (task.hasIssueLink) {
-        print(kvRow('Issue:', '${task.issueId} (${task.issueType?.toValue()})'));
-        if (task.issueStatus != null) {
-          print(kvRow('Jira status:', task.issueStatus!));
-        }
+        print(kvRow('Issue:', task.issueId!));
         final syncStatus = task.issueLastUpdated != null
             ? 'synced ${formatRelativeDate(task.issueLastUpdated!)}'
             : 'never synced';

@@ -489,6 +489,11 @@ class JiraService {
       // Jira returns seconds, we store milliseconds
       final estimateSec = fields['timeoriginalestimate'] as int?;
       final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+      // Parse Jira created timestamp (ISO 8601)
+      final jiraCreatedStr = fields['created'] as String?;
+      final jiraCreated = jiraCreatedStr != null
+          ? DateTime.tryParse(jiraCreatedStr)
+          : null;
 
       final existing = existingByIssueId[key];
       if (existing != null) {
@@ -496,6 +501,7 @@ class JiraService {
         doc.title = summary;
         doc.issueLastUpdated = DateTime.now();
         doc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) doc.issueCreated = jiraCreated;
         if (estimateMs > 0) doc.timeEstimate = estimateMs;
         // Sync done status from Jira
         if (jiraDone && !doc.isDone) {
@@ -511,6 +517,7 @@ class JiraService {
         doc.issueId = key;
         doc.issueType = IssueType.jira;
         doc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) doc.issueCreated = jiraCreated;
         if (estimateMs > 0) doc.timeEstimate = estimateMs;
         if (jiraDone) doc.markDone();
         await _saveTask(doc);
