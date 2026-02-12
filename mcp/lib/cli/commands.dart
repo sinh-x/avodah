@@ -344,9 +344,9 @@ abstract class TaskSubcommand extends Command<void> {
 /// Task management command group.
 class TaskCommand extends Command<void> {
   TaskCommand(TaskService taskService, WorklogService worklogService,
-      ProjectService projectService) {
+      ProjectService projectService, JiraService jiraService) {
     addSubcommand(TaskAddCommand(taskService));
-    addSubcommand(TaskListCommand(taskService, worklogService));
+    addSubcommand(TaskListCommand(taskService, worklogService, jiraService));
     addSubcommand(TaskDoneCommand(taskService));
     addSubcommand(TaskShowCommand(taskService, worklogService, projectService));
     addSubcommand(TaskDeleteCommand(taskService));
@@ -400,8 +400,9 @@ class TaskAddCommand extends TaskSubcommand {
 
 class TaskListCommand extends TaskSubcommand {
   final WorklogService worklogService;
+  final JiraService jiraService;
 
-  TaskListCommand(super.taskService, this.worklogService) {
+  TaskListCommand(super.taskService, this.worklogService, this.jiraService) {
     argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
     argParser.addFlag('local', abbr: 'l',
         help: 'Show only local tasks (no external link)');
@@ -409,7 +410,7 @@ class TaskListCommand extends TaskSubcommand {
         help: 'Filter by integration source (jira, github)',
         allowed: ['jira', 'github']);
     argParser.addOption('profile',
-        help: 'Filter by Jira profile (project key prefix, e.g. AG)');
+        help: 'Filter by Jira profile name (e.g. work, personal)');
   }
 
   @override
@@ -434,9 +435,23 @@ class TaskListCommand extends TaskSubcommand {
       tasks = tasks.where((t) => t.issueType == type).toList();
     }
     if (profile != null) {
-      final prefix = profile.toUpperCase();
-      tasks = tasks.where((t) =>
-          t.issueId != null && t.issueId!.toUpperCase().startsWith(prefix)).toList();
+      // Look up project keys for this profile name
+      final config = await jiraService.getConfig(profileName: profile);
+      if (config == null) {
+        print('Jira profile "$profile" not found.');
+        print(hint('avo jira status', 'to see configured profiles'));
+        return;
+      }
+      final projectKeys = config.jiraProjectKey
+          .split(',')
+          .map((k) => k.trim().toUpperCase())
+          .where((k) => k.isNotEmpty)
+          .toList();
+      tasks = tasks.where((t) {
+        if (t.issueId == null) return false;
+        final id = t.issueId!.toUpperCase();
+        return projectKeys.any((key) => id.startsWith('$key-'));
+      }).toList();
     }
 
     if (tasks.isEmpty) {
