@@ -115,6 +115,23 @@ String buildBar(int value, int max, {int width = 20}) {
   return '${'#' * filled}${'.' * (width - filled)}';
 }
 
+// ── Jira Profile Display ─────────────────────────────────────────────────────
+
+/// Formats a Jira profile for consistent display across commands.
+String formatJiraProfile({
+  required String profileName,
+  required String baseUrl,
+  required List<String> projectKeys,
+  String? username,
+}) {
+  final buf = StringBuffer();
+  buf.writeln(kvRow('Profile:', profileName));
+  if (username != null) buf.writeln(kvRow('Username:', username));
+  buf.writeln(kvRow('URL:', baseUrl));
+  buf.write(kvRow('Projects:', projectKeys.join(', ')));
+  return buf.toString();
+}
+
 // ── Task Title Resolution ────────────────────────────────────────────────────
 
 /// Resolves a task ID to a display title.

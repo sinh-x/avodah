@@ -196,19 +196,26 @@ void main() {
       expect(loaded.jiraProjectKey, equals('AG,ABDE'));
     });
 
-    test('updates existing config when re-setup', () async {
+    test('re-setup same profile updates existing row', () async {
       await writeProfileConfig();
       final service = createService();
       await service.setup(profileName: 'work');
+      await service.setup(profileName: 'work');
 
-      final updated = await service.setup(profileName: 'personal');
-      expect(updated.baseUrl, equals('https://personal.atlassian.net'));
-      expect(updated.jiraProjectKey, equals('HOME'));
-      expect(updated.profileName, equals('personal'));
-
-      // Should still be one config
+      // Same profile → should still be one config row
       final rows = await db.select(db.jiraIntegrations).get();
       expect(rows, hasLength(1));
+    });
+
+    test('setup different profiles creates separate rows', () async {
+      await writeProfileConfig();
+      final service = createService();
+      await service.setup(profileName: 'work');
+      await service.setup(profileName: 'personal');
+
+      // Different profiles → two config rows
+      final rows = await db.select(db.jiraIntegrations).get();
+      expect(rows, hasLength(2));
     });
 
     test('throws when profile not found', () async {
@@ -425,9 +432,156 @@ void main() {
       expect(result.updated, equals(0));
       expect(result.worklogsCreated, equals(0));
 
-      // Verify tasks exist
+      // Verify tasks exist (list excludes done tasks by default)
       final tasks = await taskService.list();
       expect(tasks.length, greaterThanOrEqualTo(2));
+    });
+
+    test('pull marks local task done when Jira issue is done', () async {
+      await writeProfileConfig();
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/search')) {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                {
+                  'key': 'AG-10',
+                  'fields': {
+                    'summary': 'Done issue',
+                    'status': {
+                      'name': 'Done',
+                      'statusCategory': {'key': 'done'},
+                    },
+                  },
+                },
+                {
+                  'key': 'AG-11',
+                  'fields': {
+                    'summary': 'Open issue',
+                    'status': {
+                      'name': 'In Progress',
+                      'statusCategory': {'key': 'indeterminate'},
+                    },
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(
+            jsonEncode({'accountId': 'user-123'}),
+            200,
+          );
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(
+            jsonEncode({'worklogs': []}),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      await service.pull();
+
+      // list() excludes done tasks by default
+      final openTasks = await taskService.list();
+      expect(openTasks.length, equals(1));
+      expect(openTasks.first.title, equals('Open issue'));
+
+      // list with includeCompleted shows the done task
+      final allTasks = await taskService.list(includeCompleted: true);
+      final doneTasks = allTasks.where((t) => t.isDone).toList();
+      expect(doneTasks.length, equals(1));
+      expect(doneTasks.first.title, equals('Done issue'));
+    });
+
+    test('pull reopens local task when Jira issue is reopened', () async {
+      await writeProfileConfig();
+
+      // First pull: issue is done
+      var mockClient = MockClient((request) async {
+        if (request.url.path.contains('/search')) {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                {
+                  'key': 'AG-20',
+                  'fields': {
+                    'summary': 'Reopened issue',
+                    'status': {
+                      'name': 'Done',
+                      'statusCategory': {'key': 'done'},
+                    },
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(jsonEncode({'worklogs': []}), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      var service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+      await service.pull();
+
+      // Verify task is done
+      var allTasks = await taskService.list(includeCompleted: true);
+      var task = allTasks.firstWhere((t) => t.issueId == 'AG-20');
+      expect(task.isDone, isTrue);
+
+      // Second pull: issue is reopened
+      mockClient = MockClient((request) async {
+        if (request.url.path.contains('/search')) {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                {
+                  'key': 'AG-20',
+                  'fields': {
+                    'summary': 'Reopened issue',
+                    'status': {
+                      'name': 'To Do',
+                      'statusCategory': {'key': 'new'},
+                    },
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(jsonEncode({'worklogs': []}), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+      await service.pull();
+
+      // Verify task is reopened
+      allTasks = await taskService.list(includeCompleted: true);
+      task = allTasks.firstWhere((t) => t.issueId == 'AG-20');
+      expect(task.isDone, isFalse);
     });
 
     test('pulls worklogs for current user only', () async {

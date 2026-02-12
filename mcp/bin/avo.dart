@@ -100,6 +100,7 @@ Future<void> main(List<String> args) async {
     print(e);
     exit(64);
   } finally {
+    jiraService.close();
     await db.close();
   }
 }
