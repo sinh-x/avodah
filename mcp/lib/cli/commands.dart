@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:dart_console/dart_console.dart';
 import 'package:avodah_core/avodah_core.dart';
 
 import '../config/paths.dart';
@@ -15,6 +14,8 @@ import '../services/task_service.dart';
 import '../services/timer_service.dart';
 import '../services/worklog_service.dart';
 import 'format.dart';
+import 'interactive_picker.dart';
+import 'readline.dart';
 
 // ============================================================
 // Timer Commands
@@ -45,34 +46,64 @@ class StartCommand extends TimerCommand {
     final args = argResults?.rest ?? [];
     final input = args.isNotEmpty ? args.join(' ') : null;
 
-    if (input == null) {
-      print('Missing task title or ID.');
-      print('');
-      print('  Usage: avo start <task title or id> [-n note]');
-      print('  Example: avo start "Fix login bug" -n "auth flow"');
-      print('  Example: avo start a1b2c3');
-      return;
-    }
-
     final note = argResults?['note'] as String?;
 
-    // Try to resolve input as a task ID/prefix first
     String? taskId;
-    String taskTitle = input;
-    try {
-      final task = await taskService.show(input);
-      taskId = task.id;
-      taskTitle = task.title;
-    } on TaskNotFoundException {
-      // Not an ID — treat as title
-    } on AmbiguousTaskIdException catch (e) {
-      print('Multiple tasks match "$input":');
-      for (final id in e.matchingIds) {
-        print('  ${id.substring(0, 8)}');
+    String taskTitle;
+
+    if (input == null) {
+      // Interactive picker mode
+      final tasks = await taskService.list();
+      if (tasks.isEmpty) {
+        print('No active tasks.');
+        print('');
+        print(hint('avo task add <title>', 'to create one'));
+        return;
       }
-      print('');
-      print(hintPlain('Use a longer prefix to be specific.'));
-      return;
+
+      final pickerItems = tasks.map((task) {
+        final check = task.isDone ? 'x' : ' ';
+        final id = task.id.substring(0, 8);
+        final issueTag = task.issueId != null
+            ? task.issueId!.padRight(10)
+            : ''.padRight(10);
+        final displayLine = '  [$check] $id  $issueTag  ${task.title}';
+        final searchText =
+            '${task.title} ${task.issueId ?? ''} ${task.id}'.toLowerCase();
+        return PickerItem<TaskDocument>(
+          value: task,
+          displayLine: displayLine,
+          searchText: searchText,
+        );
+      }).toList();
+
+      final picker = InteractivePicker<TaskDocument>(items: pickerItems);
+      final selected = picker.pick();
+      if (selected == null) {
+        print('Cancelled.');
+        return;
+      }
+
+      taskId = selected.id;
+      taskTitle = selected.title;
+    } else {
+      taskTitle = input;
+      // Try to resolve input as a task ID/prefix first
+      try {
+        final task = await taskService.show(input);
+        taskId = task.id;
+        taskTitle = task.title;
+      } on TaskNotFoundException {
+        // Not an ID — treat as title
+      } on AmbiguousTaskIdException catch (e) {
+        print('Multiple tasks match "$input":');
+        for (final id in e.matchingIds) {
+          print('  ${id.substring(0, 8)}');
+        }
+        print('');
+        print(hintPlain('Use a longer prefix to be specific.'));
+        return;
+      }
     }
 
     try {
@@ -1590,100 +1621,7 @@ class JiraSetupCommand extends JiraSubcommand {
     }
   }
 
-  final _console = Console();
-
-  /// Reads a line with arrow key / Home / End / backspace / delete support.
-  /// Handles wrapping when input exceeds terminal width using ANSI escapes
-  /// for cursor positioning. Uses dart_console's readKey() for keystrokes.
-  String? _readLine(String prompt) {
-    stdout.write(prompt);
-    final width = _console.windowWidth;
-    final buf = <int>[];
-    var cursor = 0;
-    // Logical position of the screen cursor (chars from prompt-start row col 0).
-    // After writing the prompt the cursor sits at promptLen.
-    var screenPos = prompt.length;
-
-    stdin.echoMode = false;
-    stdin.lineMode = false;
-
-    try {
-      while (true) {
-        final key = _console.readKey();
-
-        if (key.controlChar == ControlCharacter.enter) {
-          stdout.writeln();
-          return String.fromCharCodes(buf);
-        } else if (key.controlChar == ControlCharacter.ctrlC) {
-          stdout.writeln();
-          return null;
-        } else if (key.controlChar == ControlCharacter.backspace) {
-          if (cursor > 0) {
-            buf.removeAt(cursor - 1);
-            cursor--;
-            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-          }
-        } else if (key.controlChar == ControlCharacter.delete) {
-          if (cursor < buf.length) {
-            buf.removeAt(cursor);
-            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-          }
-        } else if (key.controlChar == ControlCharacter.arrowLeft) {
-          if (cursor > 0) {
-            cursor--;
-            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-          }
-        } else if (key.controlChar == ControlCharacter.arrowRight) {
-          if (cursor < buf.length) {
-            cursor++;
-            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-          }
-        } else if (key.controlChar == ControlCharacter.home) {
-          cursor = 0;
-          screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-        } else if (key.controlChar == ControlCharacter.end) {
-          cursor = buf.length;
-          screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-        } else if (key.controlChar == ControlCharacter.none &&
-            key.char.isNotEmpty) {
-          final code = key.char.codeUnitAt(0);
-          if (code >= 32) {
-            buf.insert(cursor, code);
-            cursor++;
-            screenPos = _rlRedraw(prompt, buf, cursor, width, screenPos);
-          }
-        }
-      }
-    } finally {
-      stdin.echoMode = true;
-      stdin.lineMode = true;
-    }
-  }
-
-  /// Clears display, rewrites prompt + buffer, positions cursor.
-  /// [screenPos] is where the terminal cursor currently sits (logical chars
-  /// from prompt-start row, col 0). Returns the new screenPos.
-  int _rlRedraw(
-      String prompt, List<int> buf, int cursor, int width, int screenPos) {
-    // 1. Move back to start of prompt from current screen position
-    final rowsUp = screenPos ~/ width;
-    if (rowsUp > 0) stdout.write('\x1B[${rowsUp}A');
-    stdout.write('\r');
-
-    // 2. Clear everything and rewrite
-    stdout.write('\x1B[J');
-    stdout.write(prompt);
-    stdout.write(String.fromCharCodes(buf));
-
-    // 3. Position cursor: move from end-of-text back to target
-    final endPos = prompt.length + buf.length;
-    final targetPos = prompt.length + cursor;
-    final rowsBack = (endPos ~/ width) - (targetPos ~/ width);
-    if (rowsBack > 0) stdout.write('\x1B[${rowsBack}A');
-    stdout.write('\x1B[${(targetPos % width) + 1}G');
-
-    return targetPos;
-  }
+  final _rl = TerminalReadline();
 
   /// Prompts for a value with an optional current default shown in brackets.
   /// Returns the current value if the user presses Enter on a non-empty default.
@@ -1694,7 +1632,7 @@ class JiraSetupCommand extends JiraSubcommand {
             : current)
         : null;
     final suffix = display != null ? ' [$display]' : '';
-    final input = _readLine('  $label$suffix: ')?.trim();
+    final input = _rl.readLine('  $label$suffix: ')?.trim();
     if (input == null || input.isEmpty) return current;
     return input;
   }
@@ -1756,7 +1694,7 @@ class JiraSetupCommand extends JiraSubcommand {
     print(kvRow('API Token:', maskedToken));
     print(kvRow('Projects:', projectKeys.join(', ')));
     print('');
-    final confirm = _readLine('  Save? (y/n) [y]: ')?.trim().toLowerCase();
+    final confirm = _rl.readLine('  Save? (y/n) [y]: ')?.trim().toLowerCase();
     if (confirm == 'n' || confirm == 'no') {
       print('  Setup cancelled.');
       return;
