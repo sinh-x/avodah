@@ -67,7 +67,6 @@ Future<void> main(List<String> args) async {
         taskService: taskService,
         worklogService: worklogService,
         projectService: projectService,
-        jiraService: jiraService,
       ))
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))

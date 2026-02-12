@@ -163,9 +163,22 @@ class WorklogService {
         .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
         .where((doc) => !doc.isDeleted)
         .toList()
-      ..sort((a, b) => b.createdMs.compareTo(a.createdMs));
+      ..sort((a, b) => b.startMs.compareTo(a.startMs));
 
     return docs.take(limit).toList();
+  }
+
+  /// Returns all non-deleted worklogs for a specific task.
+  Future<List<WorklogDocument>> listForTask(String taskId) async {
+    final rows = await (db.select(db.worklogEntries)
+          ..where((w) => w.taskId.equals(taskId)))
+        .get();
+
+    return rows
+        .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
+        .where((doc) => !doc.isDeleted)
+        .toList()
+      ..sort((a, b) => b.startMs.compareTo(a.startMs));
   }
 
   /// Returns total logged time per task as a map of taskId → Duration.

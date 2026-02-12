@@ -81,6 +81,7 @@ class JiraWorklogInfo {
   final String localTaskId;
   final int timeSpentSeconds;
   final DateTime started;
+  final DateTime created;
   final String? comment;
 
   const JiraWorklogInfo({
@@ -89,6 +90,7 @@ class JiraWorklogInfo {
     required this.localTaskId,
     required this.timeSpentSeconds,
     required this.started,
+    required this.created,
     this.comment,
   });
 
@@ -516,6 +518,7 @@ class JiraService {
         final doc = TaskDocument.create(clock: clock, title: summary);
         doc.issueId = key;
         doc.issueType = IssueType.jira;
+        doc.issueLastUpdated = DateTime.now();
         doc.issueStatus = jiraStatusName;
         if (jiraCreated != null) doc.issueCreated = jiraCreated;
         if (estimateMs > 0) doc.timeEstimate = estimateMs;
@@ -554,6 +557,7 @@ class JiraService {
 
           final timeSpentSeconds = wl['timeSpentSeconds'] as int;
           final started = DateTime.parse(wl['started'] as String);
+          final jiraCreated = DateTime.parse(wl['created'] as String);
           final durationMs = timeSpentSeconds * 1000;
           final comment = _extractPlainText(wl['comment']);
 
@@ -564,6 +568,7 @@ class JiraService {
             end: started.millisecondsSinceEpoch + durationMs,
             comment: comment,
           );
+          worklog.createdMs = jiraCreated.millisecondsSinceEpoch;
           worklog.linkToJira(jiraId);
           await _saveWorklog(worklog);
           worklogsCreated++;
@@ -710,6 +715,28 @@ class JiraService {
       } else {
         issueKeyToTaskId[key] = existing.id;
         final localDoc = TaskDocument.fromDrift(task: existing, clock: clock);
+
+        // Always refresh metadata fields from Jira
+        final jiraDone = _isJiraDone(fields);
+        final jiraStatusName = _getJiraStatusName(fields);
+        final estimateSec = fields['timeoriginalestimate'] as int?;
+        final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+        final jiraCreatedStr = fields['created'] as String?;
+        final jiraCreated = jiraCreatedStr != null
+            ? DateTime.tryParse(jiraCreatedStr)
+            : null;
+
+        localDoc.issueLastUpdated = DateTime.now();
+        localDoc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) localDoc.issueCreated = jiraCreated;
+        if (estimateMs > 0) localDoc.timeEstimate = estimateMs;
+        if (jiraDone && !localDoc.isDone) {
+          localDoc.markDone();
+        } else if (!jiraDone && localDoc.isDone) {
+          localDoc.markUndone();
+        }
+        await _saveTask(localDoc);
+
         if (localDoc.title != summary) {
           titleMismatches.add(TitleMismatch(
             localTask: localDoc,
@@ -755,6 +782,7 @@ class JiraService {
 
         final timeSpentSeconds = wl['timeSpentSeconds'] as int;
         final started = DateTime.parse(wl['started'] as String);
+        final wlCreated = DateTime.parse(wl['created'] as String);
         final comment = _extractPlainText(wl['comment']);
 
         final info = JiraWorklogInfo(
@@ -763,6 +791,7 @@ class JiraService {
           localTaskId: localTaskId,
           timeSpentSeconds: timeSpentSeconds,
           started: started,
+          created: wlCreated,
           comment: comment,
         );
 
@@ -837,10 +866,23 @@ class JiraService {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
+      final jiraDone = _isJiraDone(fields);
+      final jiraStatusName = _getJiraStatusName(fields);
+      final estimateSec = fields['timeoriginalestimate'] as int?;
+      final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+      final jiraCreatedStr = fields['created'] as String?;
+      final jiraCreated = jiraCreatedStr != null
+          ? DateTime.tryParse(jiraCreatedStr)
+          : null;
 
       final doc = TaskDocument.create(clock: clock, title: summary);
       doc.issueId = key;
       doc.issueType = IssueType.jira;
+      doc.issueLastUpdated = DateTime.now();
+      doc.issueStatus = jiraStatusName;
+      if (jiraCreated != null) doc.issueCreated = jiraCreated;
+      if (estimateMs > 0) doc.timeEstimate = estimateMs;
+      if (jiraDone) doc.markDone();
       await _saveTask(doc);
       tasksCreated++;
     }
@@ -885,6 +927,7 @@ class JiraService {
         end: info.started.millisecondsSinceEpoch + info.durationMs,
         comment: info.comment,
       );
+      worklog.createdMs = info.created.millisecondsSinceEpoch;
       worklog.linkToJira(info.jiraWorklogId);
       await _saveWorklog(worklog);
       worklogsPulled++;

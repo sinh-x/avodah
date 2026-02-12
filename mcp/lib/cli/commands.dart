@@ -132,14 +132,12 @@ class StatusCommand extends Command<void> {
   final TaskService taskService;
   final WorklogService worklogService;
   final ProjectService projectService;
-  final JiraService jiraService;
 
   StatusCommand({
     required this.timerService,
     required this.taskService,
     required this.worklogService,
     required this.projectService,
-    required this.jiraService,
   });
 
   @override
@@ -210,38 +208,6 @@ class StatusCommand extends Command<void> {
       }
       if (tasks.length > 5) {
         print(hint('avo task list', 'to see all ${tasks.length} tasks'));
-      }
-    }
-    print(separator());
-    print('');
-
-    // ── Jira ──
-    print(sectionHeader('JIRA'));
-    final jira = await jiraService.status();
-    if (!jira.configured) {
-      print('  Not configured.');
-      print(hint('avo jira init', 'to generate credentials template'));
-      print(hint('avo jira setup', 'to configure connection'));
-    } else {
-      final username = await jiraService.getProfileUsername();
-      print(formatJiraProfile(
-        profileName: jira.profileName ?? 'default',
-        baseUrl: jira.baseUrl ?? '-',
-        projectKeys: jira.projectKeysList,
-        username: username,
-      ));
-      print(kvRow('Linked tasks:', '${jira.linkedTasks}'));
-      print(kvRow('Pending logs:', '${jira.pendingWorklogs}'));
-      if (jira.lastSyncAt != null) {
-        print(kvRow('Last sync:', formatRelativeDate(jira.lastSyncAt!)));
-      } else {
-        print(kvRow('Last sync:', 'never'));
-      }
-      if (jira.lastSyncError != null) {
-        print(kvRow('Last error:', jira.lastSyncError!));
-      }
-      if (jira.pendingWorklogs > 0) {
-        print(hint('avo jira sync', 'to push pending worklogs'));
       }
     }
     print(separator());
@@ -346,7 +312,7 @@ class TaskCommand extends Command<void> {
   TaskCommand(TaskService taskService, WorklogService worklogService,
       ProjectService projectService, JiraService jiraService) {
     addSubcommand(TaskAddCommand(taskService));
-    addSubcommand(TaskListCommand(taskService, worklogService, jiraService));
+    addSubcommand(TaskListCommand(taskService, worklogService, projectService, jiraService));
     addSubcommand(TaskDoneCommand(taskService));
     addSubcommand(TaskShowCommand(taskService, worklogService, projectService));
     addSubcommand(TaskDeleteCommand(taskService));
@@ -400,15 +366,19 @@ class TaskAddCommand extends TaskSubcommand {
 
 class TaskListCommand extends TaskSubcommand {
   final WorklogService worklogService;
+  final ProjectService projectService;
   final JiraService jiraService;
 
-  TaskListCommand(super.taskService, this.worklogService, this.jiraService) {
+  TaskListCommand(super.taskService, this.worklogService,
+      this.projectService, this.jiraService) {
     argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
     argParser.addFlag('local', abbr: 'l',
         help: 'Show only local tasks (no external link)');
     argParser.addOption('source', abbr: 's',
         help: 'Filter by integration source (jira, github)',
         allowed: ['jira', 'github']);
+    argParser.addOption('project', abbr: 'p',
+        help: 'Filter by project (Jira key with -s jira, local project otherwise)');
     argParser.addOption('profile',
         help: 'Filter by Jira profile name (e.g. work, personal)');
   }
@@ -424,6 +394,7 @@ class TaskListCommand extends TaskSubcommand {
     final includeCompleted = argResults?['all'] as bool? ?? false;
     final localOnly = argResults?['local'] as bool? ?? false;
     final source = argResults?['source'] as String?;
+    final project = argResults?['project'] as String?;
     final profile = argResults?['profile'] as String?;
     var tasks = await taskService.list(includeCompleted: includeCompleted);
 
@@ -433,6 +404,30 @@ class TaskListCommand extends TaskSubcommand {
     } else if (source != null) {
       final type = IssueType.fromValue(source);
       tasks = tasks.where((t) => t.issueType == type).toList();
+    }
+    // --project: with --source jira → filter by Jira project key prefix;
+    //            without --source → filter by local projectId
+    if (project != null) {
+      if (source == 'jira') {
+        final key = project.toUpperCase();
+        tasks = tasks.where((t) {
+          if (t.issueId == null) return false;
+          return t.issueId!.toUpperCase().startsWith('$key-');
+        }).toList();
+      } else if (source == null) {
+        // Match local project by ID prefix or title
+        final projects = await projectService.list();
+        final match = projects.where((p) =>
+            p.id.startsWith(project) ||
+            p.title.toLowerCase() == project.toLowerCase()).toList();
+        if (match.isEmpty) {
+          print('Project "$project" not found.');
+          print(hint('avo project list', 'to see available projects'));
+          return;
+        }
+        final projectIds = match.map((p) => p.id).toSet();
+        tasks = tasks.where((t) => projectIds.contains(t.projectId)).toList();
+      }
     }
     if (profile != null) {
       // Look up project keys for this profile name
@@ -472,15 +467,18 @@ class TaskListCommand extends TaskSubcommand {
     }
 
     final timeByTask = await worklogService.timeByTask();
+    final projectLabel = project != null ? ' ($project)' : '';
     final filterLabel = localOnly
         ? 'Local'
         : source != null
-            ? source[0].toUpperCase() + source.substring(1)
+            ? '${source[0].toUpperCase()}${source.substring(1)}$projectLabel'
             : profile != null
                 ? 'Profile: $profile'
-                : includeCompleted
-                    ? 'All'
-                    : 'Active';
+                : project != null
+                    ? 'Project: $project'
+                    : includeCompleted
+                        ? 'All'
+                        : 'Active';
     print('$filterLabel Tasks (${tasks.length}):');
     for (final task in tasks) {
       final check = task.isDone ? 'x' : ' ';
@@ -643,9 +641,7 @@ class TaskShowCommand extends TaskSubcommand {
       }
 
       // Count worklogs for this task
-      final recentWorklogs = await worklogService.listRecent(limit: 1000);
-      final taskWorklogs =
-          recentWorklogs.where((w) => w.taskId == task.id).toList();
+      final allWorklogs = await worklogService.listForTask(task.id);
 
       print('Task: "${task.title}"');
       print(kvRow('ID:', task.id));
@@ -667,7 +663,7 @@ class TaskShowCommand extends TaskSubcommand {
           ? formatRelativeDate(created)
           : 'unknown'));
       print(kvRow('Time:', formatTimeWithEstimate(worked, estimate)));
-      print(kvRow('Worklogs:', '${taskWorklogs.length} entries'));
+      print(kvRow('Worklogs:', '${allWorklogs.length} entries'));
       if (task.dueDay != null) {
         print(kvRow('Due:', task.dueDay!));
       }
