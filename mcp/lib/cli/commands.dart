@@ -620,6 +620,9 @@ class TaskShowCommand extends TaskSubcommand {
       }
       if (task.hasIssueLink) {
         print(kvRow('Issue:', '${task.issueId} (${task.issueType?.toValue()})'));
+        if (task.issueStatus != null) {
+          print(kvRow('Jira status:', task.issueStatus!));
+        }
         final syncStatus = task.issueLastUpdated != null
             ? 'synced ${formatRelativeDate(task.issueLastUpdated!)}'
             : 'never synced';

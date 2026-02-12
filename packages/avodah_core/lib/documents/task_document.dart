@@ -40,6 +40,7 @@ class TaskFields {
   static const String issueAttachmentNr = 'issueAttachmentNr';
   static const String issueTimeTracked = 'issueTimeTracked';
   static const String issuePoints = 'issuePoints';
+  static const String issueStatus = 'issueStatus';
 }
 
 /// Issue provider types for external integrations.
@@ -393,6 +394,10 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
   int? get issuePoints => getInt(TaskFields.issuePoints);
   set issuePoints(int? value) => setInt(TaskFields.issuePoints, value);
 
+  /// Status name from the external issue tracker (e.g. "Done", "In Progress").
+  String? get issueStatus => getString(TaskFields.issueStatus);
+  set issueStatus(String? value) => setString(TaskFields.issueStatus, value);
+
   /// Returns true if this task is linked to an external issue.
   bool get hasIssueLink => issueId != null && issueProviderId != null;
 
@@ -483,6 +488,9 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       hasIssueLink: hasIssueLink,
       issueId: issueId,
       issueType: issueType,
+      issueStatus: issueStatus,
+      issueLastUpdated: issueLastUpdated,
+      doneOn: doneOn,
     );
   }
 
@@ -518,6 +526,9 @@ class TaskModel {
   final bool hasIssueLink;
   final String? issueId;
   final IssueType? issueType;
+  final String? issueStatus;
+  final DateTime? issueLastUpdated;
+  final DateTime? doneOn;
 
   const TaskModel({
     required this.id,
@@ -538,6 +549,9 @@ class TaskModel {
     required this.hasIssueLink,
     this.issueId,
     this.issueType,
+    this.issueStatus,
+    this.issueLastUpdated,
+    this.doneOn,
   });
 
   /// Returns the effective due date (prefers dueWithTime over dueDay).
