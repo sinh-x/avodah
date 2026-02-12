@@ -81,6 +81,7 @@ class JiraWorklogInfo {
   final String localTaskId;
   final int timeSpentSeconds;
   final DateTime started;
+  final DateTime created;
   final String? comment;
 
   const JiraWorklogInfo({
@@ -89,6 +90,7 @@ class JiraWorklogInfo {
     required this.localTaskId,
     required this.timeSpentSeconds,
     required this.started,
+    required this.created,
     this.comment,
   });
 
@@ -350,6 +352,12 @@ class JiraService {
     return key == 'done';
   }
 
+  /// Returns the Jira status name (e.g. "In Progress", "Done").
+  static String? _getJiraStatusName(Map<String, dynamic> fields) {
+    final status = fields['status'] as Map<String, dynamic>?;
+    return status?['name'] as String?;
+  }
+
   /// Builds a JQL string for the given config and optional issue key.
   static String _buildJql({
     required JiraIntegrationDocument config,
@@ -368,31 +376,75 @@ class JiraService {
     return 'assignee=currentUser() AND project in (${keys.join(', ')})';
   }
 
-  /// Fetches issues from Jira via the search API.
+  /// Fetches issues from Jira via the search API with automatic pagination.
   Future<List<Map<String, dynamic>>> _fetchIssues({
     required JiraIntegrationDocument config,
     required JiraCredentials creds,
     String? issueKey,
   }) async {
     final jql = _buildJql(config: config, issueKey: issueKey);
-    final response = await _makeRequest(
-      config: config,
-      creds: creds,
-      method: 'POST',
-      path: '/search/jql',
-      body: jsonEncode({
+    final allIssues = <Map<String, dynamic>>[];
+    String? nextPageToken;
+
+    while (true) {
+      final body = <String, dynamic>{
         'jql': jql,
         'maxResults': 50,
-        'fields': ['summary', 'status', 'priority', 'assignee', 'created', 'updated', 'issuetype', 'project'],
-      }),
-    );
+        'fields': ['summary', 'status', 'priority', 'assignee', 'created', 'updated', 'issuetype', 'project', 'timeoriginalestimate'],
+      };
+      if (nextPageToken != null) body['nextPageToken'] = nextPageToken;
 
-    if (response.statusCode != 200) {
-      throw JiraSyncException('Pull failed: HTTP ${response.statusCode}');
+      final response = await _makeRequest(
+        config: config,
+        creds: creds,
+        method: 'POST',
+        path: '/search/jql',
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode != 200) {
+        throw JiraSyncException('Pull failed: HTTP ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final issues = (data['issues'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      allIssues.addAll(issues);
+
+      nextPageToken = data['nextPageToken'] as String?;
+      if (nextPageToken == null || issues.isEmpty) break;
     }
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return (data['issues'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    return allIssues;
+  }
+
+  /// Fetches all worklogs for a Jira issue with automatic pagination.
+  Future<List<Map<String, dynamic>>> _fetchWorklogs({
+    required JiraIntegrationDocument config,
+    required JiraCredentials creds,
+    required String issueKey,
+  }) async {
+    final allWorklogs = <Map<String, dynamic>>[];
+    var startAt = 0;
+
+    while (true) {
+      final response = await _makeRequest(
+        config: config,
+        creds: creds,
+        method: 'GET',
+        path: '/issue/$issueKey/worklog?startAt=$startAt&maxResults=50',
+      );
+      if (response.statusCode != 200) break;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final worklogs = (data['worklogs'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+      allWorklogs.addAll(worklogs);
+
+      final total = data['total'] as int? ?? 0;
+      startAt += worklogs.length;
+      if (startAt >= total || worklogs.isEmpty) break;
+    }
+
+    return allWorklogs;
   }
 
   /// Pulls issues from Jira and creates/updates local tasks.
@@ -435,12 +487,24 @@ class JiraService {
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
       final jiraDone = _isJiraDone(fields);
+      final jiraStatusName = _getJiraStatusName(fields);
+      // Jira returns seconds, we store milliseconds
+      final estimateSec = fields['timeoriginalestimate'] as int?;
+      final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+      // Parse Jira created timestamp (ISO 8601)
+      final jiraCreatedStr = fields['created'] as String?;
+      final jiraCreated = jiraCreatedStr != null
+          ? DateTime.tryParse(jiraCreatedStr)
+          : null;
 
       final existing = existingByIssueId[key];
       if (existing != null) {
         final doc = TaskDocument.fromDrift(task: existing, clock: clock);
         doc.title = summary;
         doc.issueLastUpdated = DateTime.now();
+        doc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) doc.issueCreated = jiraCreated;
+        if (estimateMs > 0) doc.timeEstimate = estimateMs;
         // Sync done status from Jira
         if (jiraDone && !doc.isDone) {
           doc.markDone();
@@ -454,6 +518,10 @@ class JiraService {
         final doc = TaskDocument.create(clock: clock, title: summary);
         doc.issueId = key;
         doc.issueType = IssueType.jira;
+        doc.issueLastUpdated = DateTime.now();
+        doc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) doc.issueCreated = jiraCreated;
+        if (estimateMs > 0) doc.timeEstimate = estimateMs;
         if (jiraDone) doc.markDone();
         await _saveTask(doc);
         issueKeyToTaskId[key] = doc.id;
@@ -478,16 +546,8 @@ class JiraService {
         final localTaskId = issueKeyToTaskId[key];
         if (localTaskId == null) continue;
 
-        final wlResponse = await _makeRequest(
-          config: config,
-          creds: creds,
-          method: 'GET',
-          path: '/issue/$key/worklog',
-        );
-        if (wlResponse.statusCode != 200) continue;
-
-        final wlData = jsonDecode(wlResponse.body) as Map<String, dynamic>;
-        final worklogs = wlData['worklogs'] as List<dynamic>? ?? [];
+        final worklogs = await _fetchWorklogs(
+          config: config, creds: creds, issueKey: key);
 
         for (final wl in worklogs) {
           final jiraId = wl['id'].toString();
@@ -497,6 +557,7 @@ class JiraService {
 
           final timeSpentSeconds = wl['timeSpentSeconds'] as int;
           final started = DateTime.parse(wl['started'] as String);
+          final jiraCreated = DateTime.parse(wl['created'] as String);
           final durationMs = timeSpentSeconds * 1000;
           final comment = _extractPlainText(wl['comment']);
 
@@ -507,6 +568,7 @@ class JiraService {
             end: started.millisecondsSinceEpoch + durationMs,
             comment: comment,
           );
+          worklog.createdMs = jiraCreated.millisecondsSinceEpoch;
           worklog.linkToJira(jiraId);
           await _saveWorklog(worklog);
           worklogsCreated++;
@@ -653,6 +715,28 @@ class JiraService {
       } else {
         issueKeyToTaskId[key] = existing.id;
         final localDoc = TaskDocument.fromDrift(task: existing, clock: clock);
+
+        // Always refresh metadata fields from Jira
+        final jiraDone = _isJiraDone(fields);
+        final jiraStatusName = _getJiraStatusName(fields);
+        final estimateSec = fields['timeoriginalestimate'] as int?;
+        final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+        final jiraCreatedStr = fields['created'] as String?;
+        final jiraCreated = jiraCreatedStr != null
+            ? DateTime.tryParse(jiraCreatedStr)
+            : null;
+
+        localDoc.issueLastUpdated = DateTime.now();
+        localDoc.issueStatus = jiraStatusName;
+        if (jiraCreated != null) localDoc.issueCreated = jiraCreated;
+        if (estimateMs > 0) localDoc.timeEstimate = estimateMs;
+        if (jiraDone && !localDoc.isDone) {
+          localDoc.markDone();
+        } else if (!jiraDone && localDoc.isDone) {
+          localDoc.markUndone();
+        }
+        await _saveTask(localDoc);
+
         if (localDoc.title != summary) {
           titleMismatches.add(TitleMismatch(
             localTask: localDoc,
@@ -688,16 +772,8 @@ class JiraService {
       final localTaskId = issueKeyToTaskId[key];
       if (localTaskId == null) continue; // new issue, handled separately
 
-      final wlResponse = await _makeRequest(
-        config: config,
-        creds: creds,
-        method: 'GET',
-        path: '/issue/$key/worklog',
-      );
-      if (wlResponse.statusCode != 200) continue;
-
-      final wlData = jsonDecode(wlResponse.body) as Map<String, dynamic>;
-      final worklogs = wlData['worklogs'] as List<dynamic>? ?? [];
+      final worklogs = await _fetchWorklogs(
+        config: config, creds: creds, issueKey: key);
 
       for (final wl in worklogs) {
         final jiraId = wl['id'].toString();
@@ -706,6 +782,7 @@ class JiraService {
 
         final timeSpentSeconds = wl['timeSpentSeconds'] as int;
         final started = DateTime.parse(wl['started'] as String);
+        final wlCreated = DateTime.parse(wl['created'] as String);
         final comment = _extractPlainText(wl['comment']);
 
         final info = JiraWorklogInfo(
@@ -714,6 +791,7 @@ class JiraService {
           localTaskId: localTaskId,
           timeSpentSeconds: timeSpentSeconds,
           started: started,
+          created: wlCreated,
           comment: comment,
         );
 
@@ -788,10 +866,23 @@ class JiraService {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
+      final jiraDone = _isJiraDone(fields);
+      final jiraStatusName = _getJiraStatusName(fields);
+      final estimateSec = fields['timeoriginalestimate'] as int?;
+      final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+      final jiraCreatedStr = fields['created'] as String?;
+      final jiraCreated = jiraCreatedStr != null
+          ? DateTime.tryParse(jiraCreatedStr)
+          : null;
 
       final doc = TaskDocument.create(clock: clock, title: summary);
       doc.issueId = key;
       doc.issueType = IssueType.jira;
+      doc.issueLastUpdated = DateTime.now();
+      doc.issueStatus = jiraStatusName;
+      if (jiraCreated != null) doc.issueCreated = jiraCreated;
+      if (estimateMs > 0) doc.timeEstimate = estimateMs;
+      if (jiraDone) doc.markDone();
       await _saveTask(doc);
       tasksCreated++;
     }
@@ -836,6 +927,7 @@ class JiraService {
         end: info.started.millisecondsSinceEpoch + info.durationMs,
         comment: info.comment,
       );
+      worklog.createdMs = info.created.millisecondsSinceEpoch;
       worklog.linkToJira(info.jiraWorklogId);
       await _saveWorklog(worklog);
       worklogsPulled++;

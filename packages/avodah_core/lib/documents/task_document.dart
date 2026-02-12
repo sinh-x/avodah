@@ -40,6 +40,8 @@ class TaskFields {
   static const String issueAttachmentNr = 'issueAttachmentNr';
   static const String issueTimeTracked = 'issueTimeTracked';
   static const String issuePoints = 'issuePoints';
+  static const String issueStatus = 'issueStatus';
+  static const String issueCreated = 'issueCreated';
 }
 
 /// Issue provider types for external integrations.
@@ -393,6 +395,19 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
   int? get issuePoints => getInt(TaskFields.issuePoints);
   set issuePoints(int? value) => setInt(TaskFields.issuePoints, value);
 
+  /// Status name from the external issue tracker (e.g. "Done", "In Progress").
+  String? get issueStatus => getString(TaskFields.issueStatus);
+  set issueStatus(String? value) => setString(TaskFields.issueStatus, value);
+
+  /// When the issue was originally created on the external tracker.
+  DateTime? get issueCreated {
+    final ms = getInt(TaskFields.issueCreated);
+    return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
+  set issueCreated(DateTime? value) =>
+      setInt(TaskFields.issueCreated, value?.millisecondsSinceEpoch);
+
   /// Returns true if this task is linked to an external issue.
   bool get hasIssueLink => issueId != null && issueProviderId != null;
 
@@ -483,6 +498,10 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       hasIssueLink: hasIssueLink,
       issueId: issueId,
       issueType: issueType,
+      issueStatus: issueStatus,
+      issueCreated: issueCreated,
+      issueLastUpdated: issueLastUpdated,
+      doneOn: doneOn,
     );
   }
 
@@ -518,6 +537,10 @@ class TaskModel {
   final bool hasIssueLink;
   final String? issueId;
   final IssueType? issueType;
+  final String? issueStatus;
+  final DateTime? issueCreated;
+  final DateTime? issueLastUpdated;
+  final DateTime? doneOn;
 
   const TaskModel({
     required this.id,
@@ -538,6 +561,10 @@ class TaskModel {
     required this.hasIssueLink,
     this.issueId,
     this.issueType,
+    this.issueStatus,
+    this.issueCreated,
+    this.issueLastUpdated,
+    this.doneOn,
   });
 
   /// Returns the effective due date (prefers dueWithTime over dueDay).

@@ -616,6 +616,7 @@ void main() {
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 3600,
                   'started': '2026-02-10T09:00:00.000+0000',
+                  'created': '2026-02-10T09:00:00.000+0000',
                   'comment': {
                     'type': 'doc',
                     'content': [
@@ -633,12 +634,14 @@ void main() {
                   'author': {'accountId': 'other-user'},
                   'timeSpentSeconds': 1800,
                   'started': '2026-02-10T10:00:00.000+0000',
+                  'created': '2026-02-10T10:00:00.000+0000',
                 },
                 {
                   'id': '1003',
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 7200,
                   'started': '2026-02-10T14:00:00.000+0000',
+                  'created': '2026-02-10T14:00:00.000+0000',
                 },
               ],
             }),
@@ -703,6 +706,7 @@ void main() {
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 1800,
                   'started': '2026-02-10T09:00:00.000+0000',
+                  'created': '2026-02-10T09:00:00.000+0000',
                 },
               ],
             }),
@@ -761,6 +765,7 @@ void main() {
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 900,
                   'started': '2026-02-10T11:00:00.000+0000',
+                  'created': '2026-02-10T11:00:00.000+0000',
                 },
               ],
             }),
@@ -901,6 +906,7 @@ void main() {
               'author': {'accountId': 'user-123'},
               'timeSpentSeconds': 3600,
               'started': '2026-02-10T09:00:00.000+0000',
+              'created': '2026-02-10T09:00:00.000+0000',
             },
           ],
         },
@@ -940,6 +946,7 @@ void main() {
               'author': {'accountId': 'user-123'},
               'timeSpentSeconds': 3600, // 1h — differs from local 1h30m
               'started': '2026-02-10T09:00:00.000+0000',
+              'created': '2026-02-10T09:00:00.000+0000',
             },
           ],
         },
@@ -982,6 +989,7 @@ void main() {
               'author': {'accountId': 'user-123'},
               'timeSpentSeconds': 3600,
               'started': '2026-02-10T09:00:00.000+0000',
+              'created': '2026-02-10T09:00:00.000+0000',
               'comment': {
                 'type': 'doc',
                 'content': [
@@ -1054,6 +1062,7 @@ void main() {
               'author': {'accountId': 'user-123'},
               'timeSpentSeconds': 3600,
               'started': '2026-02-10T09:00:00.000+0000',
+              'created': '2026-02-10T09:00:00.000+0000',
             },
           ],
         },
@@ -1189,6 +1198,7 @@ void main() {
                 'author': {'accountId': 'user-123'},
                 'timeSpentSeconds': 1800,
                 'started': '2026-02-10T14:00:00.000+0000',
+                'created': '2026-02-10T14:00:00.000+0000',
                 'comment': {
                   'type': 'doc',
                   'content': [
@@ -1259,6 +1269,7 @@ void main() {
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 3600, // 1h — differs from local 1h30m
                   'started': '2026-02-10T09:00:00.000+0000',
+                  'created': '2026-02-10T09:00:00.000+0000',
                 },
               ],
             }), 200);
@@ -1323,6 +1334,7 @@ void main() {
                 'author': {'accountId': 'user-123'},
                 'timeSpentSeconds': 7200, // 2h — differs from local 1h
                 'started': '2026-02-10T09:00:00.000+0000',
+                'created': '2026-02-10T09:00:00.000+0000',
                 'comment': {
                   'type': 'doc',
                   'content': [
@@ -1394,6 +1406,7 @@ void main() {
                   'author': {'accountId': 'user-123'},
                   'timeSpentSeconds': 7200,
                   'started': '2026-02-10T09:00:00.000+0000',
+                  'created': '2026-02-10T09:00:00.000+0000',
                   'comment': {
                     'type': 'doc',
                     'content': [
