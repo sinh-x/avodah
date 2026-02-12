@@ -54,5 +54,8 @@ coverage/
 result
 result-*
 
+# Compiled CLI binary
+mcp/bin/avo
+
 # Direnv
 .direnv/
