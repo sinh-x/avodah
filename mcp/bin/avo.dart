@@ -58,7 +58,7 @@ Future<void> main(List<String> args) async {
       'avo',
       'Avodah - Worklog tracking from the command line',
     )
-      ..addCommand(StartCommand(timerService))
+      ..addCommand(StartCommand(timerService, taskService))
       ..addCommand(StopCommand(timerService))
       ..addCommand(StatusCommand(
         timerService: timerService,
