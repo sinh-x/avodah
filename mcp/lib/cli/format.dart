@@ -44,10 +44,27 @@ String hintPlain(String text) => '  -> $text';
 String formatTime(DateTime dt) => dt.toString().substring(11, 16);
 
 String formatDuration(Duration d) {
-  final hours = d.inHours;
-  final minutes = d.inMinutes % 60;
-  if (hours > 0) return '${hours}h ${minutes}m';
-  return '${minutes}m';
+  final totalMinutes = d.inMinutes;
+  if (totalMinutes == 0) return '0m';
+
+  final weeks = totalMinutes ~/ (5 * 8 * 60); // 5 days * 8 hours
+  final days = (totalMinutes % (5 * 8 * 60)) ~/ (8 * 60); // 8-hour days
+  final hours = (totalMinutes % (8 * 60)) ~/ 60;
+  final minutes = totalMinutes % 60;
+
+  final parts = <String>[];
+  if (weeks > 0) parts.add('${weeks}w');
+  if (days > 0) parts.add('${days}d');
+  if (hours > 0) parts.add('${hours}h');
+  if (minutes > 0) parts.add('${minutes}m');
+  return parts.join(' ');
+}
+
+/// Formats worked time with optional estimate: "2h 30m / 8h"
+String formatTimeWithEstimate(Duration worked, Duration? estimate) {
+  final w = formatDuration(worked);
+  if (estimate == null || estimate.inMinutes == 0) return w;
+  return '$w / ${formatDuration(estimate)}';
 }
 
 String formatDate(DateTime date) {
@@ -57,6 +74,39 @@ String formatDate(DateTime date) {
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
   return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
+}
+
+/// Formats a DateTime as a relative string like "2 days ago" or "just now".
+String formatRelativeDate(DateTime date) {
+  final now = DateTime.now();
+  final diff = now.difference(date);
+
+  if (diff.inSeconds < 60) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays == 1) return 'yesterday';
+  if (diff.inDays < 7) return '${diff.inDays} days ago';
+  return formatDate(date);
+}
+
+/// Formats a DateTime as "Mon, Feb 10 14:30" for display.
+String formatDateTime(DateTime date) {
+  return '${formatDate(date)} ${formatTime(date)}';
+}
+
+/// Parses human-friendly duration strings like "1h30m", "2h 15m", "30m".
+/// Returns null if the string can't be parsed.
+Duration? parseDuration(String input) {
+  final normalized = input.replaceAll(' ', '');
+  final regex = RegExp(r'^(?:(\d+)h)?(?:(\d+)m)?$');
+  final match = regex.firstMatch(normalized);
+  if (match == null) return null;
+
+  final hours = int.tryParse(match.group(1) ?? '') ?? 0;
+  final minutes = int.tryParse(match.group(2) ?? '') ?? 0;
+
+  if (hours == 0 && minutes == 0) return null;
+  return Duration(hours: hours, minutes: minutes);
 }
 
 /// Horizontal bar chart segment.

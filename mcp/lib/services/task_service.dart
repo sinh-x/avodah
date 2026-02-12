@@ -82,6 +82,17 @@ class TaskService {
     return TaskDocument.fromDrift(task: matches.first, clock: clock);
   }
 
+  /// Soft-deletes a task by exact ID or prefix match.
+  ///
+  /// Throws [TaskNotFoundException] if no task matches.
+  /// Throws [AmbiguousTaskIdException] if multiple tasks match.
+  Future<TaskDocument> delete(String idOrPrefix) async {
+    final task = await show(idOrPrefix);
+    task.delete();
+    await _saveTask(task);
+    return task;
+  }
+
   /// Marks a task as done by exact ID or prefix match.
   ///
   /// Throws [TaskNotFoundException] if no task matches.

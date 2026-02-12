@@ -219,4 +219,81 @@ void main() {
       expect(recent.last.taskId, equals('old'));
     });
   });
+
+  group('timeByTask', () {
+    test('aggregates duration per task', () async {
+      await service.manualLog(taskId: 'task-a', durationMinutes: 60);
+      await service.manualLog(taskId: 'task-a', durationMinutes: 30);
+      await service.manualLog(taskId: 'task-b', durationMinutes: 45);
+
+      final result = await service.timeByTask();
+
+      expect(result['task-a']!.inMinutes, equals(90));
+      expect(result['task-b']!.inMinutes, equals(45));
+    });
+
+    test('excludes deleted worklogs', () async {
+      final wl = await service.manualLog(taskId: 'task-a', durationMinutes: 60);
+      await service.deleteWorklog(wl.id);
+
+      final result = await service.timeByTask();
+
+      expect(result['task-a'], isNull);
+    });
+  });
+
+  group('show', () {
+    test('finds worklog by exact ID', () async {
+      final created = await service.manualLog(
+        taskId: 'task-1',
+        durationMinutes: 30,
+      );
+
+      final found = await service.show(created.id);
+
+      expect(found.id, equals(created.id));
+    });
+
+    test('finds worklog by prefix', () async {
+      final created = await service.manualLog(
+        taskId: 'task-1',
+        durationMinutes: 30,
+      );
+
+      final found = await service.show(created.id.substring(0, 8));
+
+      expect(found.id, equals(created.id));
+    });
+
+    test('throws WorklogNotFoundException for unknown ID', () async {
+      expect(
+        () => service.show('nonexistent'),
+        throwsA(isA<WorklogNotFoundException>()),
+      );
+    });
+  });
+
+  group('deleteWorklog', () {
+    test('soft-deletes worklog', () async {
+      final created = await service.manualLog(
+        taskId: 'task-1',
+        durationMinutes: 30,
+      );
+
+      final deleted = await service.deleteWorklog(created.id);
+
+      expect(deleted.isDeleted, isTrue);
+    });
+
+    test('deleted worklog excluded from listRecent', () async {
+      final created = await service.manualLog(
+        taskId: 'task-1',
+        durationMinutes: 30,
+      );
+      await service.deleteWorklog(created.id);
+
+      final recent = await service.listRecent();
+      expect(recent, isEmpty);
+    });
+  });
 }

@@ -82,6 +82,17 @@ class ProjectService {
     return ProjectDocument.fromDrift(project: matches.first, clock: clock);
   }
 
+  /// Soft-deletes a project by exact ID or prefix match.
+  ///
+  /// Throws [ProjectNotFoundException] if no project matches.
+  /// Throws [AmbiguousProjectIdException] if multiple projects match.
+  Future<ProjectDocument> delete(String idOrPrefix) async {
+    final project = await show(idOrPrefix);
+    project.delete();
+    await _saveProject(project);
+    return project;
+  }
+
   /// Returns the number of active tasks for a given project.
   Future<int> taskCount(String projectId) async {
     final rows = await db.select(db.tasks).get();
