@@ -1,5 +1,5 @@
 {
-  description = "Avodah - Super Productivity Flutter Migration";
+  description = "Avodah - Time Tracking & Task Management";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,7 +10,7 @@
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-      # Linux desktop dependencies
+      # Linux desktop dependencies (for Flutter app & devShell)
       linuxDeps = pkgs: with pkgs; [
         gtk3
         glib
@@ -30,66 +30,46 @@
         sqlite  # For Drift database tests
       ];
 
-      mkPackage = pkgs:
-        let
-          flutter = pkgs.flutter;
-          deps = linuxDeps pkgs;
-        in
-        pkgs.stdenv.mkDerivation rec {
-          pname = "avodah";
-          version = "0.1.0";
+      # CLI package (avo) — pure Dart, built with buildDartApplication
+      mkAvoPackage = pkgs: pkgs.buildDartApplication {
+        pname = "avo";
+        version = "0.1.0";
 
-          src = pkgs.lib.cleanSource ./.;
+        src = pkgs.lib.cleanSource ./.;
+        sourceRoot = "source/mcp";
 
-          nativeBuildInputs = with pkgs; [
-            flutter
-            dart
-            cmake
-            ninja
-            pkg-config
-            clang
-            makeWrapper
-          ] ++ deps;
+        pubspecLock = pkgs.lib.importJSON ./mcp/pubspec.lock.json;
 
-          buildInputs = deps;
+        # sqlite3 Dart package needs system sqlite — handled automatically
+        # by nixpkgs' package-source-builders/sqlite3
 
-          configurePhase = ''
-            export HOME=$(mktemp -d)
-            export PUB_CACHE=$HOME/.pub-cache
-            flutter config --no-analytics
-            flutter pub get
-          '';
+        postInstall = ''
+          # Fish completions
+          installShellCompletion --fish --name avo.fish \
+            $NIX_BUILD_TOP/source/completions/avo.fish
+        '';
 
-          buildPhase = ''
-            flutter build linux --release
-          '';
+        nativeBuildInputs = [ pkgs.installShellFiles ];
 
-          installPhase = ''
-            mkdir -p $out/bin $out/share/avodah
-            cp -r build/linux/x64/release/bundle/* $out/share/avodah/
-            makeWrapper $out/share/avodah/avodah $out/bin/avodah \
-              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath deps}"
-          '';
-
-          meta = with pkgs.lib; {
-            description = "Avodah - Time Tracking & Task Management";
-            homepage = "https://github.com/sinh-x/avodah";
-            license = licenses.mit;
-            platforms = platforms.linux;
-            mainProgram = "avodah";
-          };
+        meta = with pkgs.lib; {
+          description = "Avodah CLI - Time Tracking & Task Management";
+          homepage = "https://github.com/sinh-x/avodah";
+          license = licenses.mit;
+          platforms = platforms.linux;
+          mainProgram = "avo";
         };
+      };
     in
     {
       # Overlay for NixOS integration
       overlays.default = final: prev: {
-        avodah = mkPackage final;
+        avo = mkAvoPackage final;
       };
 
       # Packages
       packages = forAllSystems (system: {
-        default = mkPackage nixpkgs.legacyPackages.${system};
-        avodah = mkPackage nixpkgs.legacyPackages.${system};
+        default = mkAvoPackage nixpkgs.legacyPackages.${system};
+        avo = mkAvoPackage nixpkgs.legacyPackages.${system};
       });
 
       # Development shells
