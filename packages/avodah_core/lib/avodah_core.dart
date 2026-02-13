@@ -26,3 +26,6 @@ export 'documents/project_document.dart';
 export 'documents/task_document.dart';
 export 'documents/timer_document.dart';
 export 'documents/worklog_document.dart';
+
+// Version
+export 'version.dart';
