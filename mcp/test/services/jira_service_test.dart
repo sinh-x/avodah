@@ -437,6 +437,111 @@ void main() {
       expect(tasks.length, greaterThanOrEqualTo(2));
     });
 
+    test('pull syncs duedate from Jira to local dueDay', () async {
+      await writeProfileConfig();
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/search')) {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                {
+                  'key': 'AG-1',
+                  'fields': {
+                    'summary': 'Issue with due date',
+                    'duedate': '2026-03-15',
+                  },
+                },
+                {
+                  'key': 'AG-2',
+                  'fields': {
+                    'summary': 'Issue without due date',
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(
+            jsonEncode({'accountId': 'user-123'}),
+            200,
+          );
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(
+            jsonEncode({'worklogs': []}),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      await service.pull();
+
+      final tasks = await taskService.list();
+      final withDue = tasks.firstWhere((t) => t.issueId == 'AG-1');
+      final withoutDue = tasks.firstWhere((t) => t.issueId == 'AG-2');
+      expect(withDue.dueDay, equals('2026-03-15'));
+      expect(withoutDue.dueDay, isNull);
+    });
+
+    test('pull updates duedate on existing task', () async {
+      await writeProfileConfig();
+
+      // Create an existing task with no due date
+      final task = await taskService.add(title: 'Existing task');
+      task.issueId = 'AG-5';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/search')) {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                {
+                  'key': 'AG-5',
+                  'fields': {
+                    'summary': 'Existing task',
+                    'duedate': '2026-04-01',
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(
+            jsonEncode({'accountId': 'user-123'}),
+            200,
+          );
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(
+            jsonEncode({'worklogs': []}),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.pull();
+      expect(result.updated, equals(1));
+
+      final tasks = await taskService.list();
+      final updated = tasks.firstWhere((t) => t.issueId == 'AG-5');
+      expect(updated.dueDay, equals('2026-04-01'));
+    });
+
     test('pull marks local task done when Jira issue is done', () async {
       await writeProfileConfig();
 
@@ -1117,6 +1222,44 @@ void main() {
 
       final tasks = await taskService.list();
       expect(tasks.any((t) => t.issueId == 'AG-10'), isTrue);
+    });
+
+    test('creates tasks with dueDay from executeSyncPlan', () async {
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/search/jql')) {
+          return http.Response(jsonEncode({
+            'issues': [
+              {
+                'key': 'AG-15',
+                'fields': {
+                  'summary': 'Task with due',
+                  'duedate': '2026-06-01',
+                  'timeoriginalestimate': 7200,
+                },
+              },
+            ],
+          }), 200);
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(jsonEncode({'worklogs': []}), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+      final service = await setupService(client);
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.newRemoteIssues, hasLength(1));
+
+      final result = await service.executeSyncPlan(ctx);
+      expect(result.tasksCreated, equals(1));
+
+      final tasks = await taskService.list();
+      final created = tasks.firstWhere((t) => t.issueId == 'AG-15');
+      expect(created.dueDay, equals('2026-06-01'));
+      expect(created.timeEstimate, equals(7200000));
     });
 
     test('pushes new local worklogs and reconciles duration', () async {

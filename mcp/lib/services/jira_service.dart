@@ -360,6 +360,40 @@ class JiraService {
     return status?['name'] as String?;
   }
 
+  /// Applies common Jira field values to a [TaskDocument].
+  ///
+  /// Extracts status, estimate, created date, due date, and done state from
+  /// the Jira [fields] map and sets them on [doc]. If [defaultCategory] is
+  /// given and the task has no category yet, it is also applied.
+  static void _applyJiraFields(
+    TaskDocument doc,
+    Map<String, dynamic> fields, {
+    String? defaultCategory,
+  }) {
+    final jiraDone = _isJiraDone(fields);
+    final jiraStatusName = _getJiraStatusName(fields);
+    final estimateSec = fields['timeoriginalestimate'] as int?;
+    final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
+    final jiraCreatedStr = fields['created'] as String?;
+    final jiraCreated =
+        jiraCreatedStr != null ? DateTime.tryParse(jiraCreatedStr) : null;
+    final dueDate = fields['duedate'] as String?;
+
+    doc.issueLastUpdated = DateTime.now();
+    doc.issueStatus = jiraStatusName;
+    if (jiraCreated != null) doc.issueCreated = jiraCreated;
+    if (estimateMs > 0) doc.timeEstimate = estimateMs;
+    if (dueDate != null) doc.dueDay = dueDate;
+    if (defaultCategory != null && doc.category == null) {
+      doc.category = defaultCategory;
+    }
+    if (jiraDone && !doc.isDone) {
+      doc.markDone();
+    } else if (!jiraDone && doc.isDone) {
+      doc.markUndone();
+    }
+  }
+
   /// Builds a JQL string for the given config and optional issue key.
   static String _buildJql({
     required JiraIntegrationDocument config,
@@ -392,7 +426,7 @@ class JiraService {
       final body = <String, dynamic>{
         'jql': jql,
         'maxResults': 50,
-        'fields': ['summary', 'status', 'priority', 'assignee', 'created', 'updated', 'issuetype', 'project', 'timeoriginalestimate'],
+        'fields': ['summary', 'status', 'priority', 'assignee', 'created', 'updated', 'issuetype', 'project', 'timeoriginalestimate', 'duedate'],
       };
       if (nextPageToken != null) body['nextPageToken'] = nextPageToken;
 
@@ -488,31 +522,12 @@ class JiraService {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
-      final jiraDone = _isJiraDone(fields);
-      final jiraStatusName = _getJiraStatusName(fields);
-      // Jira returns seconds, we store milliseconds
-      final estimateSec = fields['timeoriginalestimate'] as int?;
-      final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
-      // Parse Jira created timestamp (ISO 8601)
-      final jiraCreatedStr = fields['created'] as String?;
-      final jiraCreated = jiraCreatedStr != null
-          ? DateTime.tryParse(jiraCreatedStr)
-          : null;
 
       final existing = existingByIssueId[key];
       if (existing != null) {
         final doc = TaskDocument.fromDrift(task: existing, clock: clock);
         doc.title = summary;
-        doc.issueLastUpdated = DateTime.now();
-        doc.issueStatus = jiraStatusName;
-        if (jiraCreated != null) doc.issueCreated = jiraCreated;
-        if (estimateMs > 0) doc.timeEstimate = estimateMs;
-        // Sync done status from Jira
-        if (jiraDone && !doc.isDone) {
-          doc.markDone();
-        } else if (!jiraDone && doc.isDone) {
-          doc.markUndone();
-        }
+        _applyJiraFields(doc, fields);
         await _saveTask(doc);
         issueKeyToTaskId[key] = existing.id;
         updated++;
@@ -520,14 +535,8 @@ class JiraService {
         final doc = TaskDocument.create(clock: clock, title: summary);
         doc.issueId = key;
         doc.issueType = IssueType.jira;
-        doc.issueLastUpdated = DateTime.now();
-        doc.issueStatus = jiraStatusName;
-        if (jiraCreated != null) doc.issueCreated = jiraCreated;
-        if (estimateMs > 0) doc.timeEstimate = estimateMs;
-        if (config.defaultCategory != null) {
-          doc.category = config.defaultCategory;
-        }
-        if (jiraDone) doc.markDone();
+        _applyJiraFields(doc, fields,
+            defaultCategory: config.defaultCategory);
         await _saveTask(doc);
         issueKeyToTaskId[key] = doc.id;
         created++;
@@ -722,24 +731,7 @@ class JiraService {
         final localDoc = TaskDocument.fromDrift(task: existing, clock: clock);
 
         // Always refresh metadata fields from Jira
-        final jiraDone = _isJiraDone(fields);
-        final jiraStatusName = _getJiraStatusName(fields);
-        final estimateSec = fields['timeoriginalestimate'] as int?;
-        final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
-        final jiraCreatedStr = fields['created'] as String?;
-        final jiraCreated = jiraCreatedStr != null
-            ? DateTime.tryParse(jiraCreatedStr)
-            : null;
-
-        localDoc.issueLastUpdated = DateTime.now();
-        localDoc.issueStatus = jiraStatusName;
-        if (jiraCreated != null) localDoc.issueCreated = jiraCreated;
-        if (estimateMs > 0) localDoc.timeEstimate = estimateMs;
-        if (jiraDone && !localDoc.isDone) {
-          localDoc.markDone();
-        } else if (!jiraDone && localDoc.isDone) {
-          localDoc.markUndone();
-        }
+        _applyJiraFields(localDoc, fields);
         await _saveTask(localDoc);
 
         if (localDoc.title != summary) {
@@ -871,26 +863,12 @@ class JiraService {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
-      final jiraDone = _isJiraDone(fields);
-      final jiraStatusName = _getJiraStatusName(fields);
-      final estimateSec = fields['timeoriginalestimate'] as int?;
-      final estimateMs = estimateSec != null ? estimateSec * 1000 : 0;
-      final jiraCreatedStr = fields['created'] as String?;
-      final jiraCreated = jiraCreatedStr != null
-          ? DateTime.tryParse(jiraCreatedStr)
-          : null;
 
       final doc = TaskDocument.create(clock: clock, title: summary);
       doc.issueId = key;
       doc.issueType = IssueType.jira;
-      doc.issueLastUpdated = DateTime.now();
-      doc.issueStatus = jiraStatusName;
-      if (jiraCreated != null) doc.issueCreated = jiraCreated;
-      if (estimateMs > 0) doc.timeEstimate = estimateMs;
-      if (config.defaultCategory != null) {
-        doc.category = config.defaultCategory;
-      }
-      if (jiraDone) doc.markDone();
+      _applyJiraFields(doc, fields,
+          defaultCategory: config.defaultCategory);
       await _saveTask(doc);
       tasksCreated++;
     }
