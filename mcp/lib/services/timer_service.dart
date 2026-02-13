@@ -114,7 +114,10 @@ class TimerService {
 
   /// Stops the running timer and creates a worklog entry.
   /// Throws if no timer is running.
-  Future<StopResult> stop() async {
+  ///
+  /// If [comment] is provided, it overrides the timer's note as the
+  /// worklog comment. Otherwise the timer note is used.
+  Future<StopResult> stop({String? comment}) async {
     final timer = await _loadActiveTimer();
     if (timer == null) throw NoTimerRunningException();
 
@@ -136,7 +139,7 @@ class TimerService {
       taskId: taskId,
       start: startedAt,
       end: now,
-      comment: note,
+      comment: comment ?? note,
     );
 
     await _saveWorklog(worklog);

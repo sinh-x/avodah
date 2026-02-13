@@ -61,11 +61,13 @@ String formatDuration(Duration d) {
   return parts.join(' ');
 }
 
-/// Formats worked time with optional estimate: "2h 30m / 8h"
+/// Formats worked time with estimate: "2h 30m / 8h" or "0m / -"
 String formatTimeWithEstimate(Duration worked, Duration? estimate) {
   final w = formatDuration(worked);
-  if (estimate == null || estimate.inMinutes == 0) return w;
-  return '$w / ${formatDuration(estimate)}';
+  final e = (estimate != null && estimate.inMinutes > 0)
+      ? formatDuration(estimate)
+      : '-';
+  return '$w / $e';
 }
 
 String formatDate(DateTime date) {
@@ -136,6 +138,12 @@ String todayString() {
 String buildBar(int value, int max, {int width = 20}) {
   final filled = max > 0 ? (value * width ~/ max) : 0;
   return '${'#' * filled}${'.' * (width - filled)}';
+}
+
+/// Progress bar using block characters: [████████░░░░░░░░░░░░]
+String progressBar(int current, int total, {int width = 20}) {
+  final filled = total > 0 ? (current * width ~/ total) : 0;
+  return '[${'█' * filled}${'░' * (width - filled)}]';
 }
 
 // ── Jira Profile Display ─────────────────────────────────────────────────────
