@@ -64,15 +64,24 @@ class StartCommand extends TimerCommand {
         return;
       }
 
+      final timeByTask = await worklogService.timeByTask();
       final pickerItems = tasks.map((task) {
         final check = task.isDone ? 'x' : ' ';
         final id = task.id.substring(0, 8);
         final issueTag = task.issueId != null
             ? task.issueId!.padRight(10)
             : ''.padRight(10);
-        final displayLine = '  [$check] $id  $issueTag  ${task.title}';
+        final cat = task.category ?? '-';
+        final due = task.dueDay ?? '-';
+        final worked = timeByTask[task.id] ?? Duration.zero;
+        final estimate = task.timeEstimate > 0
+            ? Duration(milliseconds: task.timeEstimate)
+            : null;
+        final time = formatTimeWithEstimate(worked, estimate);
+        final displayLine =
+            '  [$check] $id  $issueTag  ${task.title}  {$cat}  [due: $due]  ($time)';
         final searchText =
-            '${task.title} ${task.issueId ?? ''} ${task.id}'.toLowerCase();
+            '${task.title} ${task.issueId ?? ''} ${task.id} ${task.category ?? ''}'.toLowerCase();
         return PickerItem<TaskDocument>(
           value: task,
           displayLine: displayLine,
@@ -141,11 +150,16 @@ class StartCommand extends TimerCommand {
       print('Timer started: "$taskTitle"');
       if (timer.taskId != null) {
         print(kvRow('Task:', timer.taskId!.substring(0, 8)));
+        final task = await taskService.show(timer.taskId!);
         final worklogs = await worklogService.listForTask(timer.taskId!);
-        if (worklogs.isNotEmpty) {
-          final totalMs = worklogs.fold<int>(0, (sum, w) => sum + w.durationMs);
-          print(kvRow('Logged:', formatDuration(Duration(milliseconds: totalMs))));
-        }
+        final totalMs = worklogs.fold<int>(0, (sum, w) => sum + w.durationMs);
+        final worked = Duration(milliseconds: totalMs);
+        final estimate = task.timeEstimate > 0
+            ? Duration(milliseconds: task.timeEstimate)
+            : null;
+        print(kvRow('Category:', task.category ?? '-'));
+        print(kvRow('Due:', task.dueDay ?? '-'));
+        print(kvRow('Time:', formatTimeWithEstimate(worked, estimate)));
       }
       print(kvRow('Started:', formatTime(timer.startedAt!)));
       if (note != null) print(kvRow('Note:', note));
@@ -909,12 +923,8 @@ class TaskShowCommand extends TaskSubcommand {
       } else {
         print(kvRow('Status:', status));
       }
-      if (projectName != null) {
-        print(kvRow('Project:', projectName));
-      }
-      if (task.category != null) {
-        print(kvRow('Category:', task.category!));
-      }
+      print(kvRow('Project:', projectName ?? '-'));
+      print(kvRow('Category:', task.category ?? '-'));
       if (task.description != null) {
         print(kvRow('Description:', task.description!));
       }
@@ -923,12 +933,13 @@ class TaskShowCommand extends TaskSubcommand {
           ?? task.createdTimestamp;
       print(kvRow('Created:', created != null
           ? formatRelativeDate(created)
-          : 'unknown'));
+          : '-'));
       print(kvRow('Time:', formatTimeWithEstimate(worked, estimate)));
       print(kvRow('Worklogs:', '${allWorklogs.length} entries'));
-      if (task.dueDay != null) {
-        print(kvRow('Due:', task.dueDay!));
-      }
+      final dueDisplay = task.dueDay != null
+          ? (task.isOverdue ? '${task.dueDay} (OVERDUE)' : task.dueDay!)
+          : '-';
+      print(kvRow('Due:', dueDisplay));
       if (task.doneOn != null) {
         print(kvRow('Done on:', formatRelativeDate(task.doneOn!)));
       }
