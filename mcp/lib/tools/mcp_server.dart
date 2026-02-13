@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:avodah_core/avodah_core.dart' show avodahVersion;
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
@@ -24,7 +25,7 @@ class McpServer {
   final AvodahPaths paths;
 
   static const String serverName = 'avodah';
-  static const String serverVersion = '0.1.0';
+  static String get serverVersion => avodahVersion;
 
   McpServer({
     required this.timerService,

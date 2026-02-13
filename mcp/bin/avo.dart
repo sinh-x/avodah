@@ -27,7 +27,7 @@ library;
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:avodah_core/avodah_core.dart';
+import 'package:avodah_core/avodah_core.dart' show HybridLogicalClock, avodahVersion;
 import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
@@ -40,6 +40,12 @@ import 'package:avodah_mcp/services/worklog_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 
 Future<void> main(List<String> args) async {
+  // Handle --version / -v before any initialization
+  if (args.contains('--version') || args.contains('-v')) {
+    print('avodah (עבודה) $avodahVersion');
+    return;
+  }
+
   // Initialize paths and database
   final paths = AvodahPaths();
   await paths.ensureDirectories();

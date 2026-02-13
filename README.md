@@ -123,6 +123,20 @@ See `.kiro/specs/sp-flutter-migration/` for detailed:
 
 **Avodah** (עבודה) is a Hebrew word meaning "work," "service," and "worship." In Jewish tradition, it represents the idea that work itself can be a form of divine service—transforming everyday tasks into something meaningful.
 
+## Versioning
+
+Avodah follows [Semantic Versioning](https://semver.org/). See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+| Version | Milestone |
+|---------|-----------|
+| **0.x.y** | Pre-stable — core features being built and tested |
+| **0.1.0** | CLI time tracking, task management, Jira 2-way sync, daily planning, MCP server |
+| **0.2.0** | Next capability area (e.g., full Jira coverage, GitHub integration) |
+| **1.0.0** | Fully functional CLI + MCP integration for AI-assisted usage |
+| **2.0.0** | Flutter UI with Linux & Android |
+
+**Pre-1.0 convention:** minor bumps (0.x.0) for new capability areas or breaking changes; patch bumps (0.x.y) for bug fixes and polish within a capability.
+
 ## License
 
 MIT

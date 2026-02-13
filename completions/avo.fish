@@ -3,6 +3,9 @@
 # Disable file completions by default
 complete -c avo -f
 
+# Global options
+complete -c avo -n __fish_use_subcommand -l version -d 'Show version'
+
 # Top-level commands
 complete -c avo -n __fish_use_subcommand -a start -d 'Start timer on a task'
 complete -c avo -n __fish_use_subcommand -a stop -d 'Stop timer and log time'

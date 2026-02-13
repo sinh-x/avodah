@@ -1,3 +1,4 @@
+import 'package:avodah_core/avodah_core.dart' show avodahVersion;
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -48,7 +49,7 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('About'),
-            subtitle: const Text('Avodah v0.1.0'),
+            subtitle: Text('Avodah v$avodahVersion'),
             onTap: () {
               // TODO: About dialog
             },
