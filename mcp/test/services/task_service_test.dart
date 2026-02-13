@@ -216,4 +216,125 @@ void main() {
       );
     });
   });
+
+  group('setDue', () {
+    test('sets due date on a task', () async {
+      final created = await service.add(title: 'Due task');
+
+      final updated = await service.setDue(created.id, '2026-03-15');
+
+      expect(updated.dueDay, equals('2026-03-15'));
+    });
+
+    test('persists due date', () async {
+      final created = await service.add(title: 'Due task');
+      await service.setDue(created.id, '2026-03-15');
+
+      final fetched = await service.show(created.id);
+      expect(fetched.dueDay, equals('2026-03-15'));
+    });
+
+    test('clears due date with null', () async {
+      final created = await service.add(title: 'Due task', dueDay: '2026-03-15');
+
+      final updated = await service.setDue(created.id, null);
+
+      expect(updated.dueDay, isNull);
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.setDue('nonexistent', '2026-03-15'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
+  group('setCategory', () {
+    test('sets category on a task', () async {
+      final created = await service.add(title: 'Cat task');
+
+      final updated = await service.setCategory(created.id, 'Working');
+
+      expect(updated.category, equals('Working'));
+    });
+
+    test('persists category', () async {
+      final created = await service.add(title: 'Cat task');
+      await service.setCategory(created.id, 'Learning');
+
+      final fetched = await service.show(created.id);
+      expect(fetched.category, equals('Learning'));
+    });
+
+    test('clears category with null', () async {
+      final created = await service.add(title: 'Cat task', category: 'Working');
+
+      final updated = await service.setCategory(created.id, null);
+
+      expect(updated.category, isNull);
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.setCategory('nonexistent', 'Working'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
+  group('add with optional params', () {
+    test('creates task with dueDay', () async {
+      final task = await service.add(title: 'Due task', dueDay: '2026-04-01');
+
+      expect(task.dueDay, equals('2026-04-01'));
+    });
+
+    test('creates task with category', () async {
+      final task = await service.add(title: 'Cat task', category: 'Learning');
+
+      expect(task.category, equals('Learning'));
+    });
+
+    test('creates task with both dueDay and category', () async {
+      final task = await service.add(
+        title: 'Full task',
+        dueDay: '2026-04-01',
+        category: 'Working',
+      );
+
+      expect(task.dueDay, equals('2026-04-01'));
+      expect(task.category, equals('Working'));
+    });
+  });
+
+  group('overdue', () {
+    test('returns overdue tasks', () async {
+      await service.add(title: 'Past due', dueDay: '2020-01-01');
+      await service.add(title: 'Future due', dueDay: '2099-12-31');
+      await service.add(title: 'No due');
+
+      final overdueTasks = await service.overdue();
+
+      expect(overdueTasks, hasLength(1));
+      expect(overdueTasks.first.title, equals('Past due'));
+    });
+
+    test('excludes completed overdue tasks', () async {
+      final task = await service.add(title: 'Past due', dueDay: '2020-01-01');
+      await service.done(task.id);
+
+      final overdueTasks = await service.overdue();
+
+      expect(overdueTasks, isEmpty);
+    });
+
+    test('returns empty when no overdue tasks', () async {
+      await service.add(title: 'Future due', dueDay: '2099-12-31');
+
+      final overdueTasks = await service.overdue();
+
+      expect(overdueTasks, isEmpty);
+    });
+  });
 }

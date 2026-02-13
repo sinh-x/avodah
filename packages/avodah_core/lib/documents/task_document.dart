@@ -42,6 +42,7 @@ class TaskFields {
   static const String issuePoints = 'issuePoints';
   static const String issueStatus = 'issueStatus';
   static const String issueCreated = 'issueCreated';
+  static const String category = 'category';
 }
 
 /// Issue provider types for external integrations.
@@ -133,6 +134,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
     setRaw(TaskFields.timeSpentOnDay, task.timeSpentOnDay);
     setInt(TaskFields.dueWithTime, task.dueWithTime);
     setString(TaskFields.dueDay, task.dueDay);
+    setString(TaskFields.category, task.category);
     setRaw(TaskFields.tagIds, task.tagIds);
     setRaw(TaskFields.attachments, task.attachments);
     setString(TaskFields.reminderId, task.reminderId);
@@ -164,6 +166,10 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
   /// Task description (supports markdown).
   String? get description => getString(TaskFields.description);
   set description(String? value) => setString(TaskFields.description, value);
+
+  /// Category for daily planning (e.g. "Working", "Learning").
+  String? get category => getString(TaskFields.category);
+  set category(String? value) => setString(TaskFields.category, value);
 
   /// Whether the task is completed.
   bool get isDone => getBool(TaskFields.isDone) ?? false;
@@ -456,6 +462,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       timeSpentOnDay: Value(jsonEncode(timeSpentOnDay)),
       dueWithTime: Value(dueWithTime?.millisecondsSinceEpoch),
       dueDay: Value(dueDay),
+      category: Value(category),
       tagIds: Value(jsonEncode(tagIds)),
       attachments: Value(jsonEncode(attachments)),
       reminderId: Value(reminderId),
@@ -491,6 +498,7 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       timeEstimate: Duration(milliseconds: timeEstimate),
       dueWithTime: dueWithTime,
       dueDay: dueDay,
+      category: category,
       tagIds: tagIds,
       remindAt: remindAt,
       isOverdue: isOverdue,
@@ -530,6 +538,7 @@ class TaskModel {
   final Duration timeEstimate;
   final DateTime? dueWithTime;
   final String? dueDay;
+  final String? category;
   final List<String> tagIds;
   final DateTime? remindAt;
   final bool isOverdue;
@@ -554,6 +563,7 @@ class TaskModel {
     required this.timeEstimate,
     this.dueWithTime,
     this.dueDay,
+    this.category,
     required this.tagIds,
     this.remindAt,
     required this.isOverdue,

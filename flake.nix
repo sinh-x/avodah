@@ -5,60 +5,67 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs =
+    { self, nixpkgs, ... }:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
       # Linux desktop dependencies (for Flutter app & devShell)
-      linuxDeps = pkgs: with pkgs; [
-        gtk3
-        glib
-        pcre2
-        libepoxy
-        cairo
-        pango
-        gdk-pixbuf
-        atk
-        harfbuzz
-        xorg.libX11
-        xorg.libXcursor
-        xorg.libXinerama
-        xorg.libXrandr
-        libGL
-        libxkbcommon
-        sqlite  # For Drift database tests
-      ];
+      linuxDeps =
+        pkgs: with pkgs; [
+          gtk3
+          glib
+          pcre2
+          libepoxy
+          cairo
+          pango
+          gdk-pixbuf
+          atk
+          harfbuzz
+          xorg.libX11
+          xorg.libXcursor
+          xorg.libXinerama
+          xorg.libXrandr
+          libGL
+          libxkbcommon
+          sqlite # For Drift database tests
+        ];
 
       # CLI package (avo) — pure Dart, built with buildDartApplication
-      mkAvoPackage = pkgs: pkgs.buildDartApplication {
-        pname = "avo";
-        version = "0.1.0";
+      mkAvoPackage =
+        pkgs:
+        pkgs.buildDartApplication {
+          pname = "avo";
+          version = "0.1.0";
 
-        src = pkgs.lib.cleanSource ./.;
-        sourceRoot = "source/mcp";
+          src = pkgs.lib.cleanSource ./.;
+          sourceRoot = "source/mcp";
 
-        pubspecLock = pkgs.lib.importJSON ./mcp/pubspec.lock.json;
+          pubspecLock = pkgs.lib.importJSON ./mcp/pubspec.lock.json;
 
-        # sqlite3 Dart package needs system sqlite — handled automatically
-        # by nixpkgs' package-source-builders/sqlite3
+          # sqlite3 Dart package needs system sqlite — handled automatically
+          # by nixpkgs' package-source-builders/sqlite3
 
-        postInstall = ''
-          # Fish completions
-          installShellCompletion --fish --name avo.fish \
-            $NIX_BUILD_TOP/source/completions/avo.fish
-        '';
+          postInstall = ''
+            # Fish completions
+            installShellCompletion --fish --name avo.fish \
+              $NIX_BUILD_TOP/source/completions/avo.fish
+          '';
 
-        nativeBuildInputs = [ pkgs.installShellFiles ];
+          nativeBuildInputs = [ pkgs.installShellFiles ];
 
-        meta = with pkgs.lib; {
-          description = "Avodah CLI - Time Tracking & Task Management";
-          homepage = "https://github.com/sinh-x/avodah";
-          license = licenses.mit;
-          platforms = platforms.linux;
-          mainProgram = "avo";
+          meta = with pkgs.lib; {
+            description = "Avodah CLI - Time Tracking & Task Management";
+            homepage = "https://github.com/sinh-x/avodah";
+            license = licenses.mit;
+            platforms = platforms.linux;
+            mainProgram = "avo";
+          };
         };
-      };
     in
     {
       # Overlay for NixOS integration
@@ -73,7 +80,8 @@
       });
 
       # Development shells
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -88,7 +96,10 @@
             cmdLineToolsVersion = "11.0";
             platformToolsVersion = "35.0.2";
             buildToolsVersions = [ "35.0.0" ];
-            platformVersions = [ "35" "34" ];
+            platformVersions = [
+              "35"
+              "34"
+            ];
             includeEmulator = false;
             includeSources = false;
             includeSystemImages = false;
@@ -145,20 +156,24 @@
               avo-clean
               avo-build-cli
               avo
-            ] ++ deps;
+            ]
+            ++ deps;
 
             env = {
               ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
               ANDROID_SDK_ROOT = "${androidSdk}/libexec/android-sdk";
               JAVA_HOME = "${pkgs.jdk17}";
               CHROME_EXECUTABLE = "${pkgs.chromium}/bin/chromium";
+              # Prevent starship/termbg from sending OSC 11 terminal query
+              # (response leaks into fish's input buffer via direnv timing race)
+              COLORFGBG = "15;0";
             };
 
             shellHook = ''
               echo "Avodah Development Environment"
               echo ""
-              echo "Flutter: $(flutter --version --machine 2>/dev/null | ${pkgs.jq}/bin/jq -r '.frameworkVersion // "unknown"')"
-              echo "Dart:    $(dart --version 2>&1 | head -1)"
+              echo "Flutter: $(TERM=dumb flutter --version --machine </dev/null 2>/dev/null | ${pkgs.jq}/bin/jq -r '.frameworkVersion // "unknown"')"
+              echo "Dart:    $(TERM=dumb dart --version </dev/null 2>&1 | head -1)"
               echo ""
               echo "Commands:"
               echo "  avo-run           - Run on Linux desktop"
@@ -172,10 +187,15 @@
               echo ""
               echo "  avo <command>     - Run Avodah CLI (native, auto-compiles)"
               echo ""
+
+              # Reset terminal line discipline — flutter/dart can corrupt stty settings
+              # (e.g. disabling icrnl, causing Enter to show ^M instead of newline)
+              stty sane 2>/dev/null
             '';
 
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath deps;
           };
-        });
+        }
+      );
     };
 }
