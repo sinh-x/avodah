@@ -1,6 +1,7 @@
 /// CLI output formatting utilities for Avodah.
 library;
 
+import '../services/plan_service.dart';
 import '../services/task_service.dart';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -109,6 +110,28 @@ Duration? parseDuration(String input) {
   return Duration(hours: hours, minutes: minutes);
 }
 
+/// Validates a YYYY-MM-DD date string.
+bool isValidDate(String input) {
+  final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+  if (!regex.hasMatch(input)) return false;
+  try {
+    final parts = input.split('-');
+    final year = int.parse(parts[0]);
+    final month = int.parse(parts[1]);
+    final day = int.parse(parts[2]);
+    final dt = DateTime(year, month, day);
+    return dt.year == year && dt.month == month && dt.day == day;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Returns today's date as YYYY-MM-DD.
+String todayString() {
+  final now = DateTime.now();
+  return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+}
+
 /// Horizontal bar chart segment.
 String buildBar(int value, int max, {int width = 20}) {
   final filled = max > 0 ? (value * width ~/ max) : 0;
@@ -143,5 +166,48 @@ Future<String> resolveTaskTitle(TaskService taskService, String taskId) async {
     return '${task.title}$issueTag';
   } catch (_) {
     return taskId;
+  }
+}
+
+// ── Plan Table ──────────────────────────────────────────────────────────────
+
+/// Prints the plan-vs-actual table for a day.
+/// Merges [defaultCategories] with summary data, sorted alphabetically.
+void printPlanTable(DayPlanSummary summary, {List<String> defaultCategories = const []}) {
+  final totalPlanned = formatDuration(summary.totalPlanned);
+  final totalActual = formatDuration(summary.totalActual);
+
+  final summaryMap = <String, PlanVsActual>{
+    for (final cat in summary.categories) cat.category: cat,
+  };
+
+  final allCategories = <String>{...defaultCategories};
+  for (final cat in summary.categories) {
+    allCategories.add(cat.category);
+  }
+  final sorted = allCategories.toList()..sort();
+
+  print('  $totalPlanned planned / $totalActual actual');
+  print('');
+  print('  ${'Category'.padRight(20)} ${'Planned'.padRight(11)}${'Actual'.padRight(11)}Delta');
+  print('  ${'─' * 20} ${'─' * 10} ${'─' * 10} ${'─' * 10}');
+  for (final name in sorted) {
+    final cat = summaryMap[name];
+    final planned = (cat != null && cat.planned.inMilliseconds > 0)
+        ? formatDuration(cat.planned)
+        : '-';
+    final actual = cat != null ? formatDuration(cat.actual) : '0m';
+    final deltaMs = cat?.delta.inMilliseconds ?? 0;
+    final deltaStr = deltaMs == 0
+        ? '-'
+        : deltaMs > 0
+            ? '+${formatDuration(Duration(milliseconds: deltaMs))}'
+            : '-${formatDuration(Duration(milliseconds: -deltaMs))}';
+    print('  ${name.padRight(20)} ${planned.padRight(11)}${actual.padRight(11)}$deltaStr');
+  }
+  if (summary.nonCategorized != null) {
+    final nc = summary.nonCategorized!;
+    print('  ${'─' * 20} ${'─' * 10} ${'─' * 10} ${'─' * 10}');
+    print('  ${'Non-Categorized'.padRight(20)} ${'-'.padRight(11)}${formatDuration(nc.actual).padRight(11)}(uncategorized)');
   }
 }

@@ -257,6 +257,7 @@ class JiraService {
       existing.jiraProjectKey = projectKeysJoined;
       existing.credentialsFilePath = configFile;
       existing.profileName = profile.key;
+      existing.defaultCategory = profile.defaultCategory;
       await _saveConfig(existing);
       return existing;
     }
@@ -268,6 +269,7 @@ class JiraService {
       credentialsFilePath: configFile,
     );
     config.profileName = profile.key;
+    config.defaultCategory = profile.defaultCategory;
     await _saveConfig(config);
     return config;
   }
@@ -522,6 +524,9 @@ class JiraService {
         doc.issueStatus = jiraStatusName;
         if (jiraCreated != null) doc.issueCreated = jiraCreated;
         if (estimateMs > 0) doc.timeEstimate = estimateMs;
+        if (config.defaultCategory != null) {
+          doc.category = config.defaultCategory;
+        }
         if (jiraDone) doc.markDone();
         await _saveTask(doc);
         issueKeyToTaskId[key] = doc.id;
@@ -882,6 +887,9 @@ class JiraService {
       doc.issueStatus = jiraStatusName;
       if (jiraCreated != null) doc.issueCreated = jiraCreated;
       if (estimateMs > 0) doc.timeEstimate = estimateMs;
+      if (config.defaultCategory != null) {
+        doc.category = config.defaultCategory;
+      }
       if (jiraDone) doc.markDone();
       await _saveTask(doc);
       tasksCreated++;

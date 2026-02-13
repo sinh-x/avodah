@@ -33,6 +33,7 @@ class JiraIntegrationFields {
   static const String lastSyncAt = 'lastSyncAt';
   static const String lastSyncError = 'lastSyncError';
   static const String created = 'created';
+  static const String defaultCategory = 'defaultCategory';
 }
 
 /// Jira credentials loaded from external file.
@@ -64,6 +65,7 @@ class JiraProfile {
   final String username;
   final String apiToken;
   final List<String> projectKeys;
+  final String? defaultCategory;
 
   const JiraProfile({
     required this.key,
@@ -72,6 +74,7 @@ class JiraProfile {
     required this.username,
     required this.apiToken,
     required this.projectKeys,
+    this.defaultCategory,
   });
 
   factory JiraProfile.fromJson(String key, Map<String, dynamic> json) {
@@ -85,6 +88,7 @@ class JiraProfile {
               ?.map((e) => e as String)
               .toList() ??
           [],
+      defaultCategory: json['default_category'] as String?,
     );
   }
 
@@ -353,6 +357,12 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   String? get lastSyncError => getString(JiraIntegrationFields.lastSyncError);
   set lastSyncError(String? value) =>
       setString(JiraIntegrationFields.lastSyncError, value);
+
+  /// Default category for tasks synced from this profile.
+  String? get defaultCategory =>
+      getString(JiraIntegrationFields.defaultCategory);
+  set defaultCategory(String? value) =>
+      setString(JiraIntegrationFields.defaultCategory, value);
 
   /// Whether the last sync had an error.
   bool get hasError => lastSyncError != null;

@@ -17,10 +17,13 @@ class TaskService {
         .insertOnConflictUpdate(task.toDriftCompanion());
   }
 
-  /// Creates a new task with the given title and optional project ID.
+  /// Creates a new task with the given title and optional project ID,
+  /// due date, and category.
   Future<TaskDocument> add({
     required String title,
     String? projectId,
+    String? dueDay,
+    String? category,
   }) async {
     final task = TaskDocument.create(
       clock: clock,
@@ -28,8 +31,33 @@ class TaskService {
       projectId: projectId,
     );
 
+    if (dueDay != null) task.dueDay = dueDay;
+    if (category != null) task.category = category;
+
     await _saveTask(task);
     return task;
+  }
+
+  /// Sets or clears the due date on a task.
+  Future<TaskDocument> setDue(String idOrPrefix, String? dueDay) async {
+    final task = await show(idOrPrefix);
+    task.dueDay = dueDay;
+    await _saveTask(task);
+    return task;
+  }
+
+  /// Sets or clears the category on a task.
+  Future<TaskDocument> setCategory(String idOrPrefix, String? category) async {
+    final task = await show(idOrPrefix);
+    task.category = category;
+    await _saveTask(task);
+    return task;
+  }
+
+  /// Returns active tasks that are overdue.
+  Future<List<TaskDocument>> overdue() async {
+    final tasks = await list();
+    return tasks.where((t) => t.isOverdue).toList();
   }
 
   /// Lists tasks from the database.

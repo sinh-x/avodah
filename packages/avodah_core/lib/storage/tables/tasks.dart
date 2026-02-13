@@ -38,6 +38,9 @@ class Tasks extends Table {
   // Repeats
   TextColumn get repeatCfgId => text().nullable()();
 
+  // Category for daily planning
+  TextColumn get category => text().nullable()();
+
   // Issue integration fields
   TextColumn get issueId => text().nullable()();
   TextColumn get issueProviderId => text().nullable()();

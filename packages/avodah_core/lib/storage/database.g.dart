@@ -203,6 +203,17 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _issueIdMeta = const VerificationMeta(
     'issueId',
   );
@@ -338,6 +349,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     doneOn,
     modified,
     repeatCfgId,
+    category,
     issueId,
     issueProviderId,
     issueType,
@@ -488,6 +500,12 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
           data['repeat_cfg_id']!,
           _repeatCfgIdMeta,
         ),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
       );
     }
     if (data.containsKey('issue_id')) {
@@ -649,6 +667,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}repeat_cfg_id'],
       ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      ),
       issueId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}issue_id'],
@@ -717,6 +739,7 @@ class Task extends DataClass implements Insertable<Task> {
   final int? doneOn;
   final int? modified;
   final String? repeatCfgId;
+  final String? category;
   final String? issueId;
   final String? issueProviderId;
   final String? issueType;
@@ -746,6 +769,7 @@ class Task extends DataClass implements Insertable<Task> {
     this.doneOn,
     this.modified,
     this.repeatCfgId,
+    this.category,
     this.issueId,
     this.issueProviderId,
     this.issueType,
@@ -795,6 +819,9 @@ class Task extends DataClass implements Insertable<Task> {
     }
     if (!nullToAbsent || repeatCfgId != null) {
       map['repeat_cfg_id'] = Variable<String>(repeatCfgId);
+    }
+    if (!nullToAbsent || category != null) {
+      map['category'] = Variable<String>(category);
     }
     if (!nullToAbsent || issueId != null) {
       map['issue_id'] = Variable<String>(issueId);
@@ -863,6 +890,9 @@ class Task extends DataClass implements Insertable<Task> {
       repeatCfgId: repeatCfgId == null && nullToAbsent
           ? const Value.absent()
           : Value(repeatCfgId),
+      category: category == null && nullToAbsent
+          ? const Value.absent()
+          : Value(category),
       issueId: issueId == null && nullToAbsent
           ? const Value.absent()
           : Value(issueId),
@@ -916,6 +946,7 @@ class Task extends DataClass implements Insertable<Task> {
       doneOn: serializer.fromJson<int?>(json['doneOn']),
       modified: serializer.fromJson<int?>(json['modified']),
       repeatCfgId: serializer.fromJson<String?>(json['repeatCfgId']),
+      category: serializer.fromJson<String?>(json['category']),
       issueId: serializer.fromJson<String?>(json['issueId']),
       issueProviderId: serializer.fromJson<String?>(json['issueProviderId']),
       issueType: serializer.fromJson<String?>(json['issueType']),
@@ -950,6 +981,7 @@ class Task extends DataClass implements Insertable<Task> {
       'doneOn': serializer.toJson<int?>(doneOn),
       'modified': serializer.toJson<int?>(modified),
       'repeatCfgId': serializer.toJson<String?>(repeatCfgId),
+      'category': serializer.toJson<String?>(category),
       'issueId': serializer.toJson<String?>(issueId),
       'issueProviderId': serializer.toJson<String?>(issueProviderId),
       'issueType': serializer.toJson<String?>(issueType),
@@ -982,6 +1014,7 @@ class Task extends DataClass implements Insertable<Task> {
     Value<int?> doneOn = const Value.absent(),
     Value<int?> modified = const Value.absent(),
     Value<String?> repeatCfgId = const Value.absent(),
+    Value<String?> category = const Value.absent(),
     Value<String?> issueId = const Value.absent(),
     Value<String?> issueProviderId = const Value.absent(),
     Value<String?> issueType = const Value.absent(),
@@ -1011,6 +1044,7 @@ class Task extends DataClass implements Insertable<Task> {
     doneOn: doneOn.present ? doneOn.value : this.doneOn,
     modified: modified.present ? modified.value : this.modified,
     repeatCfgId: repeatCfgId.present ? repeatCfgId.value : this.repeatCfgId,
+    category: category.present ? category.value : this.category,
     issueId: issueId.present ? issueId.value : this.issueId,
     issueProviderId: issueProviderId.present
         ? issueProviderId.value
@@ -1066,6 +1100,7 @@ class Task extends DataClass implements Insertable<Task> {
       repeatCfgId: data.repeatCfgId.present
           ? data.repeatCfgId.value
           : this.repeatCfgId,
+      category: data.category.present ? data.category.value : this.category,
       issueId: data.issueId.present ? data.issueId.value : this.issueId,
       issueProviderId: data.issueProviderId.present
           ? data.issueProviderId.value
@@ -1112,6 +1147,7 @@ class Task extends DataClass implements Insertable<Task> {
           ..write('doneOn: $doneOn, ')
           ..write('modified: $modified, ')
           ..write('repeatCfgId: $repeatCfgId, ')
+          ..write('category: $category, ')
           ..write('issueId: $issueId, ')
           ..write('issueProviderId: $issueProviderId, ')
           ..write('issueType: $issueType, ')
@@ -1146,6 +1182,7 @@ class Task extends DataClass implements Insertable<Task> {
     doneOn,
     modified,
     repeatCfgId,
+    category,
     issueId,
     issueProviderId,
     issueType,
@@ -1179,6 +1216,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.doneOn == this.doneOn &&
           other.modified == this.modified &&
           other.repeatCfgId == this.repeatCfgId &&
+          other.category == this.category &&
           other.issueId == this.issueId &&
           other.issueProviderId == this.issueProviderId &&
           other.issueType == this.issueType &&
@@ -1210,6 +1248,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<int?> doneOn;
   final Value<int?> modified;
   final Value<String?> repeatCfgId;
+  final Value<String?> category;
   final Value<String?> issueId;
   final Value<String?> issueProviderId;
   final Value<String?> issueType;
@@ -1240,6 +1279,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.doneOn = const Value.absent(),
     this.modified = const Value.absent(),
     this.repeatCfgId = const Value.absent(),
+    this.category = const Value.absent(),
     this.issueId = const Value.absent(),
     this.issueProviderId = const Value.absent(),
     this.issueType = const Value.absent(),
@@ -1271,6 +1311,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.doneOn = const Value.absent(),
     this.modified = const Value.absent(),
     this.repeatCfgId = const Value.absent(),
+    this.category = const Value.absent(),
     this.issueId = const Value.absent(),
     this.issueProviderId = const Value.absent(),
     this.issueType = const Value.absent(),
@@ -1304,6 +1345,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Expression<int>? doneOn,
     Expression<int>? modified,
     Expression<String>? repeatCfgId,
+    Expression<String>? category,
     Expression<String>? issueId,
     Expression<String>? issueProviderId,
     Expression<String>? issueType,
@@ -1335,6 +1377,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (doneOn != null) 'done_on': doneOn,
       if (modified != null) 'modified': modified,
       if (repeatCfgId != null) 'repeat_cfg_id': repeatCfgId,
+      if (category != null) 'category': category,
       if (issueId != null) 'issue_id': issueId,
       if (issueProviderId != null) 'issue_provider_id': issueProviderId,
       if (issueType != null) 'issue_type': issueType,
@@ -1368,6 +1411,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<int?>? doneOn,
     Value<int?>? modified,
     Value<String?>? repeatCfgId,
+    Value<String?>? category,
     Value<String?>? issueId,
     Value<String?>? issueProviderId,
     Value<String?>? issueType,
@@ -1399,6 +1443,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
       doneOn: doneOn ?? this.doneOn,
       modified: modified ?? this.modified,
       repeatCfgId: repeatCfgId ?? this.repeatCfgId,
+      category: category ?? this.category,
       issueId: issueId ?? this.issueId,
       issueProviderId: issueProviderId ?? this.issueProviderId,
       issueType: issueType ?? this.issueType,
@@ -1470,6 +1515,9 @@ class TasksCompanion extends UpdateCompanion<Task> {
     if (repeatCfgId.present) {
       map['repeat_cfg_id'] = Variable<String>(repeatCfgId.value);
     }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
     if (issueId.present) {
       map['issue_id'] = Variable<String>(issueId.value);
     }
@@ -1527,6 +1575,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('doneOn: $doneOn, ')
           ..write('modified: $modified, ')
           ..write('repeatCfgId: $repeatCfgId, ')
+          ..write('category: $category, ')
           ..write('issueId: $issueId, ')
           ..write('issueProviderId: $issueProviderId, ')
           ..write('issueType: $issueType, ')
@@ -6061,6 +6110,459 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
   }
 }
 
+class $DailyPlanEntriesTable extends DailyPlanEntries
+    with TableInfo<$DailyPlanEntriesTable, DailyPlanEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DailyPlanEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<String> day = GeneratedColumn<String>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'duration_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    category,
+    day,
+    durationMs,
+    created,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'daily_plan_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DailyPlanEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['duration_ms']!, _durationMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_durationMsMeta);
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DailyPlanEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DailyPlanEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}day'],
+      )!,
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}duration_ms'],
+      )!,
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $DailyPlanEntriesTable createAlias(String alias) {
+    return $DailyPlanEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class DailyPlanEntry extends DataClass implements Insertable<DailyPlanEntry> {
+  final String id;
+  final String category;
+  final String day;
+  final int durationMs;
+  final int created;
+  final String crdtClock;
+  final String crdtState;
+  const DailyPlanEntry({
+    required this.id,
+    required this.category,
+    required this.day,
+    required this.durationMs,
+    required this.created,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['category'] = Variable<String>(category);
+    map['day'] = Variable<String>(day);
+    map['duration_ms'] = Variable<int>(durationMs);
+    map['created'] = Variable<int>(created);
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  DailyPlanEntriesCompanion toCompanion(bool nullToAbsent) {
+    return DailyPlanEntriesCompanion(
+      id: Value(id),
+      category: Value(category),
+      day: Value(day),
+      durationMs: Value(durationMs),
+      created: Value(created),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory DailyPlanEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DailyPlanEntry(
+      id: serializer.fromJson<String>(json['id']),
+      category: serializer.fromJson<String>(json['category']),
+      day: serializer.fromJson<String>(json['day']),
+      durationMs: serializer.fromJson<int>(json['durationMs']),
+      created: serializer.fromJson<int>(json['created']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'category': serializer.toJson<String>(category),
+      'day': serializer.toJson<String>(day),
+      'durationMs': serializer.toJson<int>(durationMs),
+      'created': serializer.toJson<int>(created),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  DailyPlanEntry copyWith({
+    String? id,
+    String? category,
+    String? day,
+    int? durationMs,
+    int? created,
+    String? crdtClock,
+    String? crdtState,
+  }) => DailyPlanEntry(
+    id: id ?? this.id,
+    category: category ?? this.category,
+    day: day ?? this.day,
+    durationMs: durationMs ?? this.durationMs,
+    created: created ?? this.created,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  DailyPlanEntry copyWithCompanion(DailyPlanEntriesCompanion data) {
+    return DailyPlanEntry(
+      id: data.id.present ? data.id.value : this.id,
+      category: data.category.present ? data.category.value : this.category,
+      day: data.day.present ? data.day.value : this.day,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      created: data.created.present ? data.created.value : this.created,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyPlanEntry(')
+          ..write('id: $id, ')
+          ..write('category: $category, ')
+          ..write('day: $day, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('created: $created, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, category, day, durationMs, created, crdtClock, crdtState);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DailyPlanEntry &&
+          other.id == this.id &&
+          other.category == this.category &&
+          other.day == this.day &&
+          other.durationMs == this.durationMs &&
+          other.created == this.created &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class DailyPlanEntriesCompanion extends UpdateCompanion<DailyPlanEntry> {
+  final Value<String> id;
+  final Value<String> category;
+  final Value<String> day;
+  final Value<int> durationMs;
+  final Value<int> created;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const DailyPlanEntriesCompanion({
+    this.id = const Value.absent(),
+    this.category = const Value.absent(),
+    this.day = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.created = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DailyPlanEntriesCompanion.insert({
+    required String id,
+    required String category,
+    required String day,
+    required int durationMs,
+    required int created,
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       category = Value(category),
+       day = Value(day),
+       durationMs = Value(durationMs),
+       created = Value(created);
+  static Insertable<DailyPlanEntry> custom({
+    Expression<String>? id,
+    Expression<String>? category,
+    Expression<String>? day,
+    Expression<int>? durationMs,
+    Expression<int>? created,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (category != null) 'category': category,
+      if (day != null) 'day': day,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (created != null) 'created': created,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DailyPlanEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? category,
+    Value<String>? day,
+    Value<int>? durationMs,
+    Value<int>? created,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return DailyPlanEntriesCompanion(
+      id: id ?? this.id,
+      category: category ?? this.category,
+      day: day ?? this.day,
+      durationMs: durationMs ?? this.durationMs,
+      created: created ?? this.created,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<String>(day.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DailyPlanEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('category: $category, ')
+          ..write('day: $day, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('created: $created, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6073,6 +6575,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $TimerEntriesTable timerEntries = $TimerEntriesTable(this);
+  late final $DailyPlanEntriesTable dailyPlanEntries = $DailyPlanEntriesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6085,6 +6590,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     worklogEntries,
     jiraIntegrations,
     timerEntries,
+    dailyPlanEntries,
   ];
 }
 
@@ -6108,6 +6614,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<int?> doneOn,
       Value<int?> modified,
       Value<String?> repeatCfgId,
+      Value<String?> category,
       Value<String?> issueId,
       Value<String?> issueProviderId,
       Value<String?> issueType,
@@ -6140,6 +6647,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<int?> doneOn,
       Value<int?> modified,
       Value<String?> repeatCfgId,
+      Value<String?> category,
       Value<String?> issueId,
       Value<String?> issueProviderId,
       Value<String?> issueType,
@@ -6248,6 +6756,11 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<String> get repeatCfgId => $composableBuilder(
     column: $table.repeatCfgId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6401,6 +6914,11 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get issueId => $composableBuilder(
     column: $table.issueId,
     builder: (column) => ColumnOrderings(column),
@@ -6529,6 +7047,9 @@ class $$TasksTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
   GeneratedColumn<String> get issueId =>
       $composableBuilder(column: $table.issueId, builder: (column) => column);
 
@@ -6618,6 +7139,7 @@ class $$TasksTableTableManager
                 Value<int?> doneOn = const Value.absent(),
                 Value<int?> modified = const Value.absent(),
                 Value<String?> repeatCfgId = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String?> issueId = const Value.absent(),
                 Value<String?> issueProviderId = const Value.absent(),
                 Value<String?> issueType = const Value.absent(),
@@ -6648,6 +7170,7 @@ class $$TasksTableTableManager
                 doneOn: doneOn,
                 modified: modified,
                 repeatCfgId: repeatCfgId,
+                category: category,
                 issueId: issueId,
                 issueProviderId: issueProviderId,
                 issueType: issueType,
@@ -6680,6 +7203,7 @@ class $$TasksTableTableManager
                 Value<int?> doneOn = const Value.absent(),
                 Value<int?> modified = const Value.absent(),
                 Value<String?> repeatCfgId = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String?> issueId = const Value.absent(),
                 Value<String?> issueProviderId = const Value.absent(),
                 Value<String?> issueType = const Value.absent(),
@@ -6710,6 +7234,7 @@ class $$TasksTableTableManager
                 doneOn: doneOn,
                 modified: modified,
                 repeatCfgId: repeatCfgId,
+                category: category,
                 issueId: issueId,
                 issueProviderId: issueProviderId,
                 issueType: issueType,
@@ -8863,6 +9388,252 @@ typedef $$TimerEntriesTableProcessedTableManager =
       TimerEntry,
       PrefetchHooks Function()
     >;
+typedef $$DailyPlanEntriesTableCreateCompanionBuilder =
+    DailyPlanEntriesCompanion Function({
+      required String id,
+      required String category,
+      required String day,
+      required int durationMs,
+      required int created,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$DailyPlanEntriesTableUpdateCompanionBuilder =
+    DailyPlanEntriesCompanion Function({
+      Value<String> id,
+      Value<String> category,
+      Value<String> day,
+      Value<int> durationMs,
+      Value<int> created,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$DailyPlanEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $DailyPlanEntriesTable> {
+  $$DailyPlanEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DailyPlanEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DailyPlanEntriesTable> {
+  $$DailyPlanEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DailyPlanEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DailyPlanEntriesTable> {
+  $$DailyPlanEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$DailyPlanEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DailyPlanEntriesTable,
+          DailyPlanEntry,
+          $$DailyPlanEntriesTableFilterComposer,
+          $$DailyPlanEntriesTableOrderingComposer,
+          $$DailyPlanEntriesTableAnnotationComposer,
+          $$DailyPlanEntriesTableCreateCompanionBuilder,
+          $$DailyPlanEntriesTableUpdateCompanionBuilder,
+          (
+            DailyPlanEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $DailyPlanEntriesTable,
+              DailyPlanEntry
+            >,
+          ),
+          DailyPlanEntry,
+          PrefetchHooks Function()
+        > {
+  $$DailyPlanEntriesTableTableManager(
+    _$AppDatabase db,
+    $DailyPlanEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DailyPlanEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DailyPlanEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DailyPlanEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String> day = const Value.absent(),
+                Value<int> durationMs = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyPlanEntriesCompanion(
+                id: id,
+                category: category,
+                day: day,
+                durationMs: durationMs,
+                created: created,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String category,
+                required String day,
+                required int durationMs,
+                required int created,
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DailyPlanEntriesCompanion.insert(
+                id: id,
+                category: category,
+                day: day,
+                durationMs: durationMs,
+                created: created,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DailyPlanEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DailyPlanEntriesTable,
+      DailyPlanEntry,
+      $$DailyPlanEntriesTableFilterComposer,
+      $$DailyPlanEntriesTableOrderingComposer,
+      $$DailyPlanEntriesTableAnnotationComposer,
+      $$DailyPlanEntriesTableCreateCompanionBuilder,
+      $$DailyPlanEntriesTableUpdateCompanionBuilder,
+      (
+        DailyPlanEntry,
+        BaseReferences<_$AppDatabase, $DailyPlanEntriesTable, DailyPlanEntry>,
+      ),
+      DailyPlanEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8880,4 +9651,6 @@ class $AppDatabaseManager {
       $$JiraIntegrationsTableTableManager(_db, _db.jiraIntegrations);
   $$TimerEntriesTableTableManager get timerEntries =>
       $$TimerEntriesTableTableManager(_db, _db.timerEntries);
+  $$DailyPlanEntriesTableTableManager get dailyPlanEntries =>
+      $$DailyPlanEntriesTableTableManager(_db, _db.dailyPlanEntries);
 }

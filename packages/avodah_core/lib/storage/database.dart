@@ -7,6 +7,7 @@ import 'tables/tags.dart';
 import 'tables/worklogs.dart';
 import 'tables/jira_integrations.dart';
 import 'tables/timer.dart';
+import 'tables/daily_plans.dart';
 
 part 'database.g.dart';
 
@@ -24,6 +25,7 @@ part 'database.g.dart';
   WorklogEntries,
   JiraIntegrations,
   TimerEntries,
+  DailyPlanEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -36,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
@@ -67,6 +69,11 @@ class AppDatabase extends _$AppDatabase {
         if (from < 6) {
           // v0.4.0: Add timer table for MCP worklog tracker
           await m.createTable(timerEntries);
+        }
+        if (from < 7) {
+          // v0.5.0: Add category to tasks, create daily plan entries table
+          await m.addColumn(tasks, tasks.category);
+          await m.createTable(dailyPlanEntries);
         }
       },
     );

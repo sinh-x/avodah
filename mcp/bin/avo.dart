@@ -29,8 +29,10 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/cli/commands.dart';
+import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
+import 'package:avodah_mcp/services/plan_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -53,20 +55,25 @@ Future<void> main(List<String> args) async {
   final taskService = TaskService(db: db, clock: clock);
   final worklogService = WorklogService(db: db, clock: clock);
   final projectService = ProjectService(db: db, clock: clock);
+  final planService = PlanService(db: db, clock: clock);
   final jiraService = JiraService(db: db, clock: clock, paths: paths);
+  final avoConfig = await AvoConfig.load(paths);
 
   try {
     final runner = CommandRunner<void>(
       'avo',
       'Avodah - Worklog tracking from the command line',
     )
-      ..addCommand(StartCommand(timerService, taskService))
+      ..addCommand(StartCommand(timerService, taskService, worklogService,
+          categories: avoConfig.effectiveCategories))
       ..addCommand(StopCommand(timerService))
       ..addCommand(StatusCommand(
         timerService: timerService,
         taskService: taskService,
         worklogService: worklogService,
         projectService: projectService,
+        planService: planService,
+        categories: avoConfig.effectiveCategories,
       ))
       ..addCommand(PauseCommand(timerService))
       ..addCommand(ResumeCommand(timerService))
@@ -79,6 +86,8 @@ Future<void> main(List<String> args) async {
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(worklogService: worklogService))
+      ..addCommand(PlanCommand(planService,
+          categories: avoConfig.effectiveCategories))
       ..addCommand(JiraCommand(jiraService, paths));
 
     // No args → run status + hint
@@ -86,6 +95,10 @@ Future<void> main(List<String> args) async {
       await runner.run(['status']);
       print('');
       print('  -> avo --help              for all commands');
+    }
+    // `avo plan` with no subcommand → run plan list
+    else if (args.length == 1 && args.first == 'plan') {
+      await runner.run(['plan', 'list']);
     }
     // `avo jira` with no subcommand → run jira status + hint
     else if (args.length == 1 && args.first == 'jira') {

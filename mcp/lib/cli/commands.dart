@@ -9,6 +9,7 @@ import 'package:avodah_core/avodah_core.dart';
 
 import '../config/paths.dart';
 import '../services/jira_service.dart';
+import '../services/plan_service.dart';
 import '../services/project_service.dart';
 import '../services/task_service.dart';
 import '../services/timer_service.dart';
@@ -30,8 +31,10 @@ abstract class TimerCommand extends Command<void> {
 /// Start timer command.
 class StartCommand extends TimerCommand {
   final TaskService taskService;
+  final WorklogService worklogService;
+  final List<String> categories;
 
-  StartCommand(super.timerService, this.taskService) {
+  StartCommand(super.timerService, this.taskService, this.worklogService, {this.categories = const []}) {
     argParser.addOption('note', abbr: 'n', help: 'Note about current work');
   }
 
@@ -106,13 +109,44 @@ class StartCommand extends TimerCommand {
       }
     }
 
+    // Prompt for category if the task doesn't have one (pre-start, for known tasks)
+    if (taskId != null) {
+      try {
+        final task = await taskService.show(taskId);
+        if (task.category == null) {
+          await _promptCategory(task);
+        }
+      } catch (_) {
+        // Task not found — skip category prompt
+      }
+    }
+
     try {
       final timer = await timerService.start(
         taskTitle: taskTitle,
         taskId: taskId,
         note: note,
       );
+
+      // Prompt for category after start if task was just created (title-based start)
+      if (taskId == null && timer.taskId != null) {
+        try {
+          final task = await taskService.show(timer.taskId!);
+          if (task.category == null) {
+            await _promptCategory(task);
+          }
+        } catch (_) {}
+      }
+
       print('Timer started: "$taskTitle"');
+      if (timer.taskId != null) {
+        print(kvRow('Task:', timer.taskId!.substring(0, 8)));
+        final worklogs = await worklogService.listForTask(timer.taskId!);
+        if (worklogs.isNotEmpty) {
+          final totalMs = worklogs.fold<int>(0, (sum, w) => sum + w.durationMs);
+          print(kvRow('Logged:', formatDuration(Duration(milliseconds: totalMs))));
+        }
+      }
       print(kvRow('Started:', formatTime(timer.startedAt!)));
       if (note != null) print(kvRow('Note:', note));
       print('');
@@ -125,6 +159,35 @@ class StartCommand extends TimerCommand {
       print(hint('avo stop', 'to stop and log time'));
       print(hint('avo cancel', 'to discard and start fresh'));
     }
+  }
+
+  Future<void> _promptCategory(TaskDocument task) async {
+    final cats = categories;
+    print('Task "${task.title}" has no category.');
+    if (cats.isNotEmpty) {
+      print('  Categories:');
+      for (var i = 0; i < cats.length; i++) {
+        print('  ${i + 1}. ${cats[i]}');
+      }
+    }
+    print('  s. Skip');
+    final prompt = cats.isNotEmpty
+        ? '  Pick (1-${cats.length}) or type custom: '
+        : '  Enter category (or s to skip): ';
+    stdout.write(prompt);
+    final input = stdin.readLineSync()?.trim();
+    if (input == null || input.isEmpty || input.toLowerCase() == 's') return;
+
+    final num = int.tryParse(input);
+    final String category;
+    if (num != null && num >= 1 && num <= cats.length) {
+      category = cats[num - 1];
+    } else {
+      category = input;
+    }
+
+    await taskService.setCategory(task.id, category);
+    print(kvRow('Category:', category));
   }
 }
 
@@ -163,12 +226,16 @@ class StatusCommand extends Command<void> {
   final TaskService taskService;
   final WorklogService worklogService;
   final ProjectService projectService;
+  final PlanService planService;
+  final List<String> categories;
 
   StatusCommand({
     required this.timerService,
     required this.taskService,
     required this.worklogService,
     required this.projectService,
+    required this.planService,
+    this.categories = const [],
   });
 
   @override
@@ -240,7 +307,27 @@ class StatusCommand extends Command<void> {
       if (tasks.length > 5) {
         print(hint('avo task list', 'to see all ${tasks.length} tasks'));
       }
+
+      // Overdue
+      final overdueTasks = tasks.where((t) => t.isOverdue).toList();
+      if (overdueTasks.isNotEmpty) {
+        print('');
+        print('  ${overdueTasks.length} overdue:');
+        for (final t in overdueTasks.take(3)) {
+          print('  ! ${t.id.substring(0, 8)}  ${t.title}  [due: ${t.dueDay}]');
+        }
+        if (overdueTasks.length > 3) {
+          print('  ... and ${overdueTasks.length - 3} more');
+        }
+      }
     }
+    print(separator());
+    print('');
+
+    // ── Plan ──
+    final planSummary = await planService.summary();
+    print(sectionHeader('PLAN'));
+    printPlanTable(planSummary, defaultCategories: categories);
     print(separator());
   }
 }
@@ -347,6 +434,8 @@ class TaskCommand extends Command<void> {
     addSubcommand(TaskDoneCommand(taskService));
     addSubcommand(TaskShowCommand(taskService, worklogService, projectService));
     addSubcommand(TaskDeleteCommand(taskService));
+    addSubcommand(TaskDueCommand(taskService));
+    addSubcommand(TaskCatCommand(taskService));
   }
 
   @override
@@ -359,6 +448,8 @@ class TaskCommand extends Command<void> {
 class TaskAddCommand extends TaskSubcommand {
   TaskAddCommand(super.taskService) {
     argParser.addOption('project', abbr: 'p', help: 'Project ID');
+    argParser.addOption('due', help: 'Due date (YYYY-MM-DD)');
+    argParser.addOption('cat', help: 'Category (e.g. Working, Learning)');
   }
 
   @override
@@ -375,20 +466,31 @@ class TaskAddCommand extends TaskSubcommand {
     if (title == null) {
       print('Missing task title.');
       print('');
-      print('  Usage: avo task add <title> [-p project]');
-      print('  Example: avo task add "Fix login bug" -p a1b2');
+      print('  Usage: avo task add <title> [-p project] [--due YYYY-MM-DD] [--cat category]');
+      print('  Example: avo task add "Fix login bug" -p a1b2 --due 2026-03-01 --cat Working');
       return;
     }
 
     final projectId = argResults?['project'] as String?;
+    final dueDay = argResults?['due'] as String?;
+    final category = argResults?['cat'] as String?;
+
+    if (dueDay != null && !isValidDate(dueDay)) {
+      print('Invalid date: "$dueDay". Use YYYY-MM-DD format.');
+      return;
+    }
 
     final task = await taskService.add(
       title: title,
       projectId: projectId,
+      dueDay: dueDay,
+      category: category,
     );
     final shortId = task.id.substring(0, 8);
     print('Created task: "$title"');
     print(kvRow('ID:', shortId));
+    if (dueDay != null) print(kvRow('Due:', dueDay));
+    if (category != null) print(kvRow('Category:', category));
     print('');
     print(hint('avo start $title', 'to start timing'));
     print(hint('avo task show $shortId', 'to see details'));
@@ -520,7 +622,11 @@ class TaskListCommand extends TaskSubcommand {
           : null;
       final time = formatTimeWithEstimate(worked, estimate);
       final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
-      print('  [$check] $id  ${task.title}$issueTag  ($time)');
+      final catTag = task.category != null ? ' {${task.category}}' : '';
+      final dueTag = task.dueDay != null
+          ? (task.isOverdue ? ' [OVERDUE: ${task.dueDay}]' : ' [due: ${task.dueDay}]')
+          : '';
+      print('  [$check] $id  ${task.title}$issueTag$catTag$dueTag  ($time)');
     }
     print('');
     print(hint('avo task show <id>', 'to see details'));
@@ -625,6 +731,128 @@ class TaskDeleteCommand extends TaskSubcommand {
   }
 }
 
+class TaskDueCommand extends TaskSubcommand {
+  TaskDueCommand(super.taskService);
+
+  @override
+  String get name => 'due';
+
+  @override
+  String get description => 'Set or clear due date on a task';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.isEmpty) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task due <id> <YYYY-MM-DD|clear>');
+      print(hint('avo task list', 'to see task IDs'));
+      return;
+    }
+
+    final taskId = args.first;
+    final dateArg = args.length > 1 ? args[1] : null;
+
+    if (dateArg == null) {
+      print('Missing date. Use YYYY-MM-DD or "clear".');
+      print('');
+      print('  Usage: avo task due <id> <YYYY-MM-DD|clear>');
+      return;
+    }
+
+    final String? dueDay;
+    if (dateArg.toLowerCase() == 'clear') {
+      dueDay = null;
+    } else if (isValidDate(dateArg)) {
+      dueDay = dateArg;
+    } else {
+      print('Invalid date: "$dateArg". Use YYYY-MM-DD or "clear".');
+      return;
+    }
+
+    try {
+      final task = await taskService.setDue(taskId, dueDay);
+      if (dueDay != null) {
+        print('Set due date on "${task.title}": $dueDay');
+      } else {
+        print('Cleared due date on "${task.title}".');
+      }
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
+class TaskCatCommand extends TaskSubcommand {
+  TaskCatCommand(super.taskService);
+
+  @override
+  String get name => 'cat';
+
+  @override
+  String get description => 'Set or clear category on a task';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.isEmpty) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task cat <id> <category|clear>');
+      print(hint('avo task list', 'to see task IDs'));
+      return;
+    }
+
+    final taskId = args.first;
+    final catArg = args.length > 1 ? args.sublist(1).join(' ') : null;
+
+    if (catArg == null) {
+      print('Missing category. Use a name or "clear".');
+      print('');
+      print('  Usage: avo task cat <id> <category|clear>');
+      print('  Categories: Learning, Working, Side-project, Family & Friends, Personal');
+      return;
+    }
+
+    final String? category;
+    if (catArg.toLowerCase() == 'clear') {
+      category = null;
+    } else {
+      category = catArg;
+    }
+
+    try {
+      final task = await taskService.setCategory(taskId, category);
+      if (category != null) {
+        print('Set category on "${task.title}": $category');
+      } else {
+        print('Cleared category on "${task.title}".');
+      }
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
 class TaskShowCommand extends TaskSubcommand {
   final WorklogService worklogService;
   final ProjectService projectService;
@@ -683,6 +911,9 @@ class TaskShowCommand extends TaskSubcommand {
       }
       if (projectName != null) {
         print(kvRow('Project:', projectName));
+      }
+      if (task.category != null) {
+        print(kvRow('Category:', task.category!));
       }
       if (task.description != null) {
         print(kvRow('Description:', task.description!));
@@ -1269,6 +1500,165 @@ class WorklogDeleteCommand extends WorklogSubcommand {
 }
 
 // ============================================================
+// Plan Commands
+// ============================================================
+
+/// Base class for plan commands.
+abstract class PlanSubcommand extends Command<void> {
+  final PlanService planService;
+  PlanSubcommand(this.planService);
+}
+
+/// Plan management command group.
+class PlanCommand extends Command<void> {
+  final PlanService planService;
+
+  PlanCommand(this.planService, {List<String> categories = const []}) {
+    addSubcommand(PlanAddCommand(planService));
+    addSubcommand(PlanListCommand(planService, categories: categories));
+    addSubcommand(PlanRemoveCommand(planService));
+  }
+
+  @override
+  String get name => 'plan';
+
+  @override
+  String get description => 'Daily time planning by category';
+}
+
+class PlanAddCommand extends PlanSubcommand {
+  PlanAddCommand(super.planService) {
+    argParser.addOption('duration', abbr: 'd', help: 'Planned duration (e.g. 3h, 1h30m)');
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'add';
+
+  @override
+  String get description => 'Add planned time for a category';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final category = args.isNotEmpty ? args.join(' ') : null;
+    final durationStr = argResults?['duration'] as String?;
+    final dayStr = argResults?['day'] as String?;
+
+    if (category == null || durationStr == null) {
+      print('Missing category or duration.');
+      print('');
+      print('  Usage: avo plan add <category> -d <duration> [--day YYYY-MM-DD]');
+      print('  Example: avo plan add Working -d 3h');
+      print('  Example: avo plan add Learning -d 2h --day 2026-02-14');
+      return;
+    }
+
+    final duration = parseDuration(durationStr);
+    if (duration == null) {
+      print('Invalid duration: "$durationStr"');
+      print('');
+      print('  Valid formats: 30m, 1h, 1h30m, 2h 15m');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    try {
+      final plan = await planService.add(
+        category: category,
+        durationMs: duration.inMilliseconds,
+        day: dayStr,
+      );
+      print('Planned ${formatDuration(duration)} for "$category" on ${plan.day}.');
+      print('');
+      print(hint('avo plan', 'to see today\'s plan'));
+    } on DuplicatePlanEntryException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan remove $category', 'to remove and re-add'));
+    }
+  }
+}
+
+class PlanListCommand extends PlanSubcommand {
+  final List<String> categories;
+
+  PlanListCommand(super.planService, {this.categories = const []}) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'list';
+
+  @override
+  String get description => 'Show plan-vs-actual for a day';
+
+  @override
+  Future<void> run() async {
+    final dayStr = argResults?['day'] as String?;
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    final summary = await planService.summary(day: dayStr);
+
+    print('Plan for ${summary.day}:');
+    printPlanTable(summary, defaultCategories: categories);
+
+    if (summary.totalPlanned == Duration.zero && summary.totalActual == Duration.zero) {
+      print('');
+      print(hint('avo plan add <category> -d <dur>', 'to start planning'));
+    }
+  }
+}
+
+class PlanRemoveCommand extends PlanSubcommand {
+  PlanRemoveCommand(super.planService) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'remove';
+
+  @override
+  String get description => 'Remove a category from the plan';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final category = args.isNotEmpty ? args.join(' ') : null;
+    final dayStr = argResults?['day'] as String?;
+
+    if (category == null) {
+      print('Missing category.');
+      print('');
+      print('  Usage: avo plan remove <category> [--day YYYY-MM-DD]');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    try {
+      final entry = await planService.remove(category: category, day: dayStr);
+      print('Removed "$category" from plan on ${entry.day}.');
+    } on PlanEntryNotFoundException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan', 'to see current plan'));
+    }
+  }
+}
+
+// ============================================================
 // Jira Commands
 // ============================================================
 
@@ -1334,6 +1724,7 @@ class JiraInitCommand extends Command<void> {
           'username': 'email@company.com',
           'api_token': 'your-api-token',
           'project_keys': ['PROJ'],
+          'default_category': 'Working',
         },
       },
       'default_profiles': {
@@ -1681,6 +2072,8 @@ class JiraSetupCommand extends JiraSubcommand {
         _promptRequired('Project keys (comma-separated)', current: currentKeys);
     final projectKeys =
         keysInput.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final defaultCategory = _prompt('Default category (empty=none)',
+        current: existing?.defaultCategory);
 
     // 4. Show summary and confirm
     final maskedToken = apiToken.length > 4
@@ -1693,6 +2086,9 @@ class JiraSetupCommand extends JiraSubcommand {
     print(kvRow('Username:', username));
     print(kvRow('API Token:', maskedToken));
     print(kvRow('Projects:', projectKeys.join(', ')));
+    if (defaultCategory != null && defaultCategory.isNotEmpty) {
+      print(kvRow('Category:', defaultCategory));
+    }
     print('');
     final confirm = _rl.readLine('  Save? (y/n) [y]: ')?.trim().toLowerCase();
     if (confirm == 'n' || confirm == 'no') {
@@ -1716,13 +2112,17 @@ class JiraSetupCommand extends JiraSubcommand {
 
     final profiles =
         (existingJson['jira_profiles'] as Map<String, dynamic>?) ?? {};
-    profiles[key] = {
+    final profileData = <String, dynamic>{
       'name': key,
       'base_url': baseUrl,
       'username': username,
       'api_token': apiToken,
       'project_keys': projectKeys,
     };
+    if (defaultCategory != null && defaultCategory.isNotEmpty) {
+      profileData['default_category'] = defaultCategory;
+    }
+    profiles[key] = profileData;
     existingJson['jira_profiles'] = profiles;
     existingJson['default_profiles'] = {'jira': key};
 
