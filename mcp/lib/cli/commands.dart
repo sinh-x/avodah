@@ -207,7 +207,13 @@ class StartCommand extends TimerCommand {
 
 /// Stop timer command.
 class StopCommand extends TimerCommand {
-  StopCommand(super.timerService);
+  final JiraService? jiraService;
+  final TaskService? taskService;
+
+  StopCommand(super.timerService, {this.jiraService, this.taskService}) {
+    argParser.addOption('message', abbr: 'm', help: 'Worklog comment/description');
+    argParser.addFlag('done', abbr: 'd', help: 'Mark task as done after stopping');
+  }
 
   @override
   String get name => 'stop';
@@ -218,11 +224,49 @@ class StopCommand extends TimerCommand {
   @override
   Future<void> run() async {
     try {
-      final result = await timerService.stop();
+      final messageArg = argResults?['message'] as String?;
+
+      // Resolve comment: -m flag > interactive prompt (if no timer note) > timer note
+      String? comment;
+      if (messageArg != null) {
+        comment = messageArg;
+      } else {
+        final timer = await timerService.status();
+        if (timer != null && timer.note == null) {
+          stdout.write('Description (Enter to skip): ');
+          final input = stdin.readLineSync()?.trim();
+          if (input != null && input.isNotEmpty) {
+            comment = input;
+          }
+        }
+        // If timer has a note, leave comment null — stop() will use it
+      }
+
+      final result = await timerService.stop(comment: comment);
       print('Timer stopped: "${result.taskTitle}"');
       print(kvRow('Duration:', result.elapsedFormatted));
       print(kvRow('Worklog:', result.worklogId.substring(0, 8)));
       if (result.note != null) print(kvRow('Note:', result.note!));
+
+      // Auto-push worklog to Jira if service is available
+      if (jiraService != null) {
+        final pushed = await jiraService!.pushWorklog(result.worklogId);
+        if (pushed) {
+          print(kvRow('Jira:', 'worklog synced'));
+        }
+      }
+
+      // Mark task as done if --done flag is set
+      final markDone = argResults?['done'] as bool? ?? false;
+      if (markDone && result.taskId != null && taskService != null) {
+        try {
+          await taskService!.done(result.taskId!);
+          print(kvRow('Task:', 'marked done'));
+        } on TaskAlreadyDoneException {
+          print(kvRow('Task:', 'already done'));
+        }
+      }
+
       print('');
       print(hint('avo today', 'to see today\'s total'));
       print(hint('avo start <task>', 'to start another timer'));
@@ -1794,10 +1838,37 @@ class JiraSyncCommand extends JiraSubcommand {
     final dryRun = argResults?['dry-run'] as bool? ?? false;
     final interactive = argResults?['interactive'] as bool? ?? true;
 
-    print('Computing sync preview...');
+    var curPhase = '';
+    var curTotal = 0;
+
+    void finishPhase() {
+      if (curPhase.isEmpty) return;
+      stdout.write('\r\x1B[K');
+      switch (curPhase) {
+        case 'Fetching issues':
+          print('  Fetched $curTotal issues.');
+        case 'Fetching worklogs':
+          print('  Fetched worklogs for $curTotal issues.');
+        case 'Applying changes':
+          print('  Applied $curTotal changes.');
+      }
+      curPhase = '';
+    }
+
+    void showProgress(String phase, int current, int total) {
+      if (phase != curPhase) finishPhase();
+      curPhase = phase;
+      curTotal = total;
+      final bar = progressBar(current, total, width: 20);
+      stdout.write('\r  $phase... $bar $current/$total\x1B[K');
+    }
 
     try {
-      final context = await jiraService.computeSyncPreview(issueKey: issueKey);
+      final context = await jiraService.computeSyncPreview(
+        issueKey: issueKey,
+        onProgress: showProgress,
+      );
+      finishPhase();
       final preview = context.preview;
 
       // Display preview
@@ -1836,7 +1907,11 @@ class JiraSyncCommand extends JiraSubcommand {
       }
 
       // Execute
-      final result = await jiraService.executeSyncPlan(context);
+      final result = await jiraService.executeSyncPlan(
+        context,
+        onProgress: showProgress,
+      );
+      finishPhase();
 
       print('');
       print(sectionHeader('SYNC RESULT'));

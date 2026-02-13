@@ -8,6 +8,9 @@ import 'package:http/http.dart' as http;
 
 import '../config/paths.dart';
 
+/// Callback for reporting sync progress.
+typedef SyncProgressCallback = void Function(String phase, int current, int total);
+
 /// Result of a Jira pull operation.
 class PullResult {
   final int created;
@@ -682,6 +685,55 @@ class JiraService {
     return PushResult(pushed: pushed, failed: failed);
   }
 
+  /// Pushes a single worklog to Jira by its local ID.
+  ///
+  /// Returns `true` if the worklog was successfully pushed, `false` if not
+  /// applicable (not configured, not a Jira task, already synced, HTTP error).
+  Future<bool> pushWorklog(String worklogId) async {
+    // 1. Load config/creds
+    final config = await getConfig();
+    if (config == null) return false;
+    final creds = await config.loadCredentials();
+    if (creds == null) return false;
+
+    // 2. Load worklog row
+    final rows = await db.select(db.worklogEntries).get();
+    final match = rows.where((w) => w.id == worklogId).toList();
+    if (match.isEmpty) return false;
+    final worklog = WorklogDocument.fromDrift(worklog: match.first, clock: clock);
+    if (worklog.isDeleted || worklog.isSyncedToJira) return false;
+
+    // 3. Load task to get issueKey
+    final taskRows = await (db.select(db.tasks)
+          ..where((t) => t.id.equals(worklog.taskId)))
+        .get();
+    if (taskRows.isEmpty) return false;
+    final issueKey = taskRows.first.issueId;
+    if (issueKey == null) return false;
+
+    // 4. POST to Jira
+    try {
+      final body = _buildWorklogBody(worklog);
+      final response = await _makeRequest(
+        config: config,
+        creds: creds,
+        method: 'POST',
+        path: '/issue/$issueKey/worklog',
+        body: body,
+      );
+      if (response.statusCode != 201) return false;
+
+      final respData = jsonDecode(response.body) as Map<String, dynamic>;
+      final jiraWorklogId = respData['id'] as String;
+      worklog.linkToJira(jiraWorklogId);
+      _reconcileDuration(worklog, respData);
+      await _saveWorklog(worklog);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Runs a full sync: pull then push.
   ///
   /// If [issueKey] is given, only pulls that specific issue.
@@ -695,7 +747,10 @@ class JiraService {
   ///
   /// Returns a [SyncContext] containing the preview and all context needed
   /// to execute the plan later via [executeSyncPlan].
-  Future<SyncContext> computeSyncPreview({String? issueKey}) async {
+  Future<SyncContext> computeSyncPreview({
+    String? issueKey,
+    SyncProgressCallback? onProgress,
+  }) async {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
@@ -703,6 +758,7 @@ class JiraService {
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
 
     final issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey);
+    onProgress?.call('Fetching issues', issues.length, issues.length);
 
     // Load local state
     final allTasks = await db.select(db.tasks).get();
@@ -764,6 +820,11 @@ class JiraService {
     final newRemoteWorklogs = <JiraWorklogInfo>[];
     final worklogMismatches = <WorklogMismatch>[];
 
+    // Count existing issues (not new) for worklog fetching progress
+    final existingIssueCount = issues.where((i) =>
+        issueKeyToTaskId.containsKey(i['key'] as String)).length;
+    var worklogFetchIndex = 0;
+
     for (final issue in issues) {
       final key = issue['key'] as String;
       final localTaskId = issueKeyToTaskId[key];
@@ -771,6 +832,8 @@ class JiraService {
 
       final worklogs = await _fetchWorklogs(
         config: config, creds: creds, issueKey: key);
+      worklogFetchIndex++;
+      onProgress?.call('Fetching worklogs', worklogFetchIndex, existingIssueCount);
 
       for (final wl in worklogs) {
         final jiraId = wl['id'].toString();
@@ -845,7 +908,10 @@ class JiraService {
   ///
   /// Takes a [SyncContext] (from [computeSyncPreview]) with resolutions
   /// set on each mismatch. Applies the approved changes.
-  Future<SyncExecutionResult> executeSyncPlan(SyncContext context) async {
+  Future<SyncExecutionResult> executeSyncPlan(
+    SyncContext context, {
+    SyncProgressCallback? onProgress,
+  }) async {
     final config = context.config;
     final creds = context.creds;
     var tasksCreated = 0;
@@ -858,8 +924,17 @@ class JiraService {
     var titlesPulled = 0;
     var failed = 0;
 
+    // Compute total operations for progress tracking
+    final preview = context.preview;
+    final totalOps = preview.newRemoteIssues.length +
+        preview.newLocalWorklogs.length +
+        preview.newRemoteWorklogs.length +
+        preview.worklogMismatches.length +
+        preview.titleMismatches.length;
+    var completedOps = 0;
+
     // 1. Create new tasks from new remote issues
-    for (final issue in context.preview.newRemoteIssues) {
+    for (final issue in preview.newRemoteIssues) {
       final fields = issue['fields'] as Map<String, dynamic>? ?? {};
       final key = issue['key'] as String;
       final summary = fields['summary'] as String? ?? key;
@@ -871,15 +946,17 @@ class JiraService {
           defaultCategory: config.defaultCategory);
       await _saveTask(doc);
       tasksCreated++;
+      completedOps++;
+      onProgress?.call('Applying changes', completedOps, totalOps);
     }
 
     // Build reverse map after creating new tasks
     final taskIdToIssueKey = await _buildTaskIdToIssueKey();
 
     // 2. Push new local worklogs
-    for (final worklog in context.preview.newLocalWorklogs) {
+    for (final worklog in preview.newLocalWorklogs) {
       final issueKey = taskIdToIssueKey[worklog.taskId];
-      if (issueKey == null) { failed++; continue; }
+      if (issueKey == null) { failed++; completedOps++; onProgress?.call('Applying changes', completedOps, totalOps); continue; }
 
       final body = _buildWorklogBody(worklog);
       try {
@@ -902,10 +979,12 @@ class JiraService {
       } catch (_) {
         failed++;
       }
+      completedOps++;
+      onProgress?.call('Applying changes', completedOps, totalOps);
     }
 
     // 3. Pull new remote worklogs
-    for (final info in context.preview.newRemoteWorklogs) {
+    for (final info in preview.newRemoteWorklogs) {
       final worklog = WorklogDocument.create(
         clock: clock,
         taskId: info.localTaskId,
@@ -917,10 +996,12 @@ class JiraService {
       worklog.linkToJira(info.jiraWorklogId);
       await _saveWorklog(worklog);
       worklogsPulled++;
+      completedOps++;
+      onProgress?.call('Applying changes', completedOps, totalOps);
     }
 
     // 4. Resolve worklog mismatches
-    for (final m in context.preview.worklogMismatches) {
+    for (final m in preview.worklogMismatches) {
       switch (m.resolution) {
         case SyncDirection.push:
           final issueKey = m.remote.issueKey;
@@ -953,10 +1034,12 @@ class JiraService {
         case SyncDirection.skip:
           break;
       }
+      completedOps++;
+      onProgress?.call('Applying changes', completedOps, totalOps);
     }
 
     // 5. Resolve title mismatches
-    for (final m in context.preview.titleMismatches) {
+    for (final m in preview.titleMismatches) {
       switch (m.resolution) {
         case SyncDirection.push:
           try {
@@ -982,6 +1065,8 @@ class JiraService {
         case SyncDirection.skip:
           break;
       }
+      completedOps++;
+      onProgress?.call('Applying changes', completedOps, totalOps);
     }
 
     config.recordSyncSuccess();

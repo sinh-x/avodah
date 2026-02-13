@@ -140,6 +140,12 @@ String buildBar(int value, int max, {int width = 20}) {
   return '${'#' * filled}${'.' * (width - filled)}';
 }
 
+/// Progress bar using block characters: [████████░░░░░░░░░░░░]
+String progressBar(int current, int total, {int width = 20}) {
+  final filled = total > 0 ? (current * width ~/ total) : 0;
+  return '[${'█' * filled}${'░' * (width - filled)}]';
+}
+
 // ── Jira Profile Display ─────────────────────────────────────────────────────
 
 /// Formats a Jira profile for consistent display across commands.

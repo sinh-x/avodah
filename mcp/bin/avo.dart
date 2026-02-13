@@ -66,7 +66,7 @@ Future<void> main(List<String> args) async {
     )
       ..addCommand(StartCommand(timerService, taskService, worklogService,
           categories: avoConfig.effectiveCategories))
-      ..addCommand(StopCommand(timerService))
+      ..addCommand(StopCommand(timerService, jiraService: jiraService, taskService: taskService))
       ..addCommand(StatusCommand(
         timerService: timerService,
         taskService: taskService,
