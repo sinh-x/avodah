@@ -112,6 +112,57 @@ Duration? parseDuration(String input) {
   return Duration(hours: hours, minutes: minutes);
 }
 
+/// Parses flexible time-of-day strings into a DateTime.
+///
+/// Supported formats:
+/// - `9:00` / `09:00` / `14:30` → today at that time
+/// - `2026-02-15T09:00` / `2026-02-15 09:00` → specific date+time
+/// - `yesterday 14:00` → yesterday at that time
+///
+/// Returns null if the input can't be parsed.
+DateTime? parseTimeOfDay(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return null;
+
+  // Pattern: "yesterday HH:MM"
+  final yesterdayRe = RegExp(r'^yesterday\s+(\d{1,2}):(\d{2})$', caseSensitive: false);
+  final yesterdayMatch = yesterdayRe.firstMatch(trimmed);
+  if (yesterdayMatch != null) {
+    final hour = int.parse(yesterdayMatch.group(1)!);
+    final minute = int.parse(yesterdayMatch.group(2)!);
+    if (hour > 23 || minute > 59) return null;
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    return DateTime(yesterday.year, yesterday.month, yesterday.day, hour, minute);
+  }
+
+  // Pattern: "YYYY-MM-DD[T ]HH:MM"
+  final dateTimeRe = RegExp(r'^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})$');
+  final dateTimeMatch = dateTimeRe.firstMatch(trimmed);
+  if (dateTimeMatch != null) {
+    final datePart = dateTimeMatch.group(1)!;
+    if (!isValidDate(datePart)) return null;
+    final hour = int.parse(dateTimeMatch.group(2)!);
+    final minute = int.parse(dateTimeMatch.group(3)!);
+    if (hour > 23 || minute > 59) return null;
+    final parts = datePart.split('-');
+    return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]), hour, minute);
+  }
+
+  // Pattern: "H:MM" or "HH:MM"
+  final timeRe = RegExp(r'^(\d{1,2}):(\d{2})$');
+  final timeMatch = timeRe.firstMatch(trimmed);
+  if (timeMatch != null) {
+    final hour = int.parse(timeMatch.group(1)!);
+    final minute = int.parse(timeMatch.group(2)!);
+    if (hour > 23 || minute > 59) return null;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, hour, minute);
+  }
+
+  return null;
+}
+
 /// Validates a YYYY-MM-DD date string.
 bool isValidDate(String input) {
   final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');

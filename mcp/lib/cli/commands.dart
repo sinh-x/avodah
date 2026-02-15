@@ -1327,6 +1327,8 @@ abstract class WorklogSubcommand extends Command<void> {
 /// Worklog management command group.
 class WorklogCommand extends Command<void> {
   WorklogCommand(WorklogService worklogService, TaskService taskService) {
+    addSubcommand(WorklogAddCommand(worklogService, taskService));
+    addSubcommand(WorklogEditCommand(worklogService, taskService));
     addSubcommand(WorklogListCommand(worklogService, taskService));
     addSubcommand(WorklogDeleteCommand(worklogService, taskService));
   }
@@ -1451,12 +1453,13 @@ class RecentCommand extends Command<void> {
     for (final w in worklogs) {
       final title = await resolveTaskTitle(taskService, w.taskId);
       final dur = formatDuration(Duration(milliseconds: w.durationMs));
-      final date = formatRelativeDate(w.createdTime);
+      final startDate = formatRelativeDate(w.startTime);
+      final startTime = formatTime(w.startTime);
       final syncIcon = w.isSyncedToJira ? ' [synced]' : '';
       final commentStr = w.comment != null && w.comment!.isNotEmpty
           ? '  "${w.comment}"'
           : '';
-      print('  ${w.id.substring(0, 8)}  $title  $dur  $date$syncIcon$commentStr');
+      print('  ${w.id.substring(0, 8)}  $title  $dur  $startDate $startTime$syncIcon$commentStr');
     }
     print('');
     print(hint('avo worklog delete <id>', 'to remove a worklog'));
@@ -1494,12 +1497,13 @@ class WorklogListCommand extends WorklogSubcommand {
     for (final w in worklogs) {
       final title = await resolveTaskTitle(taskService, w.taskId);
       final dur = formatDuration(Duration(milliseconds: w.durationMs));
-      final date = formatRelativeDate(w.createdTime);
+      final startDate = formatRelativeDate(w.startTime);
+      final startTime = formatTime(w.startTime);
       final syncIcon = w.isSyncedToJira ? ' [synced]' : '';
       final commentStr = w.comment != null && w.comment!.isNotEmpty
           ? '  "${w.comment}"'
           : '';
-      print('  ${w.id.substring(0, 8)}  $title  $dur  $date$syncIcon$commentStr');
+      print('  ${w.id.substring(0, 8)}  $title  $dur  $startDate $startTime$syncIcon$commentStr');
     }
   }
 }
@@ -1551,6 +1555,312 @@ class WorklogDeleteCommand extends WorklogSubcommand {
       print('');
       print(hintPlain('Use a longer prefix to be specific.'));
     }
+  }
+}
+
+/// Worklog add subcommand (under `avo worklog add`).
+class WorklogAddCommand extends WorklogSubcommand {
+  WorklogAddCommand(super.worklogService, super.taskService) {
+    argParser.addOption('task', abbr: 't', help: 'Task ID or prefix');
+    argParser.addOption('start', abbr: 's', help: 'Start time (e.g. 9:00, 2026-02-15T09:00)');
+    argParser.addOption('duration', abbr: 'd', help: 'Duration (e.g. 1h30m, 45m)');
+    argParser.addOption('message', abbr: 'm', help: 'Description/comment');
+  }
+
+  @override
+  String get name => 'add';
+
+  @override
+  String get description => 'Add a worklog with start time and duration';
+
+  @override
+  Future<void> run() async {
+    var taskInput = argResults?['task'] as String?;
+    final startInput = argResults?['start'] as String?;
+    final durationInput = argResults?['duration'] as String?;
+    var comment = argResults?['message'] as String?;
+
+    // Also accept task as positional arg
+    final rest = argResults?.rest ?? [];
+    if (taskInput == null && rest.isNotEmpty) {
+      taskInput = rest.first;
+    }
+
+    // Determine if interactive mode is needed
+    final interactive = taskInput == null || startInput == null || durationInput == null;
+
+    // Resolve task
+    String taskId;
+    String taskTitle;
+    if (taskInput == null) {
+      // Interactive task picker
+      final tasks = await taskService.list();
+      if (tasks.isEmpty) {
+        print('No active tasks.');
+        print('');
+        print(hint('avo task add <title>', 'to create one'));
+        return;
+      }
+
+      final timeByTask = await worklogService.timeByTask();
+      final pickerItems = tasks.map((task) {
+        final check = task.isDone ? 'x' : ' ';
+        final id = task.id.substring(0, 8);
+        final issueTag = task.issueId != null
+            ? task.issueId!.padRight(10)
+            : ''.padRight(10);
+        final worked = timeByTask[task.id] ?? Duration.zero;
+        final estimate = task.timeEstimate > 0
+            ? Duration(milliseconds: task.timeEstimate)
+            : null;
+        final time = formatTimeWithEstimate(worked, estimate);
+        final displayLine =
+            '  [$check] $id  $issueTag  ${task.title}  ($time)';
+        final searchText =
+            '${task.title} ${task.issueId ?? ''} ${task.id} ${task.category ?? ''}'.toLowerCase();
+        return PickerItem<TaskDocument>(
+          value: task,
+          displayLine: displayLine,
+          searchText: searchText,
+        );
+      }).toList();
+
+      final picker = InteractivePicker<TaskDocument>(items: pickerItems);
+      final selected = picker.pick();
+      if (selected == null) {
+        print('Cancelled.');
+        return;
+      }
+      taskId = selected.id;
+      taskTitle = selected.title;
+    } else {
+      try {
+        final task = await taskService.show(taskInput);
+        taskId = task.id;
+        taskTitle = task.title;
+      } on TaskNotFoundException {
+        print('No task found matching "$taskInput".');
+        print('');
+        print(hint('avo task list', 'to see available tasks'));
+        return;
+      } on AmbiguousTaskIdException catch (e) {
+        print('Multiple tasks match "$taskInput":');
+        for (final id in e.matchingIds) {
+          print('  ${id.substring(0, 8)}');
+        }
+        print('');
+        print(hintPlain('Use a longer prefix to be specific.'));
+        return;
+      }
+    }
+
+    // Resolve start time
+    DateTime? start;
+    if (startInput != null) {
+      start = parseTimeOfDay(startInput);
+      if (start == null) {
+        print('Invalid start time: "$startInput"');
+        print('');
+        print('  Valid formats: 9:00, 14:30, 2026-02-15T09:00, yesterday 14:00');
+        return;
+      }
+    } else if (interactive) {
+      final rl = TerminalReadline();
+      while (start == null) {
+        final input = rl.readLine('Start time (e.g. 9:00, 14:30): ');
+        if (input == null) { print('Cancelled.'); return; }
+        start = parseTimeOfDay(input.trim());
+        if (start == null) {
+          print('  Invalid time. Try 9:00, 14:30, 2026-02-15T09:00, or yesterday 14:00.');
+        }
+      }
+    }
+
+    // Resolve duration
+    Duration? duration;
+    if (durationInput != null) {
+      duration = parseDuration(durationInput);
+      if (duration == null) {
+        print('Invalid duration: "$durationInput"');
+        print('');
+        print('  Valid formats: 30m, 1h, 1h30m, 2h 15m');
+        return;
+      }
+    } else if (interactive) {
+      final rl = TerminalReadline();
+      while (duration == null) {
+        final input = rl.readLine('Duration (e.g. 1h30m, 45m): ');
+        if (input == null) { print('Cancelled.'); return; }
+        duration = parseDuration(input.trim());
+        if (duration == null) {
+          print('  Invalid duration. Try 30m, 1h, 1h30m.');
+        }
+      }
+    }
+
+    // Resolve comment
+    if (comment == null && interactive) {
+      final rl = TerminalReadline();
+      final input = rl.readLine('Description (optional): ');
+      if (input != null && input.trim().isNotEmpty) {
+        comment = input.trim();
+      }
+    }
+
+    final worklog = await worklogService.createWorklog(
+      taskId: taskId,
+      start: start!,
+      duration: duration!,
+      comment: comment,
+    );
+
+    print('Logged ${formatDuration(duration)} on "$taskTitle"');
+    print(kvRow('Worklog:', worklog.id.substring(0, 8)));
+    print(kvRow('Start:', formatTime(start)));
+    print(kvRow('End:', formatTime(start.add(duration))));
+    if (comment != null) print(kvRow('Comment:', comment));
+    print('');
+    print(hint('avo today', 'to see today\'s total'));
+    print(hint('avo worklog edit ${worklog.id.substring(0, 8)}', 'to edit'));
+  }
+}
+
+/// Worklog edit subcommand (under `avo worklog edit`).
+class WorklogEditCommand extends WorklogSubcommand {
+  WorklogEditCommand(super.worklogService, super.taskService) {
+    argParser.addOption('start', abbr: 's', help: 'New start time');
+    argParser.addOption('duration', abbr: 'd', help: 'New duration');
+    argParser.addOption('message', abbr: 'm', help: 'New description');
+  }
+
+  @override
+  String get name => 'edit';
+
+  @override
+  String get description => 'Edit an existing worklog';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final worklogId = args.isNotEmpty ? args.first : null;
+
+    if (worklogId == null) {
+      print('Missing worklog ID.');
+      print('');
+      print('  Usage: avo worklog edit <id> [-s start] [-d duration] [-m message]');
+      print(hint('avo recent', 'to see recent worklogs'));
+      return;
+    }
+
+    final startInput = argResults?['start'] as String?;
+    final durationInput = argResults?['duration'] as String?;
+    final messageInput = argResults?['message'] as String?;
+
+    // Load existing worklog first
+    WorklogDocument worklog;
+    try {
+      worklog = await worklogService.show(worklogId);
+    } on WorklogNotFoundException {
+      print('No worklog found matching "$worklogId".');
+      print('');
+      print(hint('avo recent', 'to see recent worklogs'));
+      return;
+    } on AmbiguousWorklogIdException catch (e) {
+      print('Multiple worklogs match "$worklogId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
+    final interactive = startInput == null && durationInput == null && messageInput == null;
+
+    DateTime? newStart;
+    Duration? newDuration;
+    String? newComment;
+
+    if (interactive) {
+      // Show current values
+      final curStart = formatTime(worklog.startTime);
+      final curEnd = formatTime(worklog.endTime);
+      final curDur = formatDuration(Duration(milliseconds: worklog.durationMs));
+      final curComment = worklog.comment ?? '';
+      final taskTitle = await resolveTaskTitle(taskService, worklog.taskId);
+      print('Editing worklog ${worklog.id.substring(0, 8)} — "$taskTitle"');
+      print('  Current:  $curStart - $curEnd  ($curDur)  "$curComment"');
+      print('');
+
+      final rl = TerminalReadline();
+
+      // Prompt start
+      final startStr = rl.readLine('  Start [$curStart]: ');
+      if (startStr == null) { print('Cancelled.'); return; }
+      if (startStr.trim().isNotEmpty) {
+        newStart = parseTimeOfDay(startStr.trim());
+        if (newStart == null) {
+          print('  Invalid time — keeping current.');
+        }
+      }
+
+      // Prompt duration
+      final durStr = rl.readLine('  Duration [$curDur]: ');
+      if (durStr == null) { print('Cancelled.'); return; }
+      if (durStr.trim().isNotEmpty) {
+        newDuration = parseDuration(durStr.trim());
+        if (newDuration == null) {
+          print('  Invalid duration — keeping current.');
+        }
+      }
+
+      // Prompt comment
+      final commentStr = rl.readLine('  Description [$curComment]: ');
+      if (commentStr == null) { print('Cancelled.'); return; }
+      if (commentStr.trim().isNotEmpty) {
+        newComment = commentStr.trim();
+      }
+
+      if (newStart == null && newDuration == null && newComment == null) {
+        print('No changes.');
+        return;
+      }
+    } else {
+      // Param mode
+      if (startInput != null) {
+        newStart = parseTimeOfDay(startInput);
+        if (newStart == null) {
+          print('Invalid start time: "$startInput"');
+          print('');
+          print('  Valid formats: 9:00, 14:30, 2026-02-15T09:00, yesterday 14:00');
+          return;
+        }
+      }
+      if (durationInput != null) {
+        newDuration = parseDuration(durationInput);
+        if (newDuration == null) {
+          print('Invalid duration: "$durationInput"');
+          print('');
+          print('  Valid formats: 30m, 1h, 1h30m, 2h 15m');
+          return;
+        }
+      }
+      newComment = messageInput;
+    }
+
+    final updated = await worklogService.editWorklog(
+      worklogId,
+      start: newStart,
+      duration: newDuration,
+      comment: newComment,
+    );
+
+    final taskTitle = await resolveTaskTitle(taskService, updated.taskId);
+    print('Updated worklog ${updated.id.substring(0, 8)} — "$taskTitle"');
+    print(kvRow('Start:', formatTime(updated.startTime)));
+    print(kvRow('End:', formatTime(updated.endTime)));
+    print(kvRow('Duration:', formatDuration(Duration(milliseconds: updated.durationMs))));
+    if (updated.comment != null) print(kvRow('Comment:', updated.comment!));
   }
 }
 
