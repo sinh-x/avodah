@@ -114,6 +114,60 @@ class WorklogService {
     return worklog;
   }
 
+  /// Creates a worklog with explicit start time and duration.
+  Future<WorklogDocument> createWorklog({
+    required String taskId,
+    required DateTime start,
+    required Duration duration,
+    String? comment,
+  }) async {
+    final end = start.add(duration);
+    final worklog = WorklogDocument.create(
+      clock: clock,
+      taskId: taskId,
+      start: start.millisecondsSinceEpoch,
+      end: end.millisecondsSinceEpoch,
+      comment: comment,
+    );
+    await _saveWorklog(worklog);
+    return worklog;
+  }
+
+  /// Edits an existing worklog's fields.
+  ///
+  /// Only provided fields are updated. If [start] changes, end is
+  /// recalculated from current duration. If [duration] changes, end is
+  /// recalculated from current start.
+  Future<WorklogDocument> editWorklog(
+    String idOrPrefix, {
+    DateTime? start,
+    Duration? duration,
+    String? comment,
+  }) async {
+    final worklog = await show(idOrPrefix);
+
+    if (start != null) {
+      worklog.startMs = start.millisecondsSinceEpoch;
+      worklog.date = _formatDate(start);
+      final dur = duration ?? Duration(milliseconds: worklog.durationMs);
+      final end = start.add(dur);
+      worklog.endMs = end.millisecondsSinceEpoch;
+      worklog.durationMs = dur.inMilliseconds;
+    } else if (duration != null) {
+      worklog.durationMs = duration.inMilliseconds;
+      final end = worklog.startTime.add(duration);
+      worklog.endMs = end.millisecondsSinceEpoch;
+    }
+
+    if (comment != null) {
+      worklog.comment = comment;
+    }
+
+    worklog.updatedMs = DateTime.now().millisecondsSinceEpoch;
+    await _saveWorklog(worklog);
+    return worklog;
+  }
+
   /// Finds a worklog by exact ID or unique prefix match.
   ///
   /// Throws [WorklogNotFoundException] if no worklog matches.

@@ -273,6 +273,175 @@ void main() {
     });
   });
 
+  group('createWorklog', () {
+    test('creates worklog with explicit start and duration', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final duration = const Duration(hours: 1, minutes: 30);
+
+      final worklog = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: duration,
+        comment: 'morning standup',
+      );
+
+      expect(worklog.taskId, equals('task-1'));
+      expect(worklog.startMs, equals(start.millisecondsSinceEpoch));
+      expect(worklog.endMs, equals(start.add(duration).millisecondsSinceEpoch));
+      expect(worklog.durationMs, equals(duration.inMilliseconds));
+      expect(worklog.date, equals('2026-02-15'));
+      expect(worklog.comment, equals('morning standup'));
+    });
+
+    test('persists worklog to database', () async {
+      final start = DateTime(2026, 2, 15, 14, 0);
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(minutes: 45),
+      );
+
+      final recent = await service.listRecent();
+      expect(recent, hasLength(1));
+      expect(recent.first.taskId, equals('task-1'));
+    });
+
+    test('creates worklog without comment', () async {
+      final start = DateTime(2026, 2, 15, 10, 0);
+      final worklog = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 2),
+      );
+
+      expect(worklog.comment, isNull);
+    });
+  });
+
+  group('editWorklog', () {
+    test('updates comment only', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final updated = await service.editWorklog(
+        created.id,
+        comment: 'updated comment',
+      );
+
+      expect(updated.comment, equals('updated comment'));
+      expect(updated.startMs, equals(created.startMs));
+      expect(updated.durationMs, equals(created.durationMs));
+    });
+
+    test('updates start time and recalculates end', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final newStart = DateTime(2026, 2, 15, 10, 0);
+      final updated = await service.editWorklog(
+        created.id,
+        start: newStart,
+      );
+
+      expect(updated.startMs, equals(newStart.millisecondsSinceEpoch));
+      // Duration stays the same (1h)
+      expect(updated.durationMs, equals(const Duration(hours: 1).inMilliseconds));
+      // End = newStart + 1h
+      expect(updated.endMs, equals(newStart.add(const Duration(hours: 1)).millisecondsSinceEpoch));
+      expect(updated.date, equals('2026-02-15'));
+    });
+
+    test('updates duration and recalculates end', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final updated = await service.editWorklog(
+        created.id,
+        duration: const Duration(hours: 2),
+      );
+
+      expect(updated.durationMs, equals(const Duration(hours: 2).inMilliseconds));
+      // End = original start + 2h
+      expect(updated.endMs, equals(start.add(const Duration(hours: 2)).millisecondsSinceEpoch));
+      // Start unchanged
+      expect(updated.startMs, equals(start.millisecondsSinceEpoch));
+    });
+
+    test('updates start and duration together', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final newStart = DateTime(2026, 2, 15, 14, 0);
+      final newDuration = const Duration(minutes: 30);
+      final updated = await service.editWorklog(
+        created.id,
+        start: newStart,
+        duration: newDuration,
+      );
+
+      expect(updated.startMs, equals(newStart.millisecondsSinceEpoch));
+      expect(updated.durationMs, equals(newDuration.inMilliseconds));
+      expect(updated.endMs, equals(newStart.add(newDuration).millisecondsSinceEpoch));
+    });
+
+    test('stamps updatedMs', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+      final beforeUpdate = DateTime.now().millisecondsSinceEpoch;
+
+      final updated = await service.editWorklog(
+        created.id,
+        comment: 'edited',
+      );
+
+      expect(updated.updatedMs, greaterThanOrEqualTo(beforeUpdate));
+    });
+
+    test('throws WorklogNotFoundException for unknown ID', () async {
+      expect(
+        () => service.editWorklog('nonexistent', comment: 'nope'),
+        throwsA(isA<WorklogNotFoundException>()),
+      );
+    });
+
+    test('finds worklog by prefix', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final updated = await service.editWorklog(
+        created.id.substring(0, 8),
+        comment: 'prefix edit',
+      );
+
+      expect(updated.id, equals(created.id));
+      expect(updated.comment, equals('prefix edit'));
+    });
+  });
+
   group('deleteWorklog', () {
     test('soft-deletes worklog', () async {
       final created = await service.manualLog(
