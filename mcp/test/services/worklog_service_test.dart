@@ -92,6 +92,48 @@ void main() {
     });
   });
 
+  group('daySummary', () {
+    test('returns empty summary for a day with no worklogs', () async {
+      final summary = await service.daySummary('2026-02-15');
+
+      expect(summary.total, equals(Duration.zero));
+      expect(summary.tasks, isEmpty);
+      expect(summary.date, equals('2026-02-15'));
+    });
+
+    test('returns summary for a specific past date', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 2),
+      );
+      await service.createWorklog(
+        taskId: 'task-2',
+        start: DateTime(2026, 2, 15, 14, 0),
+        duration: const Duration(hours: 1),
+      );
+      // Worklog on a different day — should not appear
+      await service.createWorklog(
+        taskId: 'task-3',
+        start: DateTime(2026, 2, 16, 9, 0),
+        duration: const Duration(hours: 1),
+      );
+
+      final summary = await service.daySummary('2026-02-15');
+
+      expect(summary.date, equals('2026-02-15'));
+      expect(summary.tasks, hasLength(2));
+      expect(summary.total.inHours, equals(3));
+    });
+
+    test('todaySummary delegates to daySummary', () async {
+      // Just verify todaySummary still works
+      final summary = await service.todaySummary();
+      expect(summary.total, equals(Duration.zero));
+    });
+  });
+
   group('weekSummary', () {
     test('returns 7 day summaries', () async {
       final summaries = await service.weekSummary();

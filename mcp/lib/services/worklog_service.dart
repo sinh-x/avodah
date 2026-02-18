@@ -58,15 +58,15 @@ class WorklogService {
   }
 
   /// Returns today's summary: total duration and per-task breakdown.
-  Future<DaySummary> todaySummary() async {
-    final now = DateTime.now();
-    final today = _formatDate(now);
+  Future<DaySummary> todaySummary() => daySummary(_formatDate(DateTime.now()));
 
+  /// Returns summary for a specific date: total duration and per-task breakdown.
+  Future<DaySummary> daySummary(String date) async {
     final rows = await (db.select(db.worklogEntries)
-          ..where((w) => w.date.equals(today)))
+          ..where((w) => w.date.equals(date)))
         .get();
 
-    return _buildDaySummary(today, rows);
+    return _buildDaySummary(date, rows);
   }
 
   /// Returns this week's summary (Mon-Sun), one DaySummary per day.

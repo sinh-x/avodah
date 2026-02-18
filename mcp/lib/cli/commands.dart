@@ -1166,14 +1166,22 @@ class TodayCommand extends Command<void> {
 /// Week summary command.
 class WeekCommand extends Command<void> {
   final WorklogService worklogService;
+  final TaskService taskService;
+  final PlanService planService;
+  final List<String> categories;
 
-  WeekCommand({required this.worklogService});
+  WeekCommand({
+    required this.worklogService,
+    required this.taskService,
+    required this.planService,
+    this.categories = const [],
+  });
 
   @override
   String get name => 'week';
 
   @override
-  String get description => "This week's work summary";
+  String get description => "This week's work summary with categories and tasks";
 
   @override
   String get invocation => 'avo week';
@@ -1185,7 +1193,8 @@ class WeekCommand extends Command<void> {
         summaries.fold<int>(0, (sum, d) => sum + d.total.inMilliseconds);
     final total = Duration(milliseconds: totalMs);
 
-    print('This Week:${' ' * 10}${formatDuration(total)}');
+    print(sectionHeader('WEEK'));
+    print('  Total:${' ' * (lineWidth - 8 - formatDuration(total).length - 2)}${formatDuration(total)}');
     print(separator());
 
     if (totalMs == 0) {
@@ -1209,6 +1218,135 @@ class WeekCommand extends Command<void> {
           day.total.inMilliseconds > 0 ? day.formattedDuration : '-';
       print('  $label  $bar  $dur');
     }
+    print(separator());
+    print('');
+
+    // ── Categories: plan vs actual for the week ──
+    final weekPlan = await planService.weekSummary();
+    print(sectionHeader('CATEGORIES'));
+    printPlanTable(weekPlan, defaultCategories: categories);
+    print(separator());
+    print('');
+
+    // ── Tasks worked on this week ──
+    print(sectionHeader('TASKS'));
+    final taskTotals = <String, int>{};
+    for (final daySummary in summaries) {
+      for (final t in daySummary.tasks) {
+        taskTotals[t.taskId] =
+            (taskTotals[t.taskId] ?? 0) + t.total.inMilliseconds;
+      }
+    }
+
+    if (taskTotals.isEmpty) {
+      print('  No tasks worked on.');
+    } else {
+      // Sort by total time descending
+      final sorted = taskTotals.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      for (final entry in sorted) {
+        try {
+          final task = await taskService.show(entry.key);
+          final check = task.isDone ? 'x' : ' ';
+          final id = task.id.substring(0, 8);
+          final dur = formatDuration(Duration(milliseconds: entry.value));
+          final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+          final catTag = task.category != null ? ' (${task.category})' : '';
+          print('  [$check] $id  ${task.title}$issueTag$catTag  $dur');
+        } catch (_) {
+          final dur = formatDuration(Duration(milliseconds: entry.value));
+          print('  [ ] ${entry.key.substring(0, 8)}  (unknown)  $dur');
+        }
+      }
+    }
+    print(separator());
+  }
+}
+
+/// Daily report command — status-style dashboard for any date.
+class DailyCommand extends Command<void> {
+  final WorklogService worklogService;
+  final TaskService taskService;
+  final PlanService planService;
+  final List<String> categories;
+
+  DailyCommand({
+    required this.worklogService,
+    required this.taskService,
+    required this.planService,
+    this.categories = const [],
+  });
+
+  @override
+  String get name => 'daily';
+
+  @override
+  String get description => 'Daily report: worklogs, tasks, and plan vs actual';
+
+  @override
+  String get invocation => 'avo daily [YYYY-MM-DD]';
+
+  @override
+  Future<void> run() async {
+    final dateArg = argResults!.rest.isNotEmpty ? argResults!.rest.first : null;
+    final dateStr = dateArg ?? todayString();
+
+    if (!isValidDate(dateStr)) {
+      print('Invalid date: "$dateStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    final dateParts = dateStr.split('-');
+    final date = DateTime(
+        int.parse(dateParts[0]), int.parse(dateParts[1]), int.parse(dateParts[2]));
+    final dateLabel = formatDate(date);
+
+    // ── Worklog ──
+    print(sectionHeader('$dateLabel'));
+    final summary = await worklogService.daySummary(dateStr);
+    print('  Total:${' ' * (lineWidth - 8 - summary.formattedDuration.length - 2)}${summary.formattedDuration}');
+
+    if (summary.tasks.isEmpty) {
+      print('  No time logged.');
+    } else {
+      for (final task in summary.tasks) {
+        final title = await resolveTaskTitle(taskService, task.taskId);
+        final dur = task.formattedDuration;
+        final padLen = lineWidth - title.length - dur.length - 4;
+        final padding = padLen > 0 ? ' ' * padLen : ' ';
+        print('  $title$padding$dur');
+      }
+    }
+    print(separator());
+    print('');
+
+    // ── Tasks worked on ──
+    print(sectionHeader('TASKS'));
+    if (summary.tasks.isEmpty) {
+      print('  No tasks worked on.');
+    } else {
+      for (final taskSummary in summary.tasks) {
+        try {
+          final task = await taskService.show(taskSummary.taskId);
+          final check = task.isDone ? 'x' : ' ';
+          final id = task.id.substring(0, 8);
+          final issueTag = task.issueId != null ? ' [${task.issueId}]' : '';
+          final catTag = task.category != null ? ' (${task.category})' : '';
+          print('  [$check] $id  ${task.title}$issueTag$catTag  ${taskSummary.formattedDuration}');
+        } catch (_) {
+          print('  [ ] ${taskSummary.taskId.substring(0, 8)}  (unknown)  ${taskSummary.formattedDuration}');
+        }
+      }
+    }
+    print(separator());
+    print('');
+
+    // ── Plan vs Actual ──
+    final planSummary = await planService.summary(day: dateStr);
+    print(sectionHeader('PLAN'));
+    printPlanTable(planSummary, defaultCategories: categories);
+    print(separator());
   }
 }
 

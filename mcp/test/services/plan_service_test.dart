@@ -230,6 +230,32 @@ void main() {
       expect(summary.nonCategorized, isNull);
     });
 
+    test('supports specific day parameter', () async {
+      final task = await taskService.add(
+        title: 'Work task',
+        category: 'Working',
+      );
+
+      // Log on specific date
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 15, 9, 0),
+        duration: const Duration(hours: 2),
+      );
+
+      await planService.add(
+        category: 'Working',
+        durationMs: 4 * 60 * 60 * 1000,
+        day: '2026-02-15',
+      );
+
+      final summary = await planService.summary(day: '2026-02-15');
+
+      expect(summary.categories, hasLength(1));
+      expect(summary.categories.first.planned.inHours, equals(4));
+      expect(summary.categories.first.actual.inHours, equals(2));
+    });
+
     test('shows unplanned categories with actual time', () async {
       // Create a task with a category that has no plan
       final task = await taskService.add(
@@ -250,6 +276,126 @@ void main() {
       expect(sideProject, hasLength(1));
       expect(sideProject.first.planned, equals(Duration.zero));
       expect(sideProject.first.actual.inMinutes, equals(45));
+    });
+  });
+
+  group('weekSummary', () {
+    test('returns empty when no plans or worklogs', () async {
+      // Use a fixed Monday anchor
+      final monday = DateTime(2026, 2, 16); // Monday
+      final summary = await planService.weekSummary(anchor: monday);
+
+      expect(summary.categories, isEmpty);
+      expect(summary.nonCategorized, isNull);
+      expect(summary.day, equals('2026-02-16'));
+    });
+
+    test('aggregates planned time across week days', () async {
+      // Mon 2026-02-16 through Sun 2026-02-22
+      await planService.add(
+        category: 'Working',
+        durationMs: 4 * 60 * 60 * 1000, // 4h
+        day: '2026-02-16',
+      );
+      await planService.add(
+        category: 'Working',
+        durationMs: 3 * 60 * 60 * 1000, // 3h
+        day: '2026-02-17',
+      );
+      await planService.add(
+        category: 'Learning',
+        durationMs: 2 * 60 * 60 * 1000, // 2h
+        day: '2026-02-16',
+      );
+
+      final monday = DateTime(2026, 2, 16);
+      final summary = await planService.weekSummary(anchor: monday);
+
+      expect(summary.categories, hasLength(2));
+      final working = summary.categories
+          .firstWhere((c) => c.category == 'Working');
+      expect(working.planned.inHours, equals(7)); // 4+3
+
+      final learning = summary.categories
+          .firstWhere((c) => c.category == 'Learning');
+      expect(learning.planned.inHours, equals(2));
+    });
+
+    test('aggregates actual time from worklogs across the week', () async {
+      final task = await taskService.add(
+        title: 'Dev task',
+        category: 'Working',
+      );
+
+      // Log on two different days within the week
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 16, 9, 0), // Monday
+        duration: const Duration(hours: 3),
+      );
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 18, 9, 0), // Wednesday
+        duration: const Duration(hours: 2),
+      );
+
+      // Plan for comparison
+      await planService.add(
+        category: 'Working',
+        durationMs: 8 * 60 * 60 * 1000, // 8h
+        day: '2026-02-16',
+      );
+
+      final monday = DateTime(2026, 2, 16);
+      final summary = await planService.weekSummary(anchor: monday);
+
+      final working = summary.categories
+          .firstWhere((c) => c.category == 'Working');
+      expect(working.planned.inHours, equals(8));
+      expect(working.actual.inHours, equals(5)); // 3+2
+    });
+
+    test('includes non-categorized worklogs', () async {
+      final task = await taskService.add(title: 'No category task');
+
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 16, 10, 0),
+        duration: const Duration(hours: 1),
+      );
+
+      final monday = DateTime(2026, 2, 16);
+      final summary = await planService.weekSummary(anchor: monday);
+
+      expect(summary.nonCategorized, isNotNull);
+      expect(summary.nonCategorized!.actual.inHours, equals(1));
+    });
+
+    test('excludes worklogs outside the week', () async {
+      final task = await taskService.add(
+        title: 'Dev task',
+        category: 'Working',
+      );
+
+      // Worklog inside the week
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 16, 9, 0), // Monday of target week
+        duration: const Duration(hours: 2),
+      );
+      // Worklog outside the week (previous week)
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 15, 9, 0), // Sunday before
+        duration: const Duration(hours: 5),
+      );
+
+      final monday = DateTime(2026, 2, 16);
+      final summary = await planService.weekSummary(anchor: monday);
+
+      final working = summary.categories
+          .firstWhere((c) => c.category == 'Working');
+      expect(working.actual.inHours, equals(2)); // Only the in-week one
     });
   });
 }

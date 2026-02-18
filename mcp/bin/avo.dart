@@ -15,7 +15,8 @@
 ///   avo task done <id>        Mark task done
 ///
 ///   avo today                 Today's summary
-///   avo week                  This week's summary
+///   avo daily [YYYY-MM-DD]    Daily report for any date
+///   avo week                  Weekly report with categories
 ///
 ///   avo jira sync             Sync with Jira
 ///   avo jira status           Show Jira sync status
@@ -87,7 +88,18 @@ Future<void> main(List<String> args) async {
       ..addCommand(WorklogCommand(worklogService, taskService))
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
-      ..addCommand(WeekCommand(worklogService: worklogService))
+      ..addCommand(WeekCommand(
+          worklogService: worklogService,
+          taskService: taskService,
+          planService: planService,
+          categories: avoConfig.effectiveCategories,
+      ))
+      ..addCommand(DailyCommand(
+          worklogService: worklogService,
+          taskService: taskService,
+          planService: planService,
+          categories: avoConfig.effectiveCategories,
+      ))
       ..addCommand(PlanCommand(planService,
           categories: avoConfig.effectiveCategories))
       ..addCommand(JiraCommand(jiraService, paths));
