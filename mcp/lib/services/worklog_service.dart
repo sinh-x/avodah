@@ -69,27 +69,41 @@ class WorklogService {
     return _buildDaySummary(date, rows);
   }
 
-  /// Returns this week's summary (Mon-Sun), one DaySummary per day.
-  Future<List<DaySummary>> weekSummary() async {
-    final now = DateTime.now();
-    // Monday of current week
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-
+  /// Returns summaries for a date range, one DaySummary per day.
+  ///
+  /// This is the core primitive — [weekSummary] derives from this.
+  Future<List<DaySummary>> rangeSummary({
+    required DateTime from,
+    required DateTime to,
+  }) async {
     final days = <String>[];
-    for (var i = 0; i < 7; i++) {
-      days.add(_formatDate(monday.add(Duration(days: i))));
+    var current = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day);
+    while (!current.isAfter(end)) {
+      days.add(_formatDate(current));
+      current = current.add(const Duration(days: 1));
     }
 
     final rows = await db.select(db.worklogEntries).get();
-    final weekRows = rows.where((r) => days.contains(r.date)).toList();
+    final rangeRows = rows.where((r) => days.contains(r.date)).toList();
 
     final summaries = <DaySummary>[];
     for (final day in days) {
-      final dayRows = weekRows.where((r) => r.date == day).toList();
+      final dayRows = rangeRows.where((r) => r.date == day).toList();
       summaries.add(_buildDaySummary(day, dayRows));
     }
 
     return summaries;
+  }
+
+  /// Returns this week's summary (Mon-Sun), one DaySummary per day.
+  ///
+  /// Convenience wrapper around [rangeSummary].
+  Future<List<DaySummary>> weekSummary({DateTime? anchor}) async {
+    final now = anchor ?? DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final sunday = monday.add(const Duration(days: 6));
+    return rangeSummary(from: monday, to: sunday);
   }
 
   /// Creates a manual worklog entry.

@@ -16,7 +16,7 @@
 ///
 ///   avo today                 Today's summary
 ///   avo daily [YYYY-MM-DD]    Daily report for any date
-///   avo week                  Weekly report with categories
+///   avo week [FROM] [TO]       Weekly/range report with categories
 ///
 ///   avo jira sync             Sync with Jira
 ///   avo jira status           Show Jira sync status

@@ -1181,19 +1181,53 @@ class WeekCommand extends Command<void> {
   String get name => 'week';
 
   @override
-  String get description => "This week's work summary with categories and tasks";
+  String get description => 'Weekly report with categories and tasks';
 
   @override
-  String get invocation => 'avo week';
+  String get invocation => 'avo week [FROM] [TO]';
 
   @override
   Future<void> run() async {
-    final summaries = await worklogService.weekSummary();
+    final rest = argResults!.rest;
+
+    late List<DaySummary> summaries;
+
+    if (rest.length >= 2) {
+      // Custom date range: avo week 2026-02-01 2026-02-14
+      if (!isValidDate(rest[0]) || !isValidDate(rest[1])) {
+        print('Invalid date range. Use: avo week YYYY-MM-DD YYYY-MM-DD');
+        return;
+      }
+      final fromParts = rest[0].split('-');
+      final toParts = rest[1].split('-');
+      final from = DateTime(int.parse(fromParts[0]), int.parse(fromParts[1]), int.parse(fromParts[2]));
+      final to = DateTime(int.parse(toParts[0]), int.parse(toParts[1]), int.parse(toParts[2]));
+      if (to.isBefore(from)) {
+        print('End date must be after start date.');
+        return;
+      }
+      summaries = await worklogService.rangeSummary(from: from, to: to);
+    } else if (rest.length == 1) {
+      // Anchor to a specific week: avo week 2026-02-10
+      if (!isValidDate(rest[0])) {
+        print('Invalid date: "${rest[0]}". Use YYYY-MM-DD format.');
+        return;
+      }
+      final parts = rest[0].split('-');
+      final anchor = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      summaries = await worklogService.weekSummary(anchor: anchor);
+    } else {
+      // Current week
+      summaries = await worklogService.weekSummary();
+    }
+
     final totalMs =
         summaries.fold<int>(0, (sum, d) => sum + d.total.inMilliseconds);
     final total = Duration(milliseconds: totalMs);
 
-    print(sectionHeader('WEEK'));
+    final startDate = summaries.first.date;
+    final endDate = summaries.last.date;
+    print(sectionHeader('$startDate ~ $endDate'));
     print('  Total:${' ' * (lineWidth - 8 - formatDuration(total).length - 2)}${formatDuration(total)}');
     print(separator());
 
@@ -1204,25 +1238,30 @@ class WeekCommand extends Command<void> {
       return;
     }
 
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final maxMs = summaries.fold<int>(
         0,
         (max, d) =>
             d.total.inMilliseconds > max ? d.total.inMilliseconds : max);
 
-    for (var i = 0; i < summaries.length; i++) {
-      final day = summaries[i];
-      final label = days[i];
+    for (final day in summaries) {
+      final dateParts = day.date.split('-');
+      final dt = DateTime(int.parse(dateParts[0]), int.parse(dateParts[1]), int.parse(dateParts[2]));
+      final label = '${dayNames[dt.weekday - 1]} ${dateParts[1]}/${dateParts[2]}';
       final bar = buildBar(day.total.inMilliseconds, maxMs);
       final dur =
           day.total.inMilliseconds > 0 ? day.formattedDuration : '-';
-      print('  $label  $bar  $dur');
+      print('  ${label.padRight(9)}  $bar  $dur');
     }
     print(separator());
     print('');
 
-    // ── Categories: plan vs actual for the week ──
-    final weekPlan = await planService.weekSummary();
+    // ── Categories: plan vs actual for the range ──
+    final fromParts = summaries.first.date.split('-');
+    final toParts = summaries.last.date.split('-');
+    final rangeFrom = DateTime(int.parse(fromParts[0]), int.parse(fromParts[1]), int.parse(fromParts[2]));
+    final rangeTo = DateTime(int.parse(toParts[0]), int.parse(toParts[1]), int.parse(toParts[2]));
+    final weekPlan = await planService.rangeSummary(from: rangeFrom, to: rangeTo);
     print(sectionHeader('CATEGORIES'));
     printPlanTable(weekPlan, defaultCategories: categories);
     print(separator());

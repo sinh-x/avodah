@@ -279,6 +279,56 @@ void main() {
     });
   });
 
+  group('rangeSummary', () {
+    test('aggregates across custom date range', () async {
+      final task = await taskService.add(
+        title: 'Dev task',
+        category: 'Working',
+      );
+
+      // Two days of work in a 5-day range
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 10, 9, 0),
+        duration: const Duration(hours: 3),
+      );
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 13, 9, 0),
+        duration: const Duration(hours: 2),
+      );
+      // Outside range
+      await worklogService.createWorklog(
+        taskId: task.id,
+        start: DateTime(2026, 2, 15, 9, 0),
+        duration: const Duration(hours: 10),
+      );
+
+      // Plan entries
+      await planService.add(
+        category: 'Working',
+        durationMs: 4 * 60 * 60 * 1000,
+        day: '2026-02-10',
+      );
+      await planService.add(
+        category: 'Working',
+        durationMs: 4 * 60 * 60 * 1000,
+        day: '2026-02-13',
+      );
+
+      final summary = await planService.rangeSummary(
+        from: DateTime(2026, 2, 10),
+        to: DateTime(2026, 2, 14),
+      );
+
+      expect(summary.day, equals('2026-02-10'));
+      final working = summary.categories
+          .firstWhere((c) => c.category == 'Working');
+      expect(working.planned.inHours, equals(8)); // 4+4
+      expect(working.actual.inHours, equals(5)); // 3+2, not 10
+    });
+  });
+
   group('weekSummary', () {
     test('returns empty when no plans or worklogs', () async {
       // Use a fixed Monday anchor
