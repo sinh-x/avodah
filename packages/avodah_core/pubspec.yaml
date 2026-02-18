@@ -1,7 +1,7 @@
 name: avodah_core
 description: "Core CRDT and storage logic for Avodah - pure Dart, no Flutter"
 publish_to: 'none'
-version: 0.1.1
+version: 0.2.0
 
 environment:
   sdk: ^3.10.8

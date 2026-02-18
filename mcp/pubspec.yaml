@@ -1,6 +1,6 @@
 name: avodah_mcp
 description: MCP server and CLI for Avodah worklog tracking
-version: 0.1.1
+version: 0.2.0
 
 environment:
   sdk: ^3.0.0
