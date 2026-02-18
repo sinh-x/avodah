@@ -40,7 +40,7 @@
         pkgs:
         pkgs.buildDartApplication {
           pname = "avo";
-          version = "0.1.0";
+          version = "0.1.1";
 
           src = pkgs.lib.cleanSource ./.;
           sourceRoot = "source/mcp";

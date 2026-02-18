@@ -14,6 +14,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | **1.0.0** | Fully functional CLI + MCP integration for AI usage |
 | **2.0.0** | Flutter UI with Linux & Android |
 
+## [0.1.1] - 2026-02-18
+
+### Added
+- Help text audit and consolidate log/worklog commands (#37) (#49)
+- Worklog add/edit with start time, duration, and description (#48)
+- Centralized version management with bump script and CHANGELOG (#46)
+- Jira sync progress, auto-push worklog, stop flags (#44)
+- Due dates, task categories, and daily time planning (#43)
+- Package avo CLI with buildDartApplication + fish completions
+- Interactive task picker for `avo start` with no args
+- Sync improvements — metadata, worklogs, filters, status (#36)
+- Jira UX polish — setup wizard, multi-profile, done-status sync (#34)
+- CLI polish — time display, delete, task show, log, recent (#33)
+- 2-way Jira sync with conflict resolution and profile credentials (#16)
+- Implement JiraService and wire Jira integration (#9) (#14)
+- Wire services into MCP server protocol (#8)
+- Implement ProjectService and wire project CLI commands (#7)
+- Implement WorklogService and wire today/week CLI commands (#6)
+- Implement TaskService and wire task CLI commands (#5) (#10)
+- Implement timer CLI and MCP server scaffold (#4)
+
+### Fixed
+- Support task ID prefix matching in start command (#24)
+- Resolve timer creating orphaned worklogs (#17) (#18)
+
+### Changed
+- Add .claude/todos.md to .gitignore
+- Merge pull request #41 from sinh-x/feat/interactive-task-picker
+- Rename av-* commands to avo-* and fix Flutter version display (#23)
+- Native avo binary + CLI default commands (#19, #20, #21) (#22)
+- Merge pull request #13 from sinh-x/feat/mcp-server-impl
+- Merge pull request #12 from sinh-x/feat/cli-project-service
+- Merge pull request #11 from sinh-x/feat/cli-worklog-queries
+- Extract avodah_core shared package (#2)
+- Add MCP worklog tracker design spec (#1)
+
 ## [0.1.0] - 2026-02-13
 
 First tagged release — CLI-first time tracking with Jira integration.
