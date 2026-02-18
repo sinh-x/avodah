@@ -45,6 +45,15 @@ class StartCommand extends TimerCommand {
   String get description => 'Start timer on a task';
 
   @override
+  String get invocation => 'avo start [task] [-n note]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo start "Fix login bug"\n'
+      '  avo start a1b2 -n "working on auth"\n'
+      '  avo start                          # interactive task picker';
+
+  @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     final input = args.isNotEmpty ? args.join(' ') : null;
@@ -222,6 +231,17 @@ class StopCommand extends TimerCommand {
   String get description => 'Stop timer and log time';
 
   @override
+  String get invocation => 'avo stop [-m comment] [-d]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo stop\n'
+      '  avo stop -m "finished auth flow"\n'
+      '  avo stop -d                        # stop and mark task done\n'
+      '\n'
+      'Worklogs are auto-pushed to Jira if configured.';
+
+  @override
   Future<void> run() async {
     try {
       final messageArg = argResults?['message'] as String?;
@@ -300,7 +320,10 @@ class StatusCommand extends Command<void> {
   String get name => 'status';
 
   @override
-  String get description => 'Show dashboard (timer, today, tasks, jira)';
+  String get description => 'Show dashboard with timer, today\'s summary, tasks, and plan';
+
+  @override
+  String get invocation => 'avo status';
 
   @override
   Future<void> run() async {
@@ -401,6 +424,12 @@ class PauseCommand extends TimerCommand {
   String get description => 'Pause running timer';
 
   @override
+  String get invocation => 'avo pause';
+
+  @override
+  String? get usageFooter => '\nUse "avo resume" to continue or "avo stop" to log time.';
+
+  @override
   Future<void> run() async {
     try {
       final timer = await timerService.pause();
@@ -433,6 +462,12 @@ class ResumeCommand extends TimerCommand {
   String get description => 'Resume paused timer';
 
   @override
+  String get invocation => 'avo resume';
+
+  @override
+  String? get usageFooter => '\nResumes a previously paused timer. Use "avo stop" when done.';
+
+  @override
   Future<void> run() async {
     try {
       final timer = await timerService.resume();
@@ -459,6 +494,12 @@ class CancelCommand extends TimerCommand {
 
   @override
   String get description => 'Cancel timer without logging';
+
+  @override
+  String get invocation => 'avo cancel';
+
+  @override
+  String? get usageFooter => '\nDiscards the running timer. No time is logged.';
 
   @override
   Future<void> run() async {
@@ -500,7 +541,7 @@ class TaskCommand extends Command<void> {
   String get name => 'task';
 
   @override
-  String get description => 'Task management';
+  String get description => 'Task management (add, list, show, done, delete, due, cat)';
 }
 
 class TaskAddCommand extends TaskSubcommand {
@@ -515,6 +556,13 @@ class TaskAddCommand extends TaskSubcommand {
 
   @override
   String get description => 'Create a new task';
+
+  @override
+  String get invocation => 'avo task add <title> [-p project] [--due YYYY-MM-DD] [--cat category]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo task add "Fix login bug" -p a1b2 --due 2026-03-01 --cat Working';
 
   @override
   Future<void> run() async {
@@ -579,6 +627,19 @@ class TaskListCommand extends TaskSubcommand {
 
   @override
   String get description => 'List tasks';
+
+  @override
+  String get invocation => 'avo task list [flags]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo task list                      # active tasks\n'
+      '  avo task list -a                   # include completed\n'
+      '  avo task list -s jira              # Jira-linked tasks only\n'
+      '  avo task list -s jira -p PROJ      # Jira project PROJ\n'
+      '  avo task list -l                   # local tasks only\n'
+      '  avo task list --profile work       # tasks from Jira profile "work"\n'
+      '  avo task list -p myproject         # tasks in local project';
 
   @override
   Future<void> run() async {
@@ -702,6 +763,12 @@ class TaskDoneCommand extends TaskSubcommand {
   String get description => 'Mark task as done';
 
   @override
+  String get invocation => 'avo task done <id>';
+
+  @override
+  String? get usageFooter => '\nID can be a prefix (e.g. "a1b2" matches "a1b2c3d4...").';
+
+  @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     final taskId = args.isNotEmpty ? args.first : null;
@@ -748,6 +815,12 @@ class TaskDeleteCommand extends TaskSubcommand {
 
   @override
   String get description => 'Delete a task';
+
+  @override
+  String get invocation => 'avo task delete <id>';
+
+  @override
+  String? get usageFooter => '\nPrompts for confirmation before deleting.';
 
   @override
   Future<void> run() async {
@@ -797,6 +870,14 @@ class TaskDueCommand extends TaskSubcommand {
 
   @override
   String get description => 'Set or clear due date on a task';
+
+  @override
+  String get invocation => 'avo task due <id> <YYYY-MM-DD|clear>';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo task due a1b2 2026-03-01       # set due date\n'
+      '  avo task due a1b2 clear            # remove due date';
 
   @override
   Future<void> run() async {
@@ -861,6 +942,16 @@ class TaskCatCommand extends TaskSubcommand {
   String get description => 'Set or clear category on a task';
 
   @override
+  String get invocation => 'avo task cat <id> <category|clear>';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo task cat a1b2 Working\n'
+      '  avo task cat a1b2 clear\n'
+      '\n'
+      'Common categories: Working, Learning, Side-project, Family & Friends, Personal';
+
+  @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     if (args.isEmpty) {
@@ -922,6 +1013,13 @@ class TaskShowCommand extends TaskSubcommand {
 
   @override
   String get description => 'Show task details';
+
+  @override
+  String get invocation => 'avo task show <id>';
+
+  @override
+  String? get usageFooter => '\nID can be a prefix (e.g. "a1b2" matches "a1b2c3d4...").\n'
+      'Shows status, project, category, time, worklogs, Jira sync info.';
 
   @override
   Future<void> run() async {
@@ -1035,6 +1133,9 @@ class TodayCommand extends Command<void> {
   String get description => "Today's work summary";
 
   @override
+  String get invocation => 'avo today';
+
+  @override
   Future<void> run() async {
     final summary = await worklogService.todaySummary();
     final now = DateTime.now();
@@ -1073,6 +1174,9 @@ class WeekCommand extends Command<void> {
 
   @override
   String get description => "This week's work summary";
+
+  @override
+  String get invocation => 'avo week';
 
   @override
   Future<void> run() async {
@@ -1131,7 +1235,7 @@ class ProjectCommand extends Command<void> {
   String get name => 'project';
 
   @override
-  String get description => 'Project management';
+  String get description => 'Project management (add, list, show, delete)';
 }
 
 class ProjectAddCommand extends ProjectSubcommand {
@@ -1144,6 +1248,13 @@ class ProjectAddCommand extends ProjectSubcommand {
 
   @override
   String get description => 'Create a new project';
+
+  @override
+  String get invocation => 'avo project add <title> [-i icon]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo project add "Web App" -i "🌐"';
 
   @override
   Future<void> run() async {
@@ -1185,6 +1296,12 @@ class ProjectListCommand extends ProjectSubcommand {
   String get description => 'List projects';
 
   @override
+  String get invocation => 'avo project list [-a]';
+
+  @override
+  String? get usageFooter => '\nUse -a to include archived projects.';
+
+  @override
   Future<void> run() async {
     final includeArchived = argResults?['all'] as bool? ?? false;
     final projects =
@@ -1221,6 +1338,12 @@ class ProjectShowCommand extends ProjectSubcommand {
 
   @override
   String get description => 'Show project details';
+
+  @override
+  String get invocation => 'avo project show <id>';
+
+  @override
+  String? get usageFooter => '\nID can be a prefix (e.g. "a1b2" matches "a1b2c3d4...").';
 
   @override
   Future<void> run() async {
@@ -1273,6 +1396,12 @@ class ProjectDeleteCommand extends ProjectSubcommand {
 
   @override
   String get description => 'Delete a project';
+
+  @override
+  String get invocation => 'avo project delete <id>';
+
+  @override
+  String? get usageFooter => '\nPrompts for confirmation before deleting.';
 
   @override
   Future<void> run() async {
@@ -1337,134 +1466,7 @@ class WorklogCommand extends Command<void> {
   String get name => 'worklog';
 
   @override
-  String get description => 'Worklog management';
-}
-
-/// Top-level `avo log` command for manual worklog entry.
-class LogCommand extends Command<void> {
-  final WorklogService worklogService;
-  final TaskService taskService;
-
-  LogCommand(this.worklogService, this.taskService) {
-    argParser.addOption('message', abbr: 'm', help: 'Comment for the worklog');
-  }
-
-  @override
-  String get name => 'log';
-
-  @override
-  String get description => 'Log time manually (e.g., avo log <task> 1h30m)';
-
-  @override
-  Future<void> run() async {
-    final args = argResults?.rest ?? [];
-
-    if (args.length < 2) {
-      print('Missing task and/or duration.');
-      print('');
-      print('  Usage: avo log <task> <duration> [-m "comment"]');
-      print('  Example: avo log a1b2 1h30m');
-      print('  Example: avo log a1b2 45m -m "code review"');
-      print('');
-      print('  Duration formats: 30m, 1h, 1h30m, 2h 15m');
-      return;
-    }
-
-    final taskInput = args.first;
-    final durationInput = args.sublist(1).join(' ');
-    final comment = argResults?['message'] as String?;
-
-    // Parse duration
-    final duration = parseDuration(durationInput);
-    if (duration == null) {
-      print('Invalid duration: "$durationInput"');
-      print('');
-      print('  Valid formats: 30m, 1h, 1h30m, 2h 15m');
-      return;
-    }
-
-    // Resolve task
-    String taskId;
-    String taskTitle;
-    try {
-      final task = await taskService.show(taskInput);
-      taskId = task.id;
-      taskTitle = task.title;
-    } on TaskNotFoundException {
-      print('No task found matching "$taskInput".');
-      print('');
-      print(hint('avo task list', 'to see available tasks'));
-      return;
-    } on AmbiguousTaskIdException catch (e) {
-      print('Multiple tasks match "$taskInput":');
-      for (final id in e.matchingIds) {
-        print('  ${id.substring(0, 8)}');
-      }
-      print('');
-      print(hintPlain('Use a longer prefix to be specific.'));
-      return;
-    }
-
-    final worklog = await worklogService.manualLog(
-      taskId: taskId,
-      durationMinutes: duration.inMinutes,
-      comment: comment,
-    );
-
-    print('Logged ${formatDuration(duration)} on "$taskTitle"');
-    print(kvRow('Worklog:', worklog.id.substring(0, 8)));
-    if (comment != null) print(kvRow('Comment:', comment));
-    print('');
-    print(hint('avo today', 'to see today\'s total'));
-  }
-}
-
-/// Top-level `avo recent` command for listing recent worklogs.
-class RecentCommand extends Command<void> {
-  final WorklogService worklogService;
-  final TaskService taskService;
-
-  RecentCommand(this.worklogService, this.taskService) {
-    argParser.addOption('count', abbr: 'n', help: 'Number of entries',
-        defaultsTo: '10');
-  }
-
-  @override
-  String get name => 'recent';
-
-  @override
-  String get description => 'Show recent worklogs';
-
-  @override
-  Future<void> run() async {
-    final limit = int.tryParse(argResults?['count'] as String? ?? '10') ?? 10;
-    final worklogs = await worklogService.listRecent(limit: limit);
-
-    if (worklogs.isEmpty) {
-      print('No worklogs yet.');
-      print('');
-      print(hint('avo start <task>', 'to begin tracking'));
-      print(hint('avo log <task> <duration>', 'to log manually'));
-      return;
-    }
-
-    print('Recent Worklogs (${worklogs.length}):');
-    print(separator());
-    for (final w in worklogs) {
-      final title = await resolveTaskTitle(taskService, w.taskId);
-      final dur = formatDuration(Duration(milliseconds: w.durationMs));
-      final startDate = formatRelativeDate(w.startTime);
-      final startTime = formatTime(w.startTime);
-      final syncIcon = w.isSyncedToJira ? ' [synced]' : '';
-      final commentStr = w.comment != null && w.comment!.isNotEmpty
-          ? '  "${w.comment}"'
-          : '';
-      print('  ${w.id.substring(0, 8)}  $title  $dur  $startDate $startTime$syncIcon$commentStr');
-    }
-    print('');
-    print(hint('avo worklog delete <id>', 'to remove a worklog'));
-    print(hint('avo today', 'to see today\'s total'));
-  }
+  String get description => 'Worklog management (add, edit, list, delete)';
 }
 
 /// Worklog list subcommand (under `avo worklog list`).
@@ -1481,6 +1483,12 @@ class WorklogListCommand extends WorklogSubcommand {
   String get description => 'List recent worklogs';
 
   @override
+  String get invocation => 'avo worklog list [-n count]';
+
+  @override
+  String? get usageFooter => '\nShows the 10 most recent worklogs by default.';
+
+  @override
   Future<void> run() async {
     final limit = int.tryParse(argResults?['count'] as String? ?? '10') ?? 10;
     final worklogs = await worklogService.listRecent(limit: limit);
@@ -1488,7 +1496,7 @@ class WorklogListCommand extends WorklogSubcommand {
     if (worklogs.isEmpty) {
       print('No worklogs yet.');
       print('');
-      print(hint('avo log <task> <duration>', 'to log manually'));
+      print(hint('avo worklog add', 'to log manually'));
       return;
     }
 
@@ -1518,6 +1526,12 @@ class WorklogDeleteCommand extends WorklogSubcommand {
   String get description => 'Delete a worklog';
 
   @override
+  String get invocation => 'avo worklog delete <id>';
+
+  @override
+  String? get usageFooter => '\nPrompts for confirmation before deleting.';
+
+  @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     final worklogId = args.isNotEmpty ? args.first : null;
@@ -1526,7 +1540,7 @@ class WorklogDeleteCommand extends WorklogSubcommand {
       print('Missing worklog ID.');
       print('');
       print('  Usage: avo worklog delete <id>');
-      print(hint('avo recent', 'to see recent worklogs'));
+      print(hint('avo worklog list', 'to see recent worklogs'));
       return;
     }
 
@@ -1546,7 +1560,7 @@ class WorklogDeleteCommand extends WorklogSubcommand {
     } on WorklogNotFoundException {
       print('No worklog found matching "$worklogId".');
       print('');
-      print(hint('avo recent', 'to see recent worklogs'));
+      print(hint('avo worklog list', 'to see recent worklogs'));
     } on AmbiguousWorklogIdException catch (e) {
       print('Multiple worklogs match "$worklogId":');
       for (final id in e.matchingIds) {
@@ -1572,6 +1586,17 @@ class WorklogAddCommand extends WorklogSubcommand {
 
   @override
   String get description => 'Add a worklog with start time and duration';
+
+  @override
+  String get invocation => 'avo worklog add [-t task] [-s start] [-d duration] [-m message]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo worklog add -t a1b2 -s 9:00 -d 1h30m -m "morning work"\n'
+      '  avo worklog add                    # interactive mode\n'
+      '\n'
+      'Time formats: 9:00, 14:30, 2026-02-15T09:00, yesterday 14:00\n'
+      'Duration formats: 30m, 1h, 1h30m, 2h 15m';
 
   @override
   Future<void> run() async {
@@ -1740,6 +1765,14 @@ class WorklogEditCommand extends WorklogSubcommand {
   String get description => 'Edit an existing worklog';
 
   @override
+  String get invocation => 'avo worklog edit <id> [-s start] [-d duration] [-m message]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo worklog edit a1b2 -d 2h -m "updated"\n'
+      '  avo worklog edit a1b2              # interactive mode';
+
+  @override
   Future<void> run() async {
     final args = argResults?.rest ?? [];
     final worklogId = args.isNotEmpty ? args.first : null;
@@ -1748,7 +1781,7 @@ class WorklogEditCommand extends WorklogSubcommand {
       print('Missing worklog ID.');
       print('');
       print('  Usage: avo worklog edit <id> [-s start] [-d duration] [-m message]');
-      print(hint('avo recent', 'to see recent worklogs'));
+      print(hint('avo worklog list', 'to see recent worklogs'));
       return;
     }
 
@@ -1763,7 +1796,7 @@ class WorklogEditCommand extends WorklogSubcommand {
     } on WorklogNotFoundException {
       print('No worklog found matching "$worklogId".');
       print('');
-      print(hint('avo recent', 'to see recent worklogs'));
+      print(hint('avo worklog list', 'to see recent worklogs'));
       return;
     } on AmbiguousWorklogIdException catch (e) {
       print('Multiple worklogs match "$worklogId":');
@@ -1888,7 +1921,7 @@ class PlanCommand extends Command<void> {
   String get name => 'plan';
 
   @override
-  String get description => 'Daily time planning by category';
+  String get description => 'Daily time planning by category (add, list, remove)';
 }
 
 class PlanAddCommand extends PlanSubcommand {
@@ -1902,6 +1935,14 @@ class PlanAddCommand extends PlanSubcommand {
 
   @override
   String get description => 'Add planned time for a category';
+
+  @override
+  String get invocation => 'avo plan add <category> -d <duration> [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo plan add Working -d 3h\n'
+      '  avo plan add Learning -d 2h --day 2026-02-14';
 
   @override
   Future<void> run() async {
@@ -1963,6 +2004,12 @@ class PlanListCommand extends PlanSubcommand {
   String get description => 'Show plan-vs-actual for a day';
 
   @override
+  String get invocation => 'avo plan list [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nDefaults to today if no day is specified.';
+
+  @override
   Future<void> run() async {
     final dayStr = argResults?['day'] as String?;
 
@@ -1993,6 +2040,13 @@ class PlanRemoveCommand extends PlanSubcommand {
 
   @override
   String get description => 'Remove a category from the plan';
+
+  @override
+  String get invocation => 'avo plan remove <category> [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo plan remove Learning --day 2026-02-14';
 
   @override
   Future<void> run() async {
@@ -2046,7 +2100,8 @@ class JiraCommand extends Command<void> {
   String get name => 'jira';
 
   @override
-  String get description => 'Jira integration';
+  String get description => 'Jira integration (init, setup, sync, status)\n\n'
+      'Workflow: init -> setup -> sync';
 }
 
 /// Generate Jira credentials template file with profile format.
@@ -2060,6 +2115,13 @@ class JiraInitCommand extends Command<void> {
 
   @override
   String get description => 'Generate Jira credentials template file';
+
+  @override
+  String get invocation => 'avo jira init';
+
+  @override
+  String? get usageFooter => '\nCreates a credentials template at ~/.config/avodah/.\n'
+      'Next steps: edit credentials, then run "avo jira setup".';
 
   @override
   Future<void> run() async {
@@ -2135,6 +2197,17 @@ class JiraSyncCommand extends JiraSubcommand {
 
   @override
   String get description => 'Sync with Jira (2-way with conflict resolution)';
+
+  @override
+  String get invocation => 'avo jira sync [issue-key] [--profile name] [--dry-run] [--no-interactive]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo jira sync                      # sync all configured projects\n'
+      '  avo jira sync PROJ-123             # sync single issue\n'
+      '  avo jira sync --dry-run            # preview without applying\n'
+      '  avo jira sync --profile work       # use specific profile\n'
+      '  avo jira sync --no-interactive     # skip conflict prompts';
 
   @override
   Future<void> run() async {
@@ -2337,6 +2410,12 @@ class JiraStatusCommand extends JiraSubcommand {
   String get description => 'Show Jira sync status';
 
   @override
+  String get invocation => 'avo jira status';
+
+  @override
+  String? get usageFooter => '\nShows configured profiles, linked tasks, pending worklogs, and last sync time.';
+
+  @override
   Future<void> run() async {
     final statuses = await jiraService.statusAll();
 
@@ -2387,6 +2466,13 @@ class JiraSetupCommand extends JiraSubcommand {
 
   @override
   String get description => 'Configure Jira connection (interactive or from profile)';
+
+  @override
+  String get invocation => 'avo jira setup [--profile name]';
+
+  @override
+  String? get usageFooter => '\nInteractive wizard that prompts for URL, credentials, and project keys.\n'
+      'Prerequisite: run "avo jira init" first to create the credentials file.';
 
   @override
   Future<void> run() async {

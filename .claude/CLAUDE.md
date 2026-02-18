@@ -56,6 +56,18 @@ Reference: `lib/features/tasks/models/task_document.dart`
 - MCP/CLI: `cd mcp && dart test`
 - 92 tests across 5 service suites (Timer, Task, Worklog, Project, Jira)
 
+## Release Workflow
+
+- **Do NOT bump version in feature branches or PRs.**
+- Version bumps happen on `main` at release time, separate from feature work.
+- Sequence:
+  1. Merge feature PRs to `main` (no version changes)
+  2. When ready to release, run `dart run tool/bump_version.dart patch|minor|major`
+  3. Commit: `chore: bump version to X.Y.Z`
+  4. Tag: `git tag vX.Y.Z`
+  5. Push: `git push origin main --tags`
+- The bump script auto-generates the changelog from all commits since the last tag.
+
 ## Current Phase
 
 Phase 3 (Core Features) complete. Current focus: CLI polish and E2E validation.
