@@ -187,6 +187,100 @@ class PlanService {
     );
   }
 
+  /// Aggregates plan-vs-actual across a date range.
+  ///
+  /// This is the core primitive — [weekSummary] derives from this.
+  /// Returns a [DayPlanSummary] whose [day] is the start date and whose
+  /// categories contain totals across all days in the range.
+  Future<DayPlanSummary> rangeSummary({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final days = <String>[];
+    var current = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day);
+    while (!current.isAfter(end)) {
+      days.add(
+          '${current.year}-${current.month.toString().padLeft(2, '0')}-${current.day.toString().padLeft(2, '0')}');
+      current = current.add(const Duration(days: 1));
+    }
+
+    // Aggregate planned per category across the range
+    final plannedByCategory = <String, int>{};
+    for (final day in days) {
+      final entries = await _entriesForDay(day);
+      for (final e in entries) {
+        plannedByCategory[e.category] =
+            (plannedByCategory[e.category] ?? 0) + e.durationMs;
+      }
+    }
+
+    // Aggregate actual per category from worklogs across the range
+    final allWorklogRows = await db.select(db.worklogEntries).get();
+    final rangeWorklogs = allWorklogRows
+        .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
+        .where((doc) => !doc.isDeleted && days.contains(doc.date))
+        .toList();
+
+    final taskRows = await db.select(db.tasks).get();
+    final taskCategory = <String, String?>{};
+    for (final row in taskRows) {
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      taskCategory[doc.id] = doc.category;
+    }
+
+    final actualByCategory = <String, int>{};
+    int nonCategorizedMs = 0;
+    for (final w in rangeWorklogs) {
+      final cat = taskCategory[w.taskId];
+      if (cat == null) {
+        nonCategorizedMs += w.durationMs;
+      } else {
+        actualByCategory[cat] =
+            (actualByCategory[cat] ?? 0) + w.durationMs;
+      }
+    }
+
+    // Merge planned and actual
+    final allCategories = <String>{
+      ...plannedByCategory.keys,
+      ...actualByCategory.keys,
+    };
+    final categories = <PlanVsActual>[];
+    for (final cat in allCategories) {
+      categories.add(PlanVsActual(
+        category: cat,
+        planned: Duration(milliseconds: plannedByCategory[cat] ?? 0),
+        actual: Duration(milliseconds: actualByCategory.remove(cat) ?? 0),
+      ));
+    }
+
+    PlanVsActual? nonCat;
+    if (nonCategorizedMs > 0) {
+      nonCat = PlanVsActual(
+        category: 'Non-Categorized',
+        planned: Duration.zero,
+        actual: Duration(milliseconds: nonCategorizedMs),
+      );
+    }
+
+    return DayPlanSummary(
+      day: days.first,
+      categories: categories,
+      nonCategorized: nonCat,
+    );
+  }
+
+  /// Aggregates plan-vs-actual across a week (Mon-Sun).
+  ///
+  /// Convenience wrapper around [rangeSummary].
+  Future<DayPlanSummary> weekSummary({DateTime? anchor}) async {
+    final now = anchor ?? DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final sunday = monday.add(const Duration(days: 6));
+    return rangeSummary(from: monday, to: sunday);
+  }
+
   /// Returns non-deleted entries for a given day.
   Future<List<DailyPlanDocument>> _entriesForDay(String day) async {
     final rows = await (db.select(db.dailyPlanEntries)
