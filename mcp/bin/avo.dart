@@ -85,7 +85,8 @@ Future<void> main(List<String> args) async {
       ..addCommand(CancelCommand(timerService))
       ..addCommand(TaskCommand(taskService, worklogService, projectService, jiraService))
       ..addCommand(ProjectCommand(projectService))
-      ..addCommand(WorklogCommand(worklogService, taskService))
+      ..addCommand(WorklogCommand(worklogService, taskService,
+          jiraService: jiraService))
       ..addCommand(TodayCommand(
           worklogService: worklogService, taskService: taskService))
       ..addCommand(WeekCommand(

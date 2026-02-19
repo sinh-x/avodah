@@ -1627,13 +1627,16 @@ class ProjectDeleteCommand extends ProjectSubcommand {
 abstract class WorklogSubcommand extends Command<void> {
   final WorklogService worklogService;
   final TaskService taskService;
-  WorklogSubcommand(this.worklogService, this.taskService);
+  final JiraService? jiraService;
+  WorklogSubcommand(this.worklogService, this.taskService, {this.jiraService});
 }
 
 /// Worklog management command group.
 class WorklogCommand extends Command<void> {
-  WorklogCommand(WorklogService worklogService, TaskService taskService) {
-    addSubcommand(WorklogAddCommand(worklogService, taskService));
+  WorklogCommand(WorklogService worklogService, TaskService taskService,
+      {JiraService? jiraService}) {
+    addSubcommand(
+        WorklogAddCommand(worklogService, taskService, jiraService: jiraService));
     addSubcommand(WorklogEditCommand(worklogService, taskService));
     addSubcommand(WorklogListCommand(worklogService, taskService));
     addSubcommand(WorklogDeleteCommand(worklogService, taskService));
@@ -1751,7 +1754,8 @@ class WorklogDeleteCommand extends WorklogSubcommand {
 
 /// Worklog add subcommand (under `avo worklog add`).
 class WorklogAddCommand extends WorklogSubcommand {
-  WorklogAddCommand(super.worklogService, super.taskService) {
+  WorklogAddCommand(super.worklogService, super.taskService,
+      {super.jiraService}) {
     argParser.addOption('task', abbr: 't', help: 'Task ID or prefix');
     argParser.addOption('start', abbr: 's', help: 'Start time (e.g. 9:00, 2026-02-15T09:00)');
     argParser.addOption('duration', abbr: 'd', help: 'Duration (e.g. 1h30m, 45m)');
@@ -1921,6 +1925,15 @@ class WorklogAddCommand extends WorklogSubcommand {
     print(kvRow('Start:', formatTime(start)));
     print(kvRow('End:', formatTime(start.add(duration))));
     if (comment != null) print(kvRow('Comment:', comment));
+
+    // Auto-push worklog to Jira if service is available
+    if (jiraService != null) {
+      final pushed = await jiraService!.pushWorklog(worklog.id);
+      if (pushed) {
+        print(kvRow('Jira:', 'worklog synced'));
+      }
+    }
+
     print('');
     print(hint('avo today', 'to see today\'s total'));
     print(hint('avo worklog edit ${worklog.id.substring(0, 8)}', 'to edit'));
