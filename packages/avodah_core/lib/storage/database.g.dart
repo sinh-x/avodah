@@ -6563,6 +6563,455 @@ class DailyPlanEntriesCompanion extends UpdateCompanion<DailyPlanEntry> {
   }
 }
 
+class $DayPlanTasksTable extends DayPlanTasks
+    with TableInfo<$DayPlanTasksTable, DayPlanTask> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DayPlanTasksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<String> day = GeneratedColumn<String>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _estimateMsMeta = const VerificationMeta(
+    'estimateMs',
+  );
+  @override
+  late final GeneratedColumn<int> estimateMs = GeneratedColumn<int>(
+    'estimate_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    taskId,
+    day,
+    estimateMs,
+    created,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'day_plan_tasks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DayPlanTask> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('estimate_ms')) {
+      context.handle(
+        _estimateMsMeta,
+        estimateMs.isAcceptableOrUnknown(data['estimate_ms']!, _estimateMsMeta),
+      );
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DayPlanTask map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DayPlanTask(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}day'],
+      )!,
+      estimateMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}estimate_ms'],
+      )!,
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $DayPlanTasksTable createAlias(String alias) {
+    return $DayPlanTasksTable(attachedDatabase, alias);
+  }
+}
+
+class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
+  final String id;
+  final String taskId;
+  final String day;
+  final int estimateMs;
+  final int created;
+  final String crdtClock;
+  final String crdtState;
+  const DayPlanTask({
+    required this.id,
+    required this.taskId,
+    required this.day,
+    required this.estimateMs,
+    required this.created,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['task_id'] = Variable<String>(taskId);
+    map['day'] = Variable<String>(day);
+    map['estimate_ms'] = Variable<int>(estimateMs);
+    map['created'] = Variable<int>(created);
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  DayPlanTasksCompanion toCompanion(bool nullToAbsent) {
+    return DayPlanTasksCompanion(
+      id: Value(id),
+      taskId: Value(taskId),
+      day: Value(day),
+      estimateMs: Value(estimateMs),
+      created: Value(created),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory DayPlanTask.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DayPlanTask(
+      id: serializer.fromJson<String>(json['id']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      day: serializer.fromJson<String>(json['day']),
+      estimateMs: serializer.fromJson<int>(json['estimateMs']),
+      created: serializer.fromJson<int>(json['created']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'taskId': serializer.toJson<String>(taskId),
+      'day': serializer.toJson<String>(day),
+      'estimateMs': serializer.toJson<int>(estimateMs),
+      'created': serializer.toJson<int>(created),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  DayPlanTask copyWith({
+    String? id,
+    String? taskId,
+    String? day,
+    int? estimateMs,
+    int? created,
+    String? crdtClock,
+    String? crdtState,
+  }) => DayPlanTask(
+    id: id ?? this.id,
+    taskId: taskId ?? this.taskId,
+    day: day ?? this.day,
+    estimateMs: estimateMs ?? this.estimateMs,
+    created: created ?? this.created,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  DayPlanTask copyWithCompanion(DayPlanTasksCompanion data) {
+    return DayPlanTask(
+      id: data.id.present ? data.id.value : this.id,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      day: data.day.present ? data.day.value : this.day,
+      estimateMs: data.estimateMs.present
+          ? data.estimateMs.value
+          : this.estimateMs,
+      created: data.created.present ? data.created.value : this.created,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DayPlanTask(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('day: $day, ')
+          ..write('estimateMs: $estimateMs, ')
+          ..write('created: $created, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, taskId, day, estimateMs, created, crdtClock, crdtState);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DayPlanTask &&
+          other.id == this.id &&
+          other.taskId == this.taskId &&
+          other.day == this.day &&
+          other.estimateMs == this.estimateMs &&
+          other.created == this.created &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
+  final Value<String> id;
+  final Value<String> taskId;
+  final Value<String> day;
+  final Value<int> estimateMs;
+  final Value<int> created;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const DayPlanTasksCompanion({
+    this.id = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.day = const Value.absent(),
+    this.estimateMs = const Value.absent(),
+    this.created = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DayPlanTasksCompanion.insert({
+    required String id,
+    required String taskId,
+    required String day,
+    this.estimateMs = const Value.absent(),
+    required int created,
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       taskId = Value(taskId),
+       day = Value(day),
+       created = Value(created);
+  static Insertable<DayPlanTask> custom({
+    Expression<String>? id,
+    Expression<String>? taskId,
+    Expression<String>? day,
+    Expression<int>? estimateMs,
+    Expression<int>? created,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (taskId != null) 'task_id': taskId,
+      if (day != null) 'day': day,
+      if (estimateMs != null) 'estimate_ms': estimateMs,
+      if (created != null) 'created': created,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DayPlanTasksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? taskId,
+    Value<String>? day,
+    Value<int>? estimateMs,
+    Value<int>? created,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return DayPlanTasksCompanion(
+      id: id ?? this.id,
+      taskId: taskId ?? this.taskId,
+      day: day ?? this.day,
+      estimateMs: estimateMs ?? this.estimateMs,
+      created: created ?? this.created,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<String>(day.value);
+    }
+    if (estimateMs.present) {
+      map['estimate_ms'] = Variable<int>(estimateMs.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DayPlanTasksCompanion(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('day: $day, ')
+          ..write('estimateMs: $estimateMs, ')
+          ..write('created: $created, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6578,6 +7027,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DailyPlanEntriesTable dailyPlanEntries = $DailyPlanEntriesTable(
     this,
   );
+  late final $DayPlanTasksTable dayPlanTasks = $DayPlanTasksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6591,6 +7041,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     jiraIntegrations,
     timerEntries,
     dailyPlanEntries,
+    dayPlanTasks,
   ];
 }
 
@@ -9634,6 +10085,246 @@ typedef $$DailyPlanEntriesTableProcessedTableManager =
       DailyPlanEntry,
       PrefetchHooks Function()
     >;
+typedef $$DayPlanTasksTableCreateCompanionBuilder =
+    DayPlanTasksCompanion Function({
+      required String id,
+      required String taskId,
+      required String day,
+      Value<int> estimateMs,
+      required int created,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$DayPlanTasksTableUpdateCompanionBuilder =
+    DayPlanTasksCompanion Function({
+      Value<String> id,
+      Value<String> taskId,
+      Value<String> day,
+      Value<int> estimateMs,
+      Value<int> created,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$DayPlanTasksTableFilterComposer
+    extends Composer<_$AppDatabase, $DayPlanTasksTable> {
+  $$DayPlanTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get estimateMs => $composableBuilder(
+    column: $table.estimateMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DayPlanTasksTableOrderingComposer
+    extends Composer<_$AppDatabase, $DayPlanTasksTable> {
+  $$DayPlanTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get estimateMs => $composableBuilder(
+    column: $table.estimateMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DayPlanTasksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DayPlanTasksTable> {
+  $$DayPlanTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<int> get estimateMs => $composableBuilder(
+    column: $table.estimateMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$DayPlanTasksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DayPlanTasksTable,
+          DayPlanTask,
+          $$DayPlanTasksTableFilterComposer,
+          $$DayPlanTasksTableOrderingComposer,
+          $$DayPlanTasksTableAnnotationComposer,
+          $$DayPlanTasksTableCreateCompanionBuilder,
+          $$DayPlanTasksTableUpdateCompanionBuilder,
+          (
+            DayPlanTask,
+            BaseReferences<_$AppDatabase, $DayPlanTasksTable, DayPlanTask>,
+          ),
+          DayPlanTask,
+          PrefetchHooks Function()
+        > {
+  $$DayPlanTasksTableTableManager(_$AppDatabase db, $DayPlanTasksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DayPlanTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DayPlanTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DayPlanTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<String> day = const Value.absent(),
+                Value<int> estimateMs = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DayPlanTasksCompanion(
+                id: id,
+                taskId: taskId,
+                day: day,
+                estimateMs: estimateMs,
+                created: created,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String taskId,
+                required String day,
+                Value<int> estimateMs = const Value.absent(),
+                required int created,
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DayPlanTasksCompanion.insert(
+                id: id,
+                taskId: taskId,
+                day: day,
+                estimateMs: estimateMs,
+                created: created,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DayPlanTasksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DayPlanTasksTable,
+      DayPlanTask,
+      $$DayPlanTasksTableFilterComposer,
+      $$DayPlanTasksTableOrderingComposer,
+      $$DayPlanTasksTableAnnotationComposer,
+      $$DayPlanTasksTableCreateCompanionBuilder,
+      $$DayPlanTasksTableUpdateCompanionBuilder,
+      (
+        DayPlanTask,
+        BaseReferences<_$AppDatabase, $DayPlanTasksTable, DayPlanTask>,
+      ),
+      DayPlanTask,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9653,4 +10344,6 @@ class $AppDatabaseManager {
       $$TimerEntriesTableTableManager(_db, _db.timerEntries);
   $$DailyPlanEntriesTableTableManager get dailyPlanEntries =>
       $$DailyPlanEntriesTableTableManager(_db, _db.dailyPlanEntries);
+  $$DayPlanTasksTableTableManager get dayPlanTasks =>
+      $$DayPlanTasksTableTableManager(_db, _db.dayPlanTasks);
 }

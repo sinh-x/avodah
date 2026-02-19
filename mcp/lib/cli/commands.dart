@@ -316,6 +316,11 @@ class StatusCommand extends Command<void> {
     this.categories = const [],
   });
 
+  String _today() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   String get name => 'status';
 
@@ -364,6 +369,19 @@ class StatusCommand extends Command<void> {
     print(separator());
     print('');
 
+    // ── Plan ──
+    final today = _today();
+    final planSummary = await planService.summary();
+    final plannedTasks = await planService.listTasksForDay(day: today);
+    print(sectionHeader('PLAN'));
+    await printPlanTable(planSummary,
+        defaultCategories: categories,
+        plannedTasks: plannedTasks,
+        taskService: taskService,
+        worklogService: worklogService);
+    print(separator());
+    print('');
+
     // ── Tasks ──
     print(sectionHeader('TASKS'));
     final tasks = await taskService.list();
@@ -402,13 +420,6 @@ class StatusCommand extends Command<void> {
         }
       }
     }
-    print(separator());
-    print('');
-
-    // ── Plan ──
-    final planSummary = await planService.summary();
-    print(sectionHeader('PLAN'));
-    printPlanTable(planSummary, defaultCategories: categories);
     print(separator());
   }
 }
@@ -1263,7 +1274,7 @@ class WeekCommand extends Command<void> {
     final rangeTo = DateTime(int.parse(toParts[0]), int.parse(toParts[1]), int.parse(toParts[2]));
     final weekPlan = await planService.rangeSummary(from: rangeFrom, to: rangeTo);
     print(sectionHeader('CATEGORIES'));
-    printPlanTable(weekPlan, defaultCategories: categories);
+    await printPlanTable(weekPlan, defaultCategories: categories);
     print(separator());
     print('');
 
@@ -1383,8 +1394,13 @@ class DailyCommand extends Command<void> {
 
     // ── Plan vs Actual ──
     final planSummary = await planService.summary(day: dateStr);
+    final plannedTasks = await planService.listTasksForDay(day: dateStr);
     print(sectionHeader('PLAN'));
-    printPlanTable(planSummary, defaultCategories: categories);
+    await printPlanTable(planSummary,
+        defaultCategories: categories,
+        plannedTasks: plannedTasks,
+        taskService: taskService,
+        worklogService: worklogService);
     print(separator());
   }
 }
@@ -1627,13 +1643,16 @@ class ProjectDeleteCommand extends ProjectSubcommand {
 abstract class WorklogSubcommand extends Command<void> {
   final WorklogService worklogService;
   final TaskService taskService;
-  WorklogSubcommand(this.worklogService, this.taskService);
+  final JiraService? jiraService;
+  WorklogSubcommand(this.worklogService, this.taskService, {this.jiraService});
 }
 
 /// Worklog management command group.
 class WorklogCommand extends Command<void> {
-  WorklogCommand(WorklogService worklogService, TaskService taskService) {
-    addSubcommand(WorklogAddCommand(worklogService, taskService));
+  WorklogCommand(WorklogService worklogService, TaskService taskService,
+      {JiraService? jiraService}) {
+    addSubcommand(
+        WorklogAddCommand(worklogService, taskService, jiraService: jiraService));
     addSubcommand(WorklogEditCommand(worklogService, taskService));
     addSubcommand(WorklogListCommand(worklogService, taskService));
     addSubcommand(WorklogDeleteCommand(worklogService, taskService));
@@ -1751,7 +1770,8 @@ class WorklogDeleteCommand extends WorklogSubcommand {
 
 /// Worklog add subcommand (under `avo worklog add`).
 class WorklogAddCommand extends WorklogSubcommand {
-  WorklogAddCommand(super.worklogService, super.taskService) {
+  WorklogAddCommand(super.worklogService, super.taskService,
+      {super.jiraService}) {
     argParser.addOption('task', abbr: 't', help: 'Task ID or prefix');
     argParser.addOption('start', abbr: 's', help: 'Start time (e.g. 9:00, 2026-02-15T09:00)');
     argParser.addOption('duration', abbr: 'd', help: 'Duration (e.g. 1h30m, 45m)');
@@ -1921,6 +1941,15 @@ class WorklogAddCommand extends WorklogSubcommand {
     print(kvRow('Start:', formatTime(start)));
     print(kvRow('End:', formatTime(start.add(duration))));
     if (comment != null) print(kvRow('Comment:', comment));
+
+    // Auto-push worklog to Jira if service is available
+    if (jiraService != null) {
+      final pushed = await jiraService!.pushWorklog(worklog.id);
+      if (pushed) {
+        print(kvRow('Jira:', 'worklog synced'));
+      }
+    }
+
     print('');
     print(hint('avo today', 'to see today\'s total'));
     print(hint('avo worklog edit ${worklog.id.substring(0, 8)}', 'to edit'));
@@ -2088,17 +2117,26 @@ abstract class PlanSubcommand extends Command<void> {
 class PlanCommand extends Command<void> {
   final PlanService planService;
 
-  PlanCommand(this.planService, {List<String> categories = const []}) {
+  PlanCommand(this.planService, {
+    List<String> categories = const [],
+    required TaskService taskService,
+    required WorklogService worklogService,
+  }) {
     addSubcommand(PlanAddCommand(planService));
-    addSubcommand(PlanListCommand(planService, categories: categories));
+    addSubcommand(PlanListCommand(planService,
+        categories: categories,
+        taskService: taskService,
+        worklogService: worklogService));
     addSubcommand(PlanRemoveCommand(planService));
+    addSubcommand(PlanTaskCommand(planService, taskService));
+    addSubcommand(PlanUntaskCommand(planService, taskService));
   }
 
   @override
   String get name => 'plan';
 
   @override
-  String get description => 'Daily time planning by category (add, list, remove)';
+  String get description => 'Daily time planning by category (add, list, remove, task, untask)';
 }
 
 class PlanAddCommand extends PlanSubcommand {
@@ -2169,8 +2207,14 @@ class PlanAddCommand extends PlanSubcommand {
 
 class PlanListCommand extends PlanSubcommand {
   final List<String> categories;
+  final TaskService taskService;
+  final WorklogService worklogService;
 
-  PlanListCommand(super.planService, {this.categories = const []}) {
+  PlanListCommand(super.planService, {
+    this.categories = const [],
+    required this.taskService,
+    required this.worklogService,
+  }) {
     argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
   }
 
@@ -2196,11 +2240,18 @@ class PlanListCommand extends PlanSubcommand {
     }
 
     final summary = await planService.summary(day: dayStr);
+    final plannedTasks = await planService.listTasksForDay(day: dayStr);
 
     print('Plan for ${summary.day}:');
-    printPlanTable(summary, defaultCategories: categories);
+    await printPlanTable(summary,
+        defaultCategories: categories,
+        plannedTasks: plannedTasks,
+        taskService: taskService,
+        worklogService: worklogService);
 
-    if (summary.totalPlanned == Duration.zero && summary.totalActual == Duration.zero) {
+    if (summary.totalPlanned == Duration.zero &&
+        summary.totalActual == Duration.zero &&
+        plannedTasks.isEmpty) {
       print('');
       print(hint('avo plan add <category> -d <dur>', 'to start planning'));
     }
@@ -2247,6 +2298,169 @@ class PlanRemoveCommand extends PlanSubcommand {
       final entry = await planService.remove(category: category, day: dayStr);
       print('Removed "$category" from plan on ${entry.day}.');
     } on PlanEntryNotFoundException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan', 'to see current plan'));
+    }
+  }
+}
+
+class PlanTaskCommand extends PlanSubcommand {
+  final TaskService taskService;
+
+  PlanTaskCommand(super.planService, this.taskService) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+    argParser.addOption('estimate', abbr: 'e', help: 'Time estimate (e.g. 2h, 1h30m)');
+  }
+
+  @override
+  String get name => 'task';
+
+  @override
+  String get description => 'Add a task to the day plan';
+
+  @override
+  String get invocation => 'avo plan task <task-id> [--day YYYY-MM-DD] [-e <duration>]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo plan task a1b2\n'
+      '  avo plan task a1b2 -e 2h\n'
+      '  avo plan task a1b2 --day 2026-02-20 -e 1h30m';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskIdInput = args.isNotEmpty ? args.first : null;
+    final dayStr = argResults?['day'] as String?;
+    final estimateStr = argResults?['estimate'] as String?;
+
+    if (taskIdInput == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo plan task <task-id> [-e <duration>] [--day YYYY-MM-DD]');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    int estimateMs = 0;
+    if (estimateStr != null) {
+      final duration = parseDuration(estimateStr);
+      if (duration == null) {
+        print('Invalid duration: "$estimateStr"');
+        print('');
+        print('  Valid formats: 30m, 1h, 1h30m, 2h 15m');
+        return;
+      }
+      estimateMs = duration.inMilliseconds;
+    }
+
+    // Resolve task
+    String taskId;
+    String taskTitle;
+    try {
+      final task = await taskService.show(taskIdInput);
+      taskId = task.id;
+      taskTitle = task.title;
+    } on TaskNotFoundException {
+      print('Task not found: "$taskIdInput"');
+      return;
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskIdInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
+    try {
+      final entry = await planService.addTask(
+        taskId: taskId,
+        estimateMs: estimateMs,
+        day: dayStr,
+      );
+      final est = estimateMs > 0
+          ? ' (${formatDuration(Duration(milliseconds: estimateMs))})'
+          : '';
+      print('Added "$taskTitle" to plan for ${entry.day}$est.');
+      print('');
+      print(hint('avo plan', 'to see today\'s plan'));
+    } on DuplicatePlanTaskException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan untask ${taskId.substring(0, 8)}', 'to remove and re-add'));
+    }
+  }
+}
+
+class PlanUntaskCommand extends PlanSubcommand {
+  final TaskService taskService;
+
+  PlanUntaskCommand(super.planService, this.taskService) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'untask';
+
+  @override
+  String get description => 'Remove a task from the day plan';
+
+  @override
+  String get invocation => 'avo plan untask <task-id> [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo plan untask a1b2 --day 2026-02-20';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskIdInput = args.isNotEmpty ? args.first : null;
+    final dayStr = argResults?['day'] as String?;
+
+    if (taskIdInput == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo plan untask <task-id> [--day YYYY-MM-DD]');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    // Resolve task
+    String taskId;
+    String taskTitle;
+    try {
+      final task = await taskService.show(taskIdInput);
+      taskId = task.id;
+      taskTitle = task.title;
+    } on TaskNotFoundException {
+      print('Task not found: "$taskIdInput"');
+      return;
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskIdInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
+    try {
+      final entry = await planService.removeTask(taskId: taskId, day: dayStr);
+      print('Removed "$taskTitle" from plan on ${entry.day}.');
+    } on PlanTaskNotFoundException catch (e) {
       print('$e');
       print('');
       print(hint('avo plan', 'to see current plan'));

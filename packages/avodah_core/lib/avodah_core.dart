@@ -18,9 +18,11 @@ export 'storage/tables/worklogs.dart';
 export 'storage/tables/jira_integrations.dart';
 export 'storage/tables/timer.dart';
 export 'storage/tables/daily_plans.dart';
+export 'storage/tables/day_plan_tasks.dart';
 
 // CRDT Document types
 export 'documents/daily_plan_document.dart';
+export 'documents/day_plan_task_document.dart';
 export 'documents/jira_integration_document.dart';
 export 'documents/project_document.dart';
 export 'documents/task_document.dart';
