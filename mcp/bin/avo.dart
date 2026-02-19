@@ -102,7 +102,9 @@ Future<void> main(List<String> args) async {
           categories: avoConfig.effectiveCategories,
       ))
       ..addCommand(PlanCommand(planService,
-          categories: avoConfig.effectiveCategories))
+          categories: avoConfig.effectiveCategories,
+          taskService: taskService,
+          worklogService: worklogService))
       ..addCommand(JiraCommand(jiraService, paths));
 
     // No args → run status + hint
