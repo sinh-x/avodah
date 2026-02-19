@@ -281,6 +281,81 @@ class PlanService {
     return rangeSummary(from: monday, to: sunday);
   }
 
+  // ============================================================
+  // Day Plan Tasks — link tasks to specific days
+  // ============================================================
+
+  Future<void> _savePlanTask(DayPlanTaskDocument doc) async {
+    await db
+        .into(db.dayPlanTasks)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+  }
+
+  /// Adds a task to the day plan. Throws [DuplicatePlanTaskException] if
+  /// the same task is already planned for the day (and not deleted).
+  Future<DayPlanTaskDocument> addTask({
+    required String taskId,
+    int estimateMs = 0,
+    String? day,
+  }) async {
+    final targetDay = day ?? _today();
+
+    final existing = await _tasksForDay(targetDay);
+    final dup = existing.where((e) => e.taskId == taskId).toList();
+    if (dup.isNotEmpty) {
+      throw DuplicatePlanTaskException(taskId, targetDay);
+    }
+
+    final doc = DayPlanTaskDocument.create(
+      clock: clock,
+      taskId: taskId,
+      day: targetDay,
+      estimateMs: estimateMs,
+    );
+
+    await _savePlanTask(doc);
+    return doc;
+  }
+
+  /// Removes a task from the day plan (soft-delete).
+  /// Throws [PlanTaskNotFoundException] if not found.
+  Future<DayPlanTaskDocument> removeTask({
+    required String taskId,
+    String? day,
+  }) async {
+    final targetDay = day ?? _today();
+    final existing = await _tasksForDay(targetDay);
+    final match = existing.where((e) => e.taskId == taskId).toList();
+
+    if (match.isEmpty) {
+      throw PlanTaskNotFoundException(taskId, targetDay);
+    }
+
+    final entry = match.first;
+    entry.delete();
+    await _savePlanTask(entry);
+    return entry;
+  }
+
+  /// Lists non-deleted plan tasks for a day.
+  Future<List<DayPlanTaskDocument>> listTasksForDay({String? day}) async {
+    final targetDay = day ?? _today();
+    return _tasksForDay(targetDay);
+  }
+
+  /// Returns non-deleted day plan task entries for a given day.
+  Future<List<DayPlanTaskDocument>> _tasksForDay(String day) async {
+    final rows = await (db.select(db.dayPlanTasks)
+          ..where((e) => e.day.equals(day)))
+        .get();
+
+    return rows
+        .map((row) =>
+            DayPlanTaskDocument.fromDrift(entry: row, clock: clock))
+        .where((doc) => !doc.isDeleted)
+        .toList();
+  }
+
   /// Returns non-deleted entries for a given day.
   Future<List<DailyPlanDocument>> _entriesForDay(String day) async {
     final rows = await (db.select(db.dailyPlanEntries)
@@ -315,4 +390,26 @@ class PlanEntryNotFoundException implements Exception {
   @override
   String toString() =>
       'No plan entry for "$category" on $day.';
+}
+
+/// Thrown when a task is already planned for the given day.
+class DuplicatePlanTaskException implements Exception {
+  final String taskId;
+  final String day;
+  DuplicatePlanTaskException(this.taskId, this.day);
+
+  @override
+  String toString() =>
+      'Task "$taskId" is already planned for $day. Remove it first.';
+}
+
+/// Thrown when no plan task matches the task+day.
+class PlanTaskNotFoundException implements Exception {
+  final String taskId;
+  final String day;
+  PlanTaskNotFoundException(this.taskId, this.day);
+
+  @override
+  String toString() =>
+      'Task "$taskId" is not planned for $day.';
 }

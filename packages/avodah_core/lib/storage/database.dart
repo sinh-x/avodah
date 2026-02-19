@@ -8,6 +8,7 @@ import 'tables/worklogs.dart';
 import 'tables/jira_integrations.dart';
 import 'tables/timer.dart';
 import 'tables/daily_plans.dart';
+import 'tables/day_plan_tasks.dart';
 
 part 'database.g.dart';
 
@@ -26,6 +27,7 @@ part 'database.g.dart';
   JiraIntegrations,
   TimerEntries,
   DailyPlanEntries,
+  DayPlanTasks,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -38,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -74,6 +76,10 @@ class AppDatabase extends _$AppDatabase {
           // v0.5.0: Add category to tasks, create daily plan entries table
           await m.addColumn(tasks, tasks.category);
           await m.createTable(dailyPlanEntries);
+        }
+        if (from < 8) {
+          // Add day plan tasks table for linking tasks to daily plans
+          await m.createTable(dayPlanTasks);
         }
       },
     );

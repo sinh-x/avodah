@@ -329,6 +329,144 @@ void main() {
     });
   });
 
+  group('addTask', () {
+    test('creates plan task entry and returns it', () async {
+      final task = await taskService.add(title: 'Build login');
+      final entry = await planService.addTask(
+        taskId: task.id,
+        estimateMs: 2 * 60 * 60 * 1000, // 2h
+        day: '2026-02-19',
+      );
+
+      expect(entry.taskId, equals(task.id));
+      expect(entry.estimateMs, equals(2 * 60 * 60 * 1000));
+      expect(entry.day, equals('2026-02-19'));
+    });
+
+    test('defaults to today when day not provided', () async {
+      final task = await taskService.add(title: 'Write tests');
+      final entry = await planService.addTask(taskId: task.id);
+
+      final now = DateTime.now();
+      final today =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      expect(entry.day, equals(today));
+    });
+
+    test('defaults estimate to 0', () async {
+      final task = await taskService.add(title: 'Quick task');
+      final entry = await planService.addTask(
+        taskId: task.id,
+        day: '2026-02-19',
+      );
+
+      expect(entry.estimateMs, equals(0));
+    });
+
+    test('throws DuplicatePlanTaskException on same task+day', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+
+      expect(
+        () => planService.addTask(taskId: task.id, day: '2026-02-19'),
+        throwsA(isA<DuplicatePlanTaskException>()),
+      );
+    });
+
+    test('allows same task on different days', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+
+      final entry2 = await planService.addTask(
+        taskId: task.id,
+        day: '2026-02-20',
+      );
+
+      expect(entry2.day, equals('2026-02-20'));
+    });
+  });
+
+  group('removeTask', () {
+    test('soft-deletes plan task entry', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+
+      await planService.removeTask(taskId: task.id, day: '2026-02-19');
+
+      final entries = await planService.listTasksForDay(day: '2026-02-19');
+      expect(entries, isEmpty);
+    });
+
+    test('throws PlanTaskNotFoundException when not found', () async {
+      expect(
+        () => planService.removeTask(taskId: 'nonexistent', day: '2026-02-19'),
+        throwsA(isA<PlanTaskNotFoundException>()),
+      );
+    });
+
+    test('allows re-add after remove', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(
+        taskId: task.id,
+        estimateMs: 1 * 60 * 60 * 1000,
+        day: '2026-02-19',
+      );
+      await planService.removeTask(taskId: task.id, day: '2026-02-19');
+
+      final entry = await planService.addTask(
+        taskId: task.id,
+        estimateMs: 2 * 60 * 60 * 1000,
+        day: '2026-02-19',
+      );
+
+      expect(entry.estimateMs, equals(2 * 60 * 60 * 1000));
+    });
+  });
+
+  group('listTasksForDay', () {
+    test('returns entries for specific day', () async {
+      final task1 = await taskService.add(title: 'Task 1');
+      final task2 = await taskService.add(title: 'Task 2');
+      final task3 = await taskService.add(title: 'Task 3');
+
+      await planService.addTask(taskId: task1.id, day: '2026-02-19');
+      await planService.addTask(taskId: task2.id, day: '2026-02-19');
+      await planService.addTask(taskId: task3.id, day: '2026-02-20');
+
+      final entries = await planService.listTasksForDay(day: '2026-02-19');
+      expect(entries, hasLength(2));
+    });
+
+    test('excludes deleted entries', () async {
+      final task1 = await taskService.add(title: 'Task 1');
+      final task2 = await taskService.add(title: 'Task 2');
+
+      await planService.addTask(taskId: task1.id, day: '2026-02-19');
+      await planService.addTask(taskId: task2.id, day: '2026-02-19');
+      await planService.removeTask(taskId: task1.id, day: '2026-02-19');
+
+      final entries = await planService.listTasksForDay(day: '2026-02-19');
+      expect(entries, hasLength(1));
+      expect(entries.first.taskId, equals(task2.id));
+    });
+
+    test('does not modify task due date', () async {
+      final task = await taskService.add(
+        title: 'Task with due',
+        dueDay: '2026-03-01',
+      );
+
+      await planService.addTask(
+        taskId: task.id,
+        day: '2026-02-19',
+      );
+
+      // Re-fetch the task and verify dueDay unchanged
+      final refreshed = await taskService.show(task.id);
+      expect(refreshed.dueDay, equals('2026-03-01'));
+    });
+  });
+
   group('weekSummary', () {
     test('returns empty when no plans or worklogs', () async {
       // Use a fixed Monday anchor

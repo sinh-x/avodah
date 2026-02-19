@@ -1,8 +1,11 @@
 /// CLI output formatting utilities for Avodah.
 library;
 
+import 'package:avodah_core/avodah_core.dart';
+
 import '../services/plan_service.dart';
 import '../services/task_service.dart';
+import '../services/worklog_service.dart';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -230,9 +233,15 @@ Future<String> resolveTaskTitle(TaskService taskService, String taskId) async {
 
 // ── Plan Table ──────────────────────────────────────────────────────────────
 
-/// Prints the plan-vs-actual table for a day.
-/// Merges [defaultCategories] with summary data, sorted alphabetically.
-void printPlanTable(DayPlanSummary summary, {List<String> defaultCategories = const []}) {
+/// Prints the plan-vs-actual table for a day, optionally with planned tasks
+/// grouped under each category.
+Future<void> printPlanTable(
+  DayPlanSummary summary, {
+  List<String> defaultCategories = const [],
+  List<DayPlanTaskDocument> plannedTasks = const [],
+  TaskService? taskService,
+  WorklogService? worklogService,
+}) async {
   final totalPlanned = formatDuration(summary.totalPlanned);
   final totalActual = formatDuration(summary.totalActual);
 
@@ -250,6 +259,43 @@ void printPlanTable(DayPlanSummary summary, {List<String> defaultCategories = co
   print('');
   print('  ${'Category'.padRight(20)} ${'Planned'.padRight(11)}${'Actual'.padRight(11)}Delta');
   print('  ${'─' * 20} ${'─' * 10} ${'─' * 10} ${'─' * 10}');
+
+  // Resolve planned tasks by category if provided
+  final tasksByCategory = <String, List<_ResolvedPlanTask>>{};
+  if (plannedTasks.isNotEmpty && taskService != null && worklogService != null) {
+    final daySummaryData = await worklogService.daySummary(summary.day);
+    final loggedByTask = <String, Duration>{};
+    for (final ts in daySummaryData.tasks) {
+      loggedByTask[ts.taskId] = ts.total;
+    }
+
+    for (final pt in plannedTasks) {
+      String category = 'Non-Categorized';
+      String title = '(unknown)';
+      String? issueId;
+      bool isDone = false;
+      try {
+        final task = await taskService.show(pt.taskId);
+        title = task.title;
+        issueId = task.issueId;
+        isDone = task.isDone;
+        category = task.category ?? 'Non-Categorized';
+      } catch (_) {}
+
+      final logged = loggedByTask[pt.taskId] ?? Duration.zero;
+      final resolved = _ResolvedPlanTask(
+        taskId: pt.taskId,
+        title: title,
+        issueId: issueId,
+        category: category,
+        estimateMs: pt.estimateMs,
+        logged: logged,
+        isDone: isDone,
+      );
+      tasksByCategory.putIfAbsent(category, () => []).add(resolved);
+    }
+  }
+
   for (final name in sorted) {
     final cat = summaryMap[name];
     final planned = (cat != null && cat.planned.inMilliseconds > 0)
@@ -263,10 +309,115 @@ void printPlanTable(DayPlanSummary summary, {List<String> defaultCategories = co
             ? '+${formatDuration(Duration(milliseconds: deltaMs))}'
             : '-${formatDuration(Duration(milliseconds: -deltaMs))}';
     print('  ${name.padRight(20)} ${planned.padRight(11)}${actual.padRight(11)}$deltaStr');
+
+    // Print tasks under this category
+    final catTasks = tasksByCategory[name];
+    if (catTasks != null) {
+      for (final t in catTasks) {
+        _printPlanTaskLine(t);
+      }
+    }
   }
+
+  // Non-categorized row
   if (summary.nonCategorized != null) {
     final nc = summary.nonCategorized!;
     print('  ${'─' * 20} ${'─' * 10} ${'─' * 10} ${'─' * 10}');
     print('  ${'Non-Categorized'.padRight(20)} ${'-'.padRight(11)}${formatDuration(nc.actual).padRight(11)}(uncategorized)');
+  }
+
+  // Non-categorized planned tasks
+  final uncatTasks = tasksByCategory['Non-Categorized'];
+  if (uncatTasks != null) {
+    if (summary.nonCategorized == null) {
+      print('  ${'─' * 20} ${'─' * 10} ${'─' * 10} ${'─' * 10}');
+      print('  Non-Categorized');
+    }
+    for (final t in uncatTasks) {
+      _printPlanTaskLine(t);
+    }
+  }
+}
+
+// ── Planned Tasks ──────────────────────────────────────────────────────────
+
+class _ResolvedPlanTask {
+  final String taskId;
+  final String title;
+  final String? issueId;
+  final String category;
+  final int estimateMs;
+  final Duration logged;
+  final bool isDone;
+
+  const _ResolvedPlanTask({
+    required this.taskId,
+    required this.title,
+    required this.issueId,
+    required this.category,
+    required this.estimateMs,
+    required this.logged,
+    required this.isDone,
+  });
+
+  bool get hasWorklogs => logged.inMilliseconds > 0;
+}
+
+void _printPlanTaskLine(_ResolvedPlanTask t) {
+  final check = t.isDone ? 'x' : ' ';
+  final id = t.taskId.length >= 8 ? t.taskId.substring(0, 8) : t.taskId;
+  final issueTag = t.issueId != null ? ' [${t.issueId}]' : '';
+  final estimate = t.estimateMs > 0
+      ? ' (${formatDuration(Duration(milliseconds: t.estimateMs))})'
+      : '';
+  final loggedStr = t.hasWorklogs ? '${formatDuration(t.logged)} logged' : '';
+
+  final left = '    [$check] $id  ${t.title}$issueTag$estimate';
+  if (loggedStr.isNotEmpty) {
+    final padLen = lineWidth - left.length - loggedStr.length;
+    final padding = padLen > 0 ? ' ' * padLen : '  ';
+    print('$left$padding$loggedStr');
+  } else {
+    print(left);
+  }
+}
+
+/// Prints planned tasks as a flat checklist (used in PLANNED TASKS section).
+Future<void> printPlannedTasks({
+  required List<DayPlanTaskDocument> plannedTasks,
+  required TaskService taskService,
+  required WorklogService worklogService,
+  required String day,
+}) async {
+  if (plannedTasks.isEmpty) return;
+
+  final daySummary = await worklogService.daySummary(day);
+  final loggedByTask = <String, Duration>{};
+  for (final ts in daySummary.tasks) {
+    loggedByTask[ts.taskId] = ts.total;
+  }
+
+  print('  Planned Tasks:');
+  for (final pt in plannedTasks) {
+    String title = '(unknown)';
+    String? issueId;
+    bool isDone = false;
+    try {
+      final task = await taskService.show(pt.taskId);
+      title = task.title;
+      issueId = task.issueId;
+      isDone = task.isDone;
+    } catch (_) {}
+
+    final logged = loggedByTask[pt.taskId] ?? Duration.zero;
+    _printPlanTaskLine(_ResolvedPlanTask(
+      taskId: pt.taskId,
+      title: title,
+      issueId: issueId,
+      category: '',
+      estimateMs: pt.estimateMs,
+      logged: logged,
+      isDone: isDone,
+    ));
   }
 }
