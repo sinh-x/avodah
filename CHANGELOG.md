@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | **1.0.0** | Fully functional CLI + MCP integration for AI usage |
 | **2.0.0** | Flutter UI with Linux & Android |
 
+## [0.3.0] - 2026-02-19
+
+### Added
+- Add tasks to daily plan with category-grouped display
+
+### Fixed
+- Auto-sync worklog to Jira on manual log
+
+### Changed
+- Merge pull request #57 from sinh-x/develop
+- Merge branch 'feat/day-plan-tasks' into develop
+- Merge pull request #55 from sinh-x/bugfix/worklog-auto-sync-jira
+
 ## [0.2.0] - 2026-02-18
 
 ### Added
