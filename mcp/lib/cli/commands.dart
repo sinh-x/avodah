@@ -1653,7 +1653,7 @@ class WorklogCommand extends Command<void> {
       {JiraService? jiraService}) {
     addSubcommand(
         WorklogAddCommand(worklogService, taskService, jiraService: jiraService));
-    addSubcommand(WorklogEditCommand(worklogService, taskService));
+    addSubcommand(WorklogEditCommand(worklogService, taskService, jiraService: jiraService));
     addSubcommand(WorklogListCommand(worklogService, taskService));
     addSubcommand(WorklogDeleteCommand(worklogService, taskService));
   }
@@ -1958,7 +1958,7 @@ class WorklogAddCommand extends WorklogSubcommand {
 
 /// Worklog edit subcommand (under `avo worklog edit`).
 class WorklogEditCommand extends WorklogSubcommand {
-  WorklogEditCommand(super.worklogService, super.taskService) {
+  WorklogEditCommand(super.worklogService, super.taskService, {super.jiraService}) {
     argParser.addOption('start', abbr: 's', help: 'New start time');
     argParser.addOption('duration', abbr: 'd', help: 'New duration');
     argParser.addOption('message', abbr: 'm', help: 'New description');
@@ -2093,6 +2093,14 @@ class WorklogEditCommand extends WorklogSubcommand {
       duration: newDuration,
       comment: newComment,
     );
+
+    // Auto-update worklog on Jira if already synced
+    if (jiraService != null && updated.isSyncedToJira) {
+      final synced = await jiraService!.updateWorklog(updated.id);
+      if (synced) {
+        print(kvRow('Jira:', 'worklog updated'));
+      }
+    }
 
     final taskTitle = await resolveTaskTitle(taskService, updated.taskId);
     print('Updated worklog ${updated.id.substring(0, 8)} — "$taskTitle"');
@@ -2578,6 +2586,9 @@ class JiraSyncCommand extends JiraSubcommand {
   JiraSyncCommand(super.jiraService) {
     argParser.addOption('profile',
         help: 'Switch to a named profile before syncing');
+    argParser.addOption('days',
+        abbr: 'D',
+        help: 'Only sync issues updated in the last N days');
     argParser.addFlag('dry-run', help: 'Preview changes without applying');
     argParser.addFlag('interactive', defaultsTo: true,
         help: 'Prompt for each conflict (disable with --no-interactive)');
@@ -2590,11 +2601,12 @@ class JiraSyncCommand extends JiraSubcommand {
   String get description => 'Sync with Jira (2-way with conflict resolution)';
 
   @override
-  String get invocation => 'avo jira sync [issue-key] [--profile name] [--dry-run] [--no-interactive]';
+  String get invocation => 'avo jira sync [issue-key] [--days N] [--profile name] [--dry-run] [--no-interactive]';
 
   @override
   String? get usageFooter => '\nExamples:\n'
       '  avo jira sync                      # sync all configured projects\n'
+      '  avo jira sync --days 7             # only issues updated in last 7 days\n'
       '  avo jira sync PROJ-123             # sync single issue\n'
       '  avo jira sync --dry-run            # preview without applying\n'
       '  avo jira sync --profile work       # use specific profile\n'
@@ -2609,6 +2621,8 @@ class JiraSyncCommand extends JiraSubcommand {
 
     final args = argResults?.rest ?? [];
     final issueKey = args.isNotEmpty ? args.first : null;
+    final daysStr = argResults?['days'] as String?;
+    final days = daysStr != null ? int.tryParse(daysStr) : null;
     final dryRun = argResults?['dry-run'] as bool? ?? false;
     final interactive = argResults?['interactive'] as bool? ?? true;
 
@@ -2640,6 +2654,7 @@ class JiraSyncCommand extends JiraSubcommand {
     try {
       final context = await jiraService.computeSyncPreview(
         issueKey: issueKey,
+        updatedSinceDays: days,
         onProgress: showProgress,
       );
       finishPhase();
@@ -2729,10 +2744,13 @@ class JiraSyncCommand extends JiraSubcommand {
       for (final m in preview.worklogMismatches) {
         final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
         final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        final localStart = formatDateTime(m.local.startTime);
+        final remoteStart = formatDateTime(m.remote.started);
         print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
-        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
-        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        print('    Local:   $localStart  $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteStart  $remoteDur  "${m.remote.comment ?? ''}"');
         final diffs = <String>[];
+        if (m.startTimeDiffers) diffs.add('Start time differs');
         if (m.durationDiffers) diffs.add('Duration differs');
         if (m.commentDiffers) diffs.add('Comment differs');
         print('    -> ${diffs.join(', ')}');
@@ -2757,10 +2775,13 @@ class JiraSyncCommand extends JiraSubcommand {
       for (final m in preview.worklogMismatches) {
         final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
         final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
+        final localStart = formatDateTime(m.local.startTime);
+        final remoteStart = formatDateTime(m.remote.started);
         print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
-        print('    Local:   $localDur  "${m.local.comment ?? ''}"');
-        print('    Remote:  $remoteDur  "${m.remote.comment ?? ''}"');
+        print('    Local:   $localStart  $localDur  "${m.local.comment ?? ''}"');
+        print('    Remote:  $remoteStart  $remoteDur  "${m.remote.comment ?? ''}"');
         final diffs = <String>[];
+        if (m.startTimeDiffers) diffs.add('Start time differs');
         if (m.durationDiffers) diffs.add('Duration differs');
         if (m.commentDiffers) diffs.add('Comment differs');
         print('    -> ${diffs.join(', ')}');
