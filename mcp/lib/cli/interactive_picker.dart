@@ -46,17 +46,24 @@ class InteractivePicker<T> {
     final query = <int>[];
     var selectedIndex = 0;
     var scrollOffset = 0;
+    var queryDirty = true;
+    var filtered = items;
 
     stdin.echoMode = false;
     stdin.lineMode = false;
 
     try {
       while (true) {
-        // Filter items
+        // Recompute query string for display
         final queryStr = String.fromCharCodes(query).toLowerCase();
-        final filtered = queryStr.isEmpty
-            ? items
-            : items.where((item) => item.searchText.contains(queryStr)).toList();
+
+        // Filter items only when query changed
+        if (queryDirty) {
+          filtered = queryStr.isEmpty
+              ? items
+              : items.where((item) => item.searchText.contains(queryStr)).toList();
+          queryDirty = false;
+        }
 
         // Clamp selection
         if (filtered.isEmpty) {
@@ -109,6 +116,7 @@ class InteractivePicker<T> {
             query.removeLast();
             selectedIndex = 0;
             scrollOffset = 0;
+            queryDirty = true;
           }
         } else if (key.controlChar == ControlCharacter.none &&
             key.char.isNotEmpty) {
@@ -117,6 +125,7 @@ class InteractivePicker<T> {
             query.add(code);
             selectedIndex = 0;
             scrollOffset = 0;
+            queryDirty = true;
           }
         }
       }
