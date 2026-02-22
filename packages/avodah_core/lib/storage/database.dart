@@ -83,7 +83,13 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 9) {
           // Add cancelled column to day plan tasks
-          await m.addColumn(dayPlanTasks, dayPlanTasks.cancelled);
+          // Guard: createTable in from<8 already includes this column
+          // since the table definition has it, so only add if missing.
+          try {
+            await m.addColumn(dayPlanTasks, dayPlanTasks.cancelled);
+          } on Exception catch (_) {
+            // Column already exists from createTable
+          }
         }
       },
     );
