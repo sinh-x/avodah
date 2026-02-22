@@ -2130,13 +2130,15 @@ class PlanCommand extends Command<void> {
     addSubcommand(PlanRemoveCommand(planService));
     addSubcommand(PlanTaskCommand(planService, taskService));
     addSubcommand(PlanUntaskCommand(planService, taskService));
+    addSubcommand(PlanCancelCommand(planService, taskService));
+    addSubcommand(PlanUncancelCommand(planService, taskService));
   }
 
   @override
   String get name => 'plan';
 
   @override
-  String get description => 'Daily time planning by category (add, list, remove, task, untask)';
+  String get description => 'Daily time planning by category (add, list, remove, task, untask, cancel, uncancel)';
 }
 
 class PlanAddCommand extends PlanSubcommand {
@@ -2460,6 +2462,148 @@ class PlanUntaskCommand extends PlanSubcommand {
     try {
       final entry = await planService.removeTask(taskId: taskId, day: dayStr);
       print('Removed "$taskTitle" from plan on ${entry.day}.');
+    } on PlanTaskNotFoundException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan', 'to see current plan'));
+    }
+  }
+}
+
+class PlanCancelCommand extends PlanSubcommand {
+  final TaskService taskService;
+
+  PlanCancelCommand(super.planService, this.taskService) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'cancel';
+
+  @override
+  String get description => 'Cancel a task in the day plan';
+
+  @override
+  String get invocation => 'avo plan cancel <task-id> [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo plan cancel a1b2 --day 2026-02-20';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskIdInput = args.isNotEmpty ? args.first : null;
+    final dayStr = argResults?['day'] as String?;
+
+    if (taskIdInput == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo plan cancel <task-id> [--day YYYY-MM-DD]');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    // Resolve task
+    String taskId;
+    String taskTitle;
+    try {
+      final task = await taskService.show(taskIdInput);
+      taskId = task.id;
+      taskTitle = task.title;
+    } on TaskNotFoundException {
+      print('Task not found: "$taskIdInput"');
+      return;
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskIdInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
+    try {
+      final entry = await planService.cancelTask(taskId: taskId, day: dayStr);
+      print('Cancelled "$taskTitle" on ${entry.day}.');
+      print('');
+      print(hint('avo plan', 'to see today\'s plan'));
+    } on PlanTaskNotFoundException catch (e) {
+      print('$e');
+      print('');
+      print(hint('avo plan', 'to see current plan'));
+    }
+  }
+}
+
+class PlanUncancelCommand extends PlanSubcommand {
+  final TaskService taskService;
+
+  PlanUncancelCommand(super.planService, this.taskService) {
+    argParser.addOption('day', help: 'Day (YYYY-MM-DD, defaults to today)');
+  }
+
+  @override
+  String get name => 'uncancel';
+
+  @override
+  String get description => 'Un-cancel a task in the day plan';
+
+  @override
+  String get invocation => 'avo plan uncancel <task-id> [--day YYYY-MM-DD]';
+
+  @override
+  String? get usageFooter => '\nExample:\n'
+      '  avo plan uncancel a1b2 --day 2026-02-20';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskIdInput = args.isNotEmpty ? args.first : null;
+    final dayStr = argResults?['day'] as String?;
+
+    if (taskIdInput == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo plan uncancel <task-id> [--day YYYY-MM-DD]');
+      return;
+    }
+
+    if (dayStr != null && !isValidDate(dayStr)) {
+      print('Invalid date: "$dayStr". Use YYYY-MM-DD format.');
+      return;
+    }
+
+    // Resolve task
+    String taskId;
+    String taskTitle;
+    try {
+      final task = await taskService.show(taskIdInput);
+      taskId = task.id;
+      taskTitle = task.title;
+    } on TaskNotFoundException {
+      print('Task not found: "$taskIdInput"');
+      return;
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskIdInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+      return;
+    }
+
+    try {
+      final entry = await planService.uncancelTask(taskId: taskId, day: dayStr);
+      print('Un-cancelled "$taskTitle" on ${entry.day}.');
+      print('');
+      print(hint('avo plan', 'to see today\'s plan'));
     } on PlanTaskNotFoundException catch (e) {
       print('$e');
       print('');

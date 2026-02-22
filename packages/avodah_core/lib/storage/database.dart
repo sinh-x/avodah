@@ -40,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -80,6 +80,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 8) {
           // Add day plan tasks table for linking tasks to daily plans
           await m.createTable(dayPlanTasks);
+        }
+        if (from < 9) {
+          // Add cancelled column to day plan tasks
+          await m.addColumn(dayPlanTasks, dayPlanTasks.cancelled);
         }
       },
     );

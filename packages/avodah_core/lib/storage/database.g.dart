@@ -6608,6 +6608,21 @@ class $DayPlanTasksTable extends DayPlanTasks
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _cancelledMeta = const VerificationMeta(
+    'cancelled',
+  );
+  @override
+  late final GeneratedColumn<bool> cancelled = GeneratedColumn<bool>(
+    'cancelled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("cancelled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdMeta = const VerificationMeta(
     'created',
   );
@@ -6649,6 +6664,7 @@ class $DayPlanTasksTable extends DayPlanTasks
     taskId,
     day,
     estimateMs,
+    cancelled,
     created,
     crdtClock,
     crdtState,
@@ -6690,6 +6706,12 @@ class $DayPlanTasksTable extends DayPlanTasks
       context.handle(
         _estimateMsMeta,
         estimateMs.isAcceptableOrUnknown(data['estimate_ms']!, _estimateMsMeta),
+      );
+    }
+    if (data.containsKey('cancelled')) {
+      context.handle(
+        _cancelledMeta,
+        cancelled.isAcceptableOrUnknown(data['cancelled']!, _cancelledMeta),
       );
     }
     if (data.containsKey('created')) {
@@ -6737,6 +6759,10 @@ class $DayPlanTasksTable extends DayPlanTasks
         DriftSqlType.int,
         data['${effectivePrefix}estimate_ms'],
       )!,
+      cancelled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}cancelled'],
+      )!,
       created: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created'],
@@ -6763,6 +6789,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
   final String taskId;
   final String day;
   final int estimateMs;
+  final bool cancelled;
   final int created;
   final String crdtClock;
   final String crdtState;
@@ -6771,6 +6798,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
     required this.taskId,
     required this.day,
     required this.estimateMs,
+    required this.cancelled,
     required this.created,
     required this.crdtClock,
     required this.crdtState,
@@ -6782,6 +6810,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
     map['task_id'] = Variable<String>(taskId);
     map['day'] = Variable<String>(day);
     map['estimate_ms'] = Variable<int>(estimateMs);
+    map['cancelled'] = Variable<bool>(cancelled);
     map['created'] = Variable<int>(created);
     map['crdt_clock'] = Variable<String>(crdtClock);
     map['crdt_state'] = Variable<String>(crdtState);
@@ -6794,6 +6823,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
       taskId: Value(taskId),
       day: Value(day),
       estimateMs: Value(estimateMs),
+      cancelled: Value(cancelled),
       created: Value(created),
       crdtClock: Value(crdtClock),
       crdtState: Value(crdtState),
@@ -6810,6 +6840,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
       taskId: serializer.fromJson<String>(json['taskId']),
       day: serializer.fromJson<String>(json['day']),
       estimateMs: serializer.fromJson<int>(json['estimateMs']),
+      cancelled: serializer.fromJson<bool>(json['cancelled']),
       created: serializer.fromJson<int>(json['created']),
       crdtClock: serializer.fromJson<String>(json['crdtClock']),
       crdtState: serializer.fromJson<String>(json['crdtState']),
@@ -6823,6 +6854,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
       'taskId': serializer.toJson<String>(taskId),
       'day': serializer.toJson<String>(day),
       'estimateMs': serializer.toJson<int>(estimateMs),
+      'cancelled': serializer.toJson<bool>(cancelled),
       'created': serializer.toJson<int>(created),
       'crdtClock': serializer.toJson<String>(crdtClock),
       'crdtState': serializer.toJson<String>(crdtState),
@@ -6834,6 +6866,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
     String? taskId,
     String? day,
     int? estimateMs,
+    bool? cancelled,
     int? created,
     String? crdtClock,
     String? crdtState,
@@ -6842,6 +6875,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
     taskId: taskId ?? this.taskId,
     day: day ?? this.day,
     estimateMs: estimateMs ?? this.estimateMs,
+    cancelled: cancelled ?? this.cancelled,
     created: created ?? this.created,
     crdtClock: crdtClock ?? this.crdtClock,
     crdtState: crdtState ?? this.crdtState,
@@ -6854,6 +6888,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
       estimateMs: data.estimateMs.present
           ? data.estimateMs.value
           : this.estimateMs,
+      cancelled: data.cancelled.present ? data.cancelled.value : this.cancelled,
       created: data.created.present ? data.created.value : this.created,
       crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
       crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
@@ -6867,6 +6902,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
           ..write('taskId: $taskId, ')
           ..write('day: $day, ')
           ..write('estimateMs: $estimateMs, ')
+          ..write('cancelled: $cancelled, ')
           ..write('created: $created, ')
           ..write('crdtClock: $crdtClock, ')
           ..write('crdtState: $crdtState')
@@ -6875,8 +6911,16 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, taskId, day, estimateMs, created, crdtClock, crdtState);
+  int get hashCode => Object.hash(
+    id,
+    taskId,
+    day,
+    estimateMs,
+    cancelled,
+    created,
+    crdtClock,
+    crdtState,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6885,6 +6929,7 @@ class DayPlanTask extends DataClass implements Insertable<DayPlanTask> {
           other.taskId == this.taskId &&
           other.day == this.day &&
           other.estimateMs == this.estimateMs &&
+          other.cancelled == this.cancelled &&
           other.created == this.created &&
           other.crdtClock == this.crdtClock &&
           other.crdtState == this.crdtState);
@@ -6895,6 +6940,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
   final Value<String> taskId;
   final Value<String> day;
   final Value<int> estimateMs;
+  final Value<bool> cancelled;
   final Value<int> created;
   final Value<String> crdtClock;
   final Value<String> crdtState;
@@ -6904,6 +6950,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
     this.taskId = const Value.absent(),
     this.day = const Value.absent(),
     this.estimateMs = const Value.absent(),
+    this.cancelled = const Value.absent(),
     this.created = const Value.absent(),
     this.crdtClock = const Value.absent(),
     this.crdtState = const Value.absent(),
@@ -6914,6 +6961,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
     required String taskId,
     required String day,
     this.estimateMs = const Value.absent(),
+    this.cancelled = const Value.absent(),
     required int created,
     this.crdtClock = const Value.absent(),
     this.crdtState = const Value.absent(),
@@ -6927,6 +6975,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
     Expression<String>? taskId,
     Expression<String>? day,
     Expression<int>? estimateMs,
+    Expression<bool>? cancelled,
     Expression<int>? created,
     Expression<String>? crdtClock,
     Expression<String>? crdtState,
@@ -6937,6 +6986,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
       if (taskId != null) 'task_id': taskId,
       if (day != null) 'day': day,
       if (estimateMs != null) 'estimate_ms': estimateMs,
+      if (cancelled != null) 'cancelled': cancelled,
       if (created != null) 'created': created,
       if (crdtClock != null) 'crdt_clock': crdtClock,
       if (crdtState != null) 'crdt_state': crdtState,
@@ -6949,6 +6999,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
     Value<String>? taskId,
     Value<String>? day,
     Value<int>? estimateMs,
+    Value<bool>? cancelled,
     Value<int>? created,
     Value<String>? crdtClock,
     Value<String>? crdtState,
@@ -6959,6 +7010,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
       taskId: taskId ?? this.taskId,
       day: day ?? this.day,
       estimateMs: estimateMs ?? this.estimateMs,
+      cancelled: cancelled ?? this.cancelled,
       created: created ?? this.created,
       crdtClock: crdtClock ?? this.crdtClock,
       crdtState: crdtState ?? this.crdtState,
@@ -6980,6 +7032,9 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
     }
     if (estimateMs.present) {
       map['estimate_ms'] = Variable<int>(estimateMs.value);
+    }
+    if (cancelled.present) {
+      map['cancelled'] = Variable<bool>(cancelled.value);
     }
     if (created.present) {
       map['created'] = Variable<int>(created.value);
@@ -7003,6 +7058,7 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
           ..write('taskId: $taskId, ')
           ..write('day: $day, ')
           ..write('estimateMs: $estimateMs, ')
+          ..write('cancelled: $cancelled, ')
           ..write('created: $created, ')
           ..write('crdtClock: $crdtClock, ')
           ..write('crdtState: $crdtState, ')
@@ -10091,6 +10147,7 @@ typedef $$DayPlanTasksTableCreateCompanionBuilder =
       required String taskId,
       required String day,
       Value<int> estimateMs,
+      Value<bool> cancelled,
       required int created,
       Value<String> crdtClock,
       Value<String> crdtState,
@@ -10102,6 +10159,7 @@ typedef $$DayPlanTasksTableUpdateCompanionBuilder =
       Value<String> taskId,
       Value<String> day,
       Value<int> estimateMs,
+      Value<bool> cancelled,
       Value<int> created,
       Value<String> crdtClock,
       Value<String> crdtState,
@@ -10134,6 +10192,11 @@ class $$DayPlanTasksTableFilterComposer
 
   ColumnFilters<int> get estimateMs => $composableBuilder(
     column: $table.estimateMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get cancelled => $composableBuilder(
+    column: $table.cancelled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10182,6 +10245,11 @@ class $$DayPlanTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get cancelled => $composableBuilder(
+    column: $table.cancelled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get created => $composableBuilder(
     column: $table.created,
     builder: (column) => ColumnOrderings(column),
@@ -10220,6 +10288,9 @@ class $$DayPlanTasksTableAnnotationComposer
     column: $table.estimateMs,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get cancelled =>
+      $composableBuilder(column: $table.cancelled, builder: (column) => column);
 
   GeneratedColumn<int> get created =>
       $composableBuilder(column: $table.created, builder: (column) => column);
@@ -10266,6 +10337,7 @@ class $$DayPlanTasksTableTableManager
                 Value<String> taskId = const Value.absent(),
                 Value<String> day = const Value.absent(),
                 Value<int> estimateMs = const Value.absent(),
+                Value<bool> cancelled = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
                 Value<String> crdtState = const Value.absent(),
@@ -10275,6 +10347,7 @@ class $$DayPlanTasksTableTableManager
                 taskId: taskId,
                 day: day,
                 estimateMs: estimateMs,
+                cancelled: cancelled,
                 created: created,
                 crdtClock: crdtClock,
                 crdtState: crdtState,
@@ -10286,6 +10359,7 @@ class $$DayPlanTasksTableTableManager
                 required String taskId,
                 required String day,
                 Value<int> estimateMs = const Value.absent(),
+                Value<bool> cancelled = const Value.absent(),
                 required int created,
                 Value<String> crdtClock = const Value.absent(),
                 Value<String> crdtState = const Value.absent(),
@@ -10295,6 +10369,7 @@ class $$DayPlanTasksTableTableManager
                 taskId: taskId,
                 day: day,
                 estimateMs: estimateMs,
+                cancelled: cancelled,
                 created: created,
                 crdtClock: crdtClock,
                 crdtState: crdtState,

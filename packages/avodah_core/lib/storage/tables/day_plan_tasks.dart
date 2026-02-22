@@ -9,6 +9,7 @@ class DayPlanTasks extends Table {
   TextColumn get taskId => text()();
   TextColumn get day => text()(); // YYYY-MM-DD
   IntColumn get estimateMs => integer().withDefault(const Constant(0))();
+  BoolColumn get cancelled => boolean().withDefault(const Constant(false))();
   IntColumn get created => integer()(); // Unix ms
 
   // CRDT metadata
