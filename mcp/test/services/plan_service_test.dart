@@ -467,6 +467,76 @@ void main() {
     });
   });
 
+  group('cancelTask', () {
+    test('sets cancelled flag on plan task', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+
+      final entry =
+          await planService.cancelTask(taskId: task.id, day: '2026-02-19');
+
+      expect(entry.isCancelled, isTrue);
+    });
+
+    test('persists cancelled state after re-read', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+      await planService.cancelTask(taskId: task.id, day: '2026-02-19');
+
+      final entries = await planService.listTasksForDay(day: '2026-02-19');
+      expect(entries, hasLength(1));
+      expect(entries.first.isCancelled, isTrue);
+    });
+
+    test('uncancelTask clears cancelled flag', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+      await planService.cancelTask(taskId: task.id, day: '2026-02-19');
+      final entry =
+          await planService.uncancelTask(taskId: task.id, day: '2026-02-19');
+
+      expect(entry.isCancelled, isFalse);
+    });
+
+    test('uncancelTask persists after re-read', () async {
+      final task = await taskService.add(title: 'Build login');
+      await planService.addTask(taskId: task.id, day: '2026-02-19');
+      await planService.cancelTask(taskId: task.id, day: '2026-02-19');
+      await planService.uncancelTask(taskId: task.id, day: '2026-02-19');
+
+      final entries = await planService.listTasksForDay(day: '2026-02-19');
+      expect(entries, hasLength(1));
+      expect(entries.first.isCancelled, isFalse);
+    });
+
+    test('throws PlanTaskNotFoundException when task not found', () async {
+      expect(
+        () => planService.cancelTask(
+            taskId: 'nonexistent', day: '2026-02-19'),
+        throwsA(isA<PlanTaskNotFoundException>()),
+      );
+    });
+
+    test('throws PlanTaskNotFoundException on uncancel when not found',
+        () async {
+      expect(
+        () => planService.uncancelTask(
+            taskId: 'nonexistent', day: '2026-02-19'),
+        throwsA(isA<PlanTaskNotFoundException>()),
+      );
+    });
+
+    test('default is not cancelled', () async {
+      final task = await taskService.add(title: 'Build login');
+      final entry = await planService.addTask(
+        taskId: task.id,
+        day: '2026-02-19',
+      );
+
+      expect(entry.isCancelled, isFalse);
+    });
+  });
+
   group('weekSummary', () {
     test('returns empty when no plans or worklogs', () async {
       // Use a fixed Monday anchor
