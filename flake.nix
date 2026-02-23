@@ -125,8 +125,10 @@
             MCP_DIR="$(git rev-parse --show-toplevel)/mcp"
             BIN="$MCP_DIR/bin/avo"
 
+            ROOT="$(git rev-parse --show-toplevel)"
+
             # Recompile if binary is missing or any dart source is newer
-            if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/avo.dart" -newer "$BIN" 2>/dev/null | head -1)" ]; then
+            if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/avo.dart" "$ROOT/packages/avodah_core/lib" -newer "$BIN" 2>/dev/null | head -1)" ]; then
               echo "Compiling avo..." >&2
               (cd "$MCP_DIR" && dart compile exe bin/avo.dart -o bin/avo) >&2
             fi
