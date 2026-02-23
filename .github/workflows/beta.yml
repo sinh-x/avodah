@@ -1,0 +1,62 @@
+name: Beta
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  beta:
+    # Skip bot commits to prevent infinite loops
+    if: "!startsWith(github.event.head_commit.message, 'chore(ci):')"
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run MCP tests
+        run: |
+          cd mcp
+          dart pub get
+          dart test
+
+      - name: Bump build number
+        id: bump
+        run: |
+          dart run tool/bump_build.dart
+          BUILD=$(grep -oP 'version:\s*\d+\.\d+\.\d+\+\K\d+' pubspec.yaml)
+          VERSION=$(grep -oP 'version:\s*\K\d+\.\d+\.\d+' pubspec.yaml)
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit build bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git commit -m "chore(ci): bump build to +${{ steps.bump.outputs.build }}"
+          git push
+
+      - name: Create beta tag
+        run: |
+          TAG="v${{ steps.bump.outputs.version }}-beta.${{ steps.bump.outputs.build }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "Created tag: $TAG"
