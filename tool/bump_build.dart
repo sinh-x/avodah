@@ -1,16 +1,20 @@
 #!/usr/bin/env dart
 
-/// Increments the Flutter build number (+N) in root pubspec.yaml.
+/// Increments the Flutter build number (+N) in root pubspec.yaml
+/// and updates version.dart with the beta suffix.
 ///
 /// Usage:
 ///   dart run tool/bump_build.dart
 ///
-/// Reads `version: X.Y.Z+N`, increments N by 1, writes back.
-/// Only touches root pubspec.yaml (build suffix is Flutter-specific).
+/// Updates:
+///   - pubspec.yaml: version X.Y.Z+N → X.Y.Z+(N+1)
+///   - packages/avodah_core/lib/version.dart: 'X.Y.Z-beta.N'
 import 'dart:io';
 
 void main() {
   final rootDir = _findRoot();
+
+  // 1. Bump build number in pubspec.yaml
   final pubspecFile = File('$rootDir/pubspec.yaml');
   final content = pubspecFile.readAsStringSync();
 
@@ -33,6 +37,16 @@ void main() {
 
   pubspecFile.writeAsStringSync(updated);
   print('Bumped build: $version+$currentBuild → $version+$newBuild');
+
+  // 2. Update version.dart with beta suffix
+  final versionFile = File('$rootDir/packages/avodah_core/lib/version.dart');
+  final betaVersion = '$version-beta.$newBuild';
+  versionFile.writeAsStringSync(
+    "/// Single source of truth for the Avodah version.\n"
+    "/// Updated by tool/bump_version.dart and tool/bump_build.dart — do not edit manually.\n"
+    "const String avodahVersion = '$betaVersion';\n",
+  );
+  print('Updated version.dart: $betaVersion');
 }
 
 String _findRoot() {
