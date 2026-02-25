@@ -5,13 +5,19 @@
 /// Exposes worklog tracking tools via MCP over stdio.
 ///
 /// Tools:
-///   timer(action, task?, taskId?)  - Start/stop/pause/resume/status timer
-///   tasks(action, title?, id?)     - List/add/show/done tasks
-///   today()                        - Today's summary
-///   jira(action)                   - Sync with Jira
+///   timer(action, task?, taskId?)       - Start/stop/pause/resume/status timer
+///   tasks(action, title?, id?, ...)     - List/add/show/done/delete/due/cat tasks
+///   worklog(action, taskId?, ...)       - Add/edit/list/delete worklogs
+///   project(action, title?, id?, ...)   - Add/list/show/delete projects
+///   plan(action, category?, ...)        - Daily plan entries and tasks
+///   today()                             - Today's worklog summary
+///   daily(date?)                        - Date report with plan-vs-actual
+///   week(from?, to?)                    - Weekly report
+///   status()                            - Dashboard overview
+///   jira(action)                        - Sync with Jira
 ///
 /// Resources:
-///   avodah://status                - Current timer + today summary
+///   avodah://status                     - Current timer + today summary
 library;
 
 import 'dart:io';
@@ -19,6 +25,7 @@ import 'dart:io';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
+import 'package:avodah_mcp/services/plan_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -43,6 +50,7 @@ Future<void> main(List<String> args) async {
   final worklogService = WorklogService(db: db, clock: clock);
   final projectService = ProjectService(db: db, clock: clock);
   final jiraService = JiraService(db: db, clock: clock, paths: paths);
+  final planService = PlanService(db: db, clock: clock);
 
   try {
     // Start MCP server over stdio
@@ -52,6 +60,7 @@ Future<void> main(List<String> args) async {
       worklogService: worklogService,
       projectService: projectService,
       jiraService: jiraService,
+      planService: planService,
       paths: paths,
     );
     await server.serve(stdin, stdout);
