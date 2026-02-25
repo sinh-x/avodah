@@ -119,18 +119,35 @@
           avo-analyze = pkgs.writeShellScriptBin "avo-analyze" "flutter analyze";
           avo-clean = pkgs.writeShellScriptBin "avo-clean" "flutter clean && flutter pub get";
           avo-build-cli = pkgs.writeShellScriptBin "avo-build-cli" ''
-            cd "$(git rev-parse --show-toplevel)/mcp" && dart compile exe bin/avo.dart -o bin/avo
+            cd "$(git rev-parse --show-toplevel)/mcp" && dart build cli -t bin/avo.dart -o build/avo
+          '';
+          avo-build-mcp = pkgs.writeShellScriptBin "avo-build-mcp" ''
+            cd "$(git rev-parse --show-toplevel)/mcp" && dart build cli -t bin/server.dart -o build/mcp
           '';
           avo = pkgs.writeShellScriptBin "avo" ''
             MCP_DIR="$(git rev-parse --show-toplevel)/mcp"
-            BIN="$MCP_DIR/bin/avo"
+            BIN="$MCP_DIR/build/avo/bundle/bin/avo"
 
             ROOT="$(git rev-parse --show-toplevel)"
 
             # Recompile if binary is missing or any dart source is newer
             if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/avo.dart" "$ROOT/packages/avodah_core/lib" -newer "$BIN" 2>/dev/null | head -1)" ]; then
               echo "Compiling avo..." >&2
-              (cd "$MCP_DIR" && dart compile exe bin/avo.dart -o bin/avo) >&2
+              (cd "$MCP_DIR" && dart build cli -t bin/avo.dart -o build/avo) >&2
+            fi
+
+            exec "$BIN" "$@"
+          '';
+          avodah-mcp = pkgs.writeShellScriptBin "avodah-mcp" ''
+            MCP_DIR="$(git rev-parse --show-toplevel)/mcp"
+            BIN="$MCP_DIR/build/mcp/bundle/bin/server"
+
+            ROOT="$(git rev-parse --show-toplevel)"
+
+            # Recompile if binary is missing or any dart source is newer
+            if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/server.dart" "$ROOT/packages/avodah_core/lib" -newer "$BIN" 2>/dev/null | head -1)" ]; then
+              echo "Compiling avodah-mcp..." >&2
+              (cd "$MCP_DIR" && dart build cli -t bin/server.dart -o build/mcp) >&2
             fi
 
             exec "$BIN" "$@"
@@ -157,7 +174,9 @@
               avo-analyze
               avo-clean
               avo-build-cli
+              avo-build-mcp
               avo
+              avodah-mcp
             ]
             ++ deps;
 
@@ -186,8 +205,10 @@
               echo "  avo-analyze       - Run analyzer"
               echo "  avo-clean         - Clean and get deps"
               echo "  avo-build-cli     - Compile native avo binary"
+              echo "  avo-build-mcp     - Compile native MCP server binary"
               echo ""
               echo "  avo <command>     - Run Avodah CLI (native, auto-compiles)"
+              echo "  avodah-mcp        - Run MCP server (native, auto-compiles)"
               echo ""
 
               # Reset terminal line discipline — flutter/dart can corrupt stty settings

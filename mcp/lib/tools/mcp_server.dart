@@ -1356,7 +1356,7 @@ class McpServer {
 
     // First 10 active tasks
     final activeTasks = await taskService.list();
-    final taskList = activeTasks.take(10).map((t) => {
+    final taskList = activeTasks.take(10).map((t) {
       return {
         'id': t.id,
         'title': t.title,
