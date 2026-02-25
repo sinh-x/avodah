@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | **1.0.0** | Fully functional CLI + MCP integration for AI usage |
 | **2.0.0** | Flutter UI with Linux & Android |
 
+## [0.3.1] - 2026-02-25
+
+### Added
+- MCP server full CLI parity — 10 tools: timer, tasks, worklog, project, plan, today, daily, week, status, jira (#69)
+- Cancel/uncancel status for plan tasks (#64)
+- Auto-compiling `avodah-mcp` devshell wrapper for MCP server binary
+
+### Fixed
+- Devshell avo wrapper watches avodah_core for recompilation (#68)
+- Migrate devshell builds from `dart compile exe` to `dart build cli`
+
+### Changed
+- Remove beta workflow — use simple `X.Y.Z+N` versioning on develop
+- Cache interactive picker filter results (#65)
+- Add auto version bump workflow for releases (#66)
+
 ## [0.3.0] - 2026-02-19
 
 ### Added

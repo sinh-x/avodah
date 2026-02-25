@@ -54,19 +54,52 @@ Reference: `lib/features/tasks/models/task_document.dart`
 
 - Flutter app: `flutter test`
 - MCP/CLI: `cd mcp && dart test`
-- 92 tests across 5 service suites (Timer, Task, Worklog, Project, Jira)
+- 201+ tests across 6 service suites (Timer, Task, Worklog, Project, Jira, Plan)
 
-## Release Workflow
+## Versioning & Release
 
-- **Do NOT bump version in feature branches or PRs.**
-- Version bumps happen on `main` at release time, separate from feature work.
-- Sequence:
-  1. Merge feature PRs to `main` (no version changes)
-  2. When ready to release, run `dart run tool/bump_version.dart patch|minor|major`
-  3. Commit: `chore: bump version to X.Y.Z`
-  4. Tag: `git tag vX.Y.Z`
-  5. Push: `git push origin main --tags`
-- The bump script auto-generates the changelog from all commits since the last tag.
+### Version format
+
+- `X.Y.Z` in `packages/avodah_core/lib/version.dart` (source of truth)
+- `X.Y.Z+N` in root `pubspec.yaml` (`+N` is Flutter build number)
+- No beta suffixes — simple semver only
+
+### Automatic release (preferred)
+
+Version bumps are **fully automated** via CI on merge to `main`. **Do NOT bump versions manually.**
+
+1. Work on feature branches off `develop`
+2. Use conventional commit prefixes — these determine the bump type:
+   - `fix:` or `fix(scope):` → **patch** bump (e.g. 0.3.0 → 0.3.1)
+   - `feat:` or `feat(scope):` → **minor** bump (e.g. 0.3.1 → 0.4.0)
+   - `BREAKING CHANGE` in body or `feat!:` / `fix!:` → **major** bump
+   - `chore:`, `refactor:`, `docs:`, `test:` → **patch** (default)
+3. Merge feature PRs to `develop`
+4. When ready to release, merge `develop` → `main` via PR
+5. CI automatically:
+   - Detects bump type from commit messages since last tag
+   - Runs `tool/bump_version.dart` (updates 5 version files + CHANGELOG)
+   - Resets build number to `+1`
+   - Commits as `chore: bump version to X.Y.Z`
+   - Tags `vX.Y.Z` and creates GitHub Release
+
+### Skip patterns
+
+CI skips commits starting with:
+- `chore: bump version` — prevents release workflow from re-triggering itself
+- `chore(ci):` — prevents CI loops
+
+### Manual bump (escape hatch)
+
+Only use if CI is broken or for non-standard version jumps:
+
+```bash
+dart run tool/bump_version.dart patch|minor|major|X.Y.Z
+```
+
+### Build number
+
+`tool/bump_build.dart` increments the `+N` build number in pubspec.yaml. Used for Flutter builds only — not tied to releases.
 
 ## Current Phase
 
