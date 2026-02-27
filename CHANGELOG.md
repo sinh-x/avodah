@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Roadmap
 
-| Version | Scope |
-|---------|-------|
-| **0.x.y** | Pre-stable — key features being built and tested |
-| **0.2.0** | Next capability milestone (e.g., full Jira coverage, GitHub integration) |
-| **1.0.0** | Fully functional CLI + MCP integration for AI usage |
-| **2.0.0** | Flutter UI with Linux & Android |
+| Version   | Theme                                               | Issues              |
+|-----------|-----------------------------------------------------|---------------------|
+| **0.3.2** | Safety — worklog guards, undone/undelete, soft-delete | #72, #73            |
+| **0.3.3** | Reliability — Jira re-sync fix, markdown notes       | #70, #74            |
+| **0.3.4** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75       |
+| **0.3.5** | Jira — selective sync                                | #71                 |
+| **0.4.0** | New feature (TBD — GitHub sync?)                     | #54                 |
+| **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs    |
+| **2.0.0** | Flutter UI + multi-user                              | #59, Flutter app    |
 
 ## [0.3.1] - 2026-02-25
 
