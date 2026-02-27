@@ -137,6 +137,50 @@ class TaskService {
     await _saveTask(task);
     return task;
   }
+
+  /// Marks a done task as not done.
+  ///
+  /// Throws [TaskNotFoundException] if no task matches.
+  /// Throws [AmbiguousTaskIdException] if multiple tasks match.
+  /// Throws [TaskNotDoneException] if the task is not done.
+  Future<TaskDocument> undone(String idOrPrefix) async {
+    final task = await show(idOrPrefix);
+
+    if (!task.isDone) {
+      throw TaskNotDoneException(task);
+    }
+
+    task.markUndone();
+    await _saveTask(task);
+    return task;
+  }
+
+  /// Restores a soft-deleted task.
+  ///
+  /// Throws [TaskNotFoundException] if no task matches.
+  /// Throws [AmbiguousTaskIdException] if multiple tasks match.
+  /// Throws [TaskNotDeletedException] if the task is not deleted.
+  Future<TaskDocument> undelete(String idOrPrefix) async {
+    final task = await show(idOrPrefix);
+
+    if (!task.isDeleted) {
+      throw TaskNotDeletedException(task);
+    }
+
+    task.restore();
+    await _saveTask(task);
+    return task;
+  }
+
+  /// Returns only soft-deleted tasks.
+  Future<List<TaskDocument>> listDeleted() async {
+    final rows = await db.select(db.tasks).get();
+
+    return rows
+        .map((row) => TaskDocument.fromDrift(task: row, clock: clock))
+        .where((task) => task.isDeleted)
+        .toList();
+  }
 }
 
 /// Thrown when no task matches the given ID or prefix.
@@ -167,4 +211,22 @@ class TaskAlreadyDoneException implements Exception {
 
   @override
   String toString() => 'Task "${task.title}" is already done.';
+}
+
+/// Thrown when trying to undone a task that is not done.
+class TaskNotDoneException implements Exception {
+  final TaskDocument task;
+  TaskNotDoneException(this.task);
+
+  @override
+  String toString() => 'Task "${task.title}" is not done.';
+}
+
+/// Thrown when trying to undelete a task that is not deleted.
+class TaskNotDeletedException implements Exception {
+  final TaskDocument task;
+  TaskNotDeletedException(this.task);
+
+  @override
+  String toString() => 'Task "${task.title}" is not deleted.';
 }

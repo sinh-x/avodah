@@ -559,4 +559,68 @@ void main() {
       expect(recent, isEmpty);
     });
   });
+
+  group('worklogInfoForTask', () {
+    test('returns zero for no worklogs', () async {
+      final info = await service.worklogInfoForTask('nonexistent');
+
+      expect(info.count, equals(0));
+      expect(info.total, equals(Duration.zero));
+    });
+
+    test('returns correct count and total', () async {
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: DateTime(2026, 2, 15, 9, 0),
+        duration: const Duration(minutes: 30),
+      );
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: DateTime(2026, 2, 15, 14, 0),
+        duration: const Duration(minutes: 10),
+      );
+
+      final info = await service.worklogInfoForTask('task-1');
+
+      expect(info.count, equals(2));
+      expect(info.total.inMinutes, equals(40));
+    });
+
+    test('excludes deleted worklogs', () async {
+      final w1 = await service.createWorklog(
+        taskId: 'task-1',
+        start: DateTime(2026, 2, 15, 9, 0),
+        duration: const Duration(minutes: 30),
+      );
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: DateTime(2026, 2, 15, 14, 0),
+        duration: const Duration(minutes: 20),
+      );
+      await service.deleteWorklog(w1.id);
+
+      final info = await service.worklogInfoForTask('task-1');
+
+      expect(info.count, equals(1));
+      expect(info.total.inMinutes, equals(20));
+    });
+
+    test('scoped to taskId', () async {
+      await service.createWorklog(
+        taskId: 'task-1',
+        start: DateTime(2026, 2, 15, 9, 0),
+        duration: const Duration(minutes: 60),
+      );
+      await service.createWorklog(
+        taskId: 'task-2',
+        start: DateTime(2026, 2, 15, 10, 0),
+        duration: const Duration(minutes: 45),
+      );
+
+      final info = await service.worklogInfoForTask('task-1');
+
+      expect(info.count, equals(1));
+      expect(info.total.inMinutes, equals(60));
+    });
+  });
 }

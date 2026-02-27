@@ -179,13 +179,16 @@ class McpServer {
         {
           'name': 'tasks',
           'description':
-              'Manage tasks - list, add, show, done, delete, set due date, set category',
+              'Manage tasks - list, add, show, done, undone, delete, undelete, set due date, set category',
           'inputSchema': {
             'type': 'object',
             'properties': {
               'action': {
                 'type': 'string',
-                'enum': ['list', 'add', 'show', 'done', 'delete', 'due', 'cat'],
+                'enum': [
+                  'list', 'add', 'show', 'done', 'undone', 'delete',
+                  'undelete', 'due', 'cat'
+                ],
                 'description': 'Task action to perform',
               },
               'title': {
@@ -204,6 +207,16 @@ class McpServer {
               'includeCompleted': {
                 'type': 'boolean',
                 'description': 'Include completed tasks in list',
+              },
+              'includeDeleted': {
+                'type': 'boolean',
+                'description':
+                    'List only soft-deleted tasks (overrides other list filters)',
+              },
+              'force': {
+                'type': 'boolean',
+                'description':
+                    'Force delete even if the task has worklogs',
               },
               'dueDay': {
                 'type': 'string',
@@ -606,6 +619,21 @@ class McpServer {
 
     switch (action) {
       case 'list':
+        final includeDeleted = params['includeDeleted'] as bool? ?? false;
+        if (includeDeleted) {
+          final tasks = await taskService.listDeleted();
+          return {
+            'ok': true,
+            'tasks': tasks
+                .map((t) => {
+                      'id': t.id,
+                      'title': t.title,
+                      'isDone': t.isDone,
+                      'isDeleted': true,
+                    })
+                .toList(),
+          };
+        }
         final includeCompleted = params['includeCompleted'] as bool? ?? false;
         final tasks = await taskService.list(includeCompleted: includeCompleted);
         return {
@@ -699,7 +727,23 @@ class McpServer {
           return {'ok': false, 'error': 'Task ID is required'};
         }
         try {
-          final task = await taskService.delete(id);
+          final force = params['force'] as bool? ?? false;
+          final task = await taskService.show(id);
+
+          if (!force) {
+            final info = await worklogService.worklogInfoForTask(task.id);
+            if (info.count > 0) {
+              return {
+                'ok': false,
+                'error': 'Task has worklogs',
+                'worklogCount': info.count,
+                'totalTime': _formatDuration(info.total),
+                'hint': 'Set force: true to delete anyway',
+              };
+            }
+          }
+
+          await taskService.delete(id);
           return {
             'ok': true,
             'deleted': {
@@ -710,6 +754,50 @@ class McpServer {
         } on TaskNotFoundException catch (e) {
           return {'ok': false, 'error': e.toString()};
         } on AmbiguousTaskIdException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
+      case 'undone':
+        final id = params['id'] as String?;
+        if (id == null || id.isEmpty) {
+          return {'ok': false, 'error': 'Task ID is required'};
+        }
+        try {
+          final task = await taskService.undone(id);
+          return {
+            'ok': true,
+            'undone': {
+              'id': task.id,
+              'title': task.title,
+            },
+          };
+        } on TaskNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on AmbiguousTaskIdException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on TaskNotDoneException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
+      case 'undelete':
+        final id = params['id'] as String?;
+        if (id == null || id.isEmpty) {
+          return {'ok': false, 'error': 'Task ID is required'};
+        }
+        try {
+          final task = await taskService.undelete(id);
+          return {
+            'ok': true,
+            'restored': {
+              'id': task.id,
+              'title': task.title,
+            },
+          };
+        } on TaskNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on AmbiguousTaskIdException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on TaskNotDeletedException catch (e) {
           return {'ok': false, 'error': e.toString()};
         }
 

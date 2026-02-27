@@ -236,6 +236,25 @@ class WorklogService {
     return docs.take(limit).toList();
   }
 
+  /// Returns worklog count and total duration for a task (excludes deleted).
+  Future<({int count, Duration total})> worklogInfoForTask(
+      String taskId) async {
+    final rows = await (db.select(db.worklogEntries)
+          ..where((w) => w.taskId.equals(taskId)))
+        .get();
+
+    var count = 0;
+    var totalMs = 0;
+    for (final row in rows) {
+      final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      if (doc.isDeleted) continue;
+      count++;
+      totalMs += doc.durationMs;
+    }
+
+    return (count: count, total: Duration(milliseconds: totalMs));
+  }
+
   /// Returns all non-deleted worklogs for a specific task.
   Future<List<WorklogDocument>> listForTask(String taskId) async {
     final rows = await (db.select(db.worklogEntries)

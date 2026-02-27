@@ -337,4 +337,154 @@ void main() {
       expect(overdueTasks, isEmpty);
     });
   });
+
+  group('undone', () {
+    test('marks done task as active', () async {
+      final created = await service.add(title: 'Undone me');
+      await service.done(created.id);
+
+      final undone = await service.undone(created.id);
+
+      expect(undone.isDone, isFalse);
+      expect(undone.doneOn, isNull);
+    });
+
+    test('persists undone state', () async {
+      final created = await service.add(title: 'Persist undone');
+      await service.done(created.id);
+      await service.undone(created.id);
+
+      final fetched = await service.show(created.id);
+      expect(fetched.isDone, isFalse);
+    });
+
+    test('undone task reappears in list', () async {
+      final created = await service.add(title: 'Reappear');
+      await service.done(created.id);
+
+      var tasks = await service.list();
+      expect(tasks, isEmpty);
+
+      await service.undone(created.id);
+      tasks = await service.list();
+      expect(tasks, hasLength(1));
+      expect(tasks.first.title, equals('Reappear'));
+    });
+
+    test('works with prefix', () async {
+      final created = await service.add(title: 'Undone by prefix');
+      await service.done(created.id);
+
+      final undone = await service.undone(created.id.substring(0, 8));
+
+      expect(undone.isDone, isFalse);
+    });
+
+    test('throws TaskNotDoneException for active task', () async {
+      final created = await service.add(title: 'Not done');
+
+      expect(
+        () => service.undone(created.id),
+        throwsA(isA<TaskNotDoneException>()),
+      );
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.undone('nonexistent'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
+  group('undelete', () {
+    test('restores deleted task to active', () async {
+      final created = await service.add(title: 'Restore me');
+      await service.delete(created.id);
+
+      final restored = await service.undelete(created.id);
+
+      expect(restored.isDeleted, isFalse);
+    });
+
+    test('persists restored state', () async {
+      final created = await service.add(title: 'Persist restore');
+      await service.delete(created.id);
+      await service.undelete(created.id);
+
+      final fetched = await service.show(created.id);
+      expect(fetched.isDeleted, isFalse);
+    });
+
+    test('restored task reappears in list', () async {
+      final created = await service.add(title: 'Reappear after restore');
+      await service.delete(created.id);
+
+      var tasks = await service.list();
+      expect(tasks, isEmpty);
+
+      await service.undelete(created.id);
+      tasks = await service.list();
+      expect(tasks, hasLength(1));
+      expect(tasks.first.title, equals('Reappear after restore'));
+    });
+
+    test('works with prefix', () async {
+      final created = await service.add(title: 'Restore by prefix');
+      await service.delete(created.id);
+
+      final restored = await service.undelete(created.id.substring(0, 8));
+
+      expect(restored.isDeleted, isFalse);
+    });
+
+    test('throws TaskNotDeletedException for active task', () async {
+      final created = await service.add(title: 'Not deleted');
+
+      expect(
+        () => service.undelete(created.id),
+        throwsA(isA<TaskNotDeletedException>()),
+      );
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.undelete('nonexistent'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
+  group('listDeleted', () {
+    test('returns only deleted tasks', () async {
+      await service.add(title: 'Active');
+      final toDelete = await service.add(title: 'Deleted');
+      await service.delete(toDelete.id);
+
+      final deleted = await service.listDeleted();
+
+      expect(deleted, hasLength(1));
+      expect(deleted.first.title, equals('Deleted'));
+    });
+
+    test('returns empty when no deleted tasks', () async {
+      await service.add(title: 'Active');
+
+      final deleted = await service.listDeleted();
+
+      expect(deleted, isEmpty);
+    });
+
+    test('includes done+deleted tasks', () async {
+      final task = await service.add(title: 'Done then deleted');
+      await service.done(task.id);
+      await service.delete(task.id);
+
+      final deleted = await service.listDeleted();
+
+      expect(deleted, hasLength(1));
+      expect(deleted.first.isDone, isTrue);
+      expect(deleted.first.isDeleted, isTrue);
+    });
+  });
 }
