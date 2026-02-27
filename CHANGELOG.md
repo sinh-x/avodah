@@ -7,15 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Roadmap
 
-| Version   | Theme                                               | Issues              |
-|-----------|-----------------------------------------------------|---------------------|
-| **0.3.2** | Safety — worklog guards, undone/undelete, soft-delete | #72, #73            |
-| **0.3.3** | Reliability — Jira re-sync fix, markdown notes       | #70, #74            |
-| **0.3.4** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75       |
-| **0.3.5** | Jira — selective sync                                | #71                 |
-| **0.4.0** | New feature (TBD — GitHub sync?)                     | #54                 |
-| **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs    |
-| **2.0.0** | Flutter UI + multi-user                              | #59, Flutter app    |
+| Version   | Theme                                               | Issues                  |
+|-----------|-----------------------------------------------------|-------------------------|
+| **0.3.2** | Safety — worklog guards, undone/undelete             | #72, #73                |
+| **0.3.3** | Reliability — Jira re-sync fix, markdown notes       | #70, #74                |
+| **0.3.4** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75           |
+| **0.3.5** | Jira — selective sync                                | #71                     |
+| **0.4.0** | Wire dormant schema — subtasks, tags, estimates      | #76, #77, #78, #79      |
+| **0.5.0** | Filtering & search                                   | #80, #81, #82           |
+| **0.6.0** | Reporting & export                                   | #83, #84                |
+| **0.7.0** | Data management — backup, import/export, soft-delete | #85, #86, #87           |
+| **0.8.0** | Recurring tasks                                      | #88                     |
+| **0.9.0** | Schema freeze & hardening                            | #89, #90, #91           |
+| **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs        |
+| **2.0.0** | Flutter UI + multi-user + GitHub sync                | #54, #59, Flutter app   |
 
 ## [0.3.1] - 2026-02-25
 
