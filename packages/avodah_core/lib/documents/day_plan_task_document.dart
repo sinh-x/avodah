@@ -17,6 +17,7 @@ class DayPlanTaskFields {
   static const String taskId = 'taskId';
   static const String day = 'day';
   static const String estimateMs = 'estimateMs';
+  static const String cancelled = 'cancelled';
   static const String created = 'created';
 }
 
@@ -77,6 +78,7 @@ class DayPlanTaskDocument extends CrdtDocument<DayPlanTaskDocument> {
     setString(DayPlanTaskFields.taskId, entry.taskId);
     setString(DayPlanTaskFields.day, entry.day);
     setInt(DayPlanTaskFields.estimateMs, entry.estimateMs);
+    setBool(DayPlanTaskFields.cancelled, entry.cancelled);
     setInt(DayPlanTaskFields.created, entry.created);
   }
 
@@ -93,6 +95,9 @@ class DayPlanTaskDocument extends CrdtDocument<DayPlanTaskDocument> {
   int get estimateMs => getInt(DayPlanTaskFields.estimateMs) ?? 0;
   set estimateMs(int value) => setInt(DayPlanTaskFields.estimateMs, value);
 
+  bool get isCancelled => getBool(DayPlanTaskFields.cancelled) ?? false;
+  set isCancelled(bool value) => setBool(DayPlanTaskFields.cancelled, value);
+
   int get createdMs => getInt(DayPlanTaskFields.created) ?? 0;
   set createdMs(int value) => setInt(DayPlanTaskFields.created, value);
 
@@ -106,6 +111,7 @@ class DayPlanTaskDocument extends CrdtDocument<DayPlanTaskDocument> {
       taskId: Value(taskId),
       day: Value(day),
       estimateMs: Value(estimateMs),
+      cancelled: Value(isCancelled),
       created: Value(createdMs),
       crdtClock: Value(clock.lastTimestamp.pack()),
       crdtState: Value(toCrdtState()),
@@ -118,6 +124,7 @@ class DayPlanTaskDocument extends CrdtDocument<DayPlanTaskDocument> {
       taskId: taskId,
       day: day,
       estimate: Duration(milliseconds: estimateMs),
+      isCancelled: isCancelled,
       isDeleted: isDeleted,
     );
   }
@@ -137,6 +144,7 @@ class DayPlanTaskModel {
   final String taskId;
   final String day;
   final Duration estimate;
+  final bool isCancelled;
   final bool isDeleted;
 
   const DayPlanTaskModel({
@@ -144,6 +152,7 @@ class DayPlanTaskModel {
     required this.taskId,
     required this.day,
     required this.estimate,
+    required this.isCancelled,
     required this.isDeleted,
   });
 

@@ -7,12 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Roadmap
 
-| Version | Scope |
-|---------|-------|
-| **0.x.y** | Pre-stable — key features being built and tested |
-| **0.2.0** | Next capability milestone (e.g., full Jira coverage, GitHub integration) |
-| **1.0.0** | Fully functional CLI + MCP integration for AI usage |
-| **2.0.0** | Flutter UI with Linux & Android |
+| Version   | Theme                                               | Issues                  |
+|-----------|-----------------------------------------------------|-------------------------|
+| **0.3.2** | Safety — worklog guards, undone/undelete             | #72, #73                |
+| **0.3.3** | Reliability — Jira re-sync fix, markdown notes       | #70, #74                |
+| **0.3.4** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75           |
+| **0.3.5** | Jira — selective sync                                | #71                     |
+| **0.4.0** | Wire dormant schema — subtasks, tags, estimates      | #76, #77, #78, #79      |
+| **0.5.0** | Filtering & search                                   | #80, #81, #82           |
+| **0.6.0** | Reporting & export                                   | #83, #84                |
+| **0.7.0** | Data management — backup, import/export, soft-delete | #85, #86, #87           |
+| **0.8.0** | Recurring tasks                                      | #88                     |
+| **0.9.0** | Schema freeze & hardening                            | #89, #90, #91           |
+| **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs        |
+| **2.0.0** | Flutter UI + multi-user + GitHub sync                | #54, #59, Flutter app   |
+
+## [0.3.1] - 2026-02-25
+
+### Added
+- MCP server full CLI parity — 10 tools: timer, tasks, worklog, project, plan, today, daily, week, status, jira (#69)
+- Cancel/uncancel status for plan tasks (#64)
+- Auto-compiling `avodah-mcp` devshell wrapper for MCP server binary
+
+### Fixed
+- Devshell avo wrapper watches avodah_core for recompilation (#68)
+- Migrate devshell builds from `dart compile exe` to `dart build cli`
+
+### Changed
+- Remove beta workflow — use simple `X.Y.Z+N` versioning on develop
+- Cache interactive picker filter results (#65)
+- Add auto version bump workflow for releases (#66)
 
 ## [0.3.0] - 2026-02-19
 

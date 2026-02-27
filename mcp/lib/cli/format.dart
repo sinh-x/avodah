@@ -291,6 +291,7 @@ Future<void> printPlanTable(
         estimateMs: pt.estimateMs,
         logged: logged,
         isDone: isDone,
+        isCancelled: pt.isCancelled,
       );
       tasksByCategory.putIfAbsent(category, () => []).add(resolved);
     }
@@ -349,6 +350,7 @@ class _ResolvedPlanTask {
   final int estimateMs;
   final Duration logged;
   final bool isDone;
+  final bool isCancelled;
 
   const _ResolvedPlanTask({
     required this.taskId,
@@ -358,13 +360,20 @@ class _ResolvedPlanTask {
     required this.estimateMs,
     required this.logged,
     required this.isDone,
+    this.isCancelled = false,
   });
 
   bool get hasWorklogs => logged.inMilliseconds > 0;
 }
 
 void _printPlanTaskLine(_ResolvedPlanTask t) {
-  final check = t.isDone ? 'x' : ' ';
+  final check = t.isCancelled
+      ? '-'
+      : t.isDone
+          ? 'x'
+          : t.hasWorklogs
+              ? '~'
+              : ' ';
   final id = t.taskId.length >= 8 ? t.taskId.substring(0, 8) : t.taskId;
   final issueTag = t.issueId != null ? ' [${t.issueId}]' : '';
   final estimate = t.estimateMs > 0
@@ -418,6 +427,7 @@ Future<void> printPlannedTasks({
       estimateMs: pt.estimateMs,
       logged: logged,
       isDone: isDone,
+      isCancelled: pt.isCancelled,
     ));
   }
 }

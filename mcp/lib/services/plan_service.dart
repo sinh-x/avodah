@@ -337,6 +337,46 @@ class PlanService {
     return entry;
   }
 
+  /// Cancels a task in the day plan.
+  /// Throws [PlanTaskNotFoundException] if not found.
+  Future<DayPlanTaskDocument> cancelTask({
+    required String taskId,
+    String? day,
+  }) async {
+    final targetDay = day ?? _today();
+    final existing = await _tasksForDay(targetDay);
+    final match = existing.where((e) => e.taskId == taskId).toList();
+
+    if (match.isEmpty) {
+      throw PlanTaskNotFoundException(taskId, targetDay);
+    }
+
+    final entry = match.first;
+    entry.isCancelled = true;
+    await _savePlanTask(entry);
+    return entry;
+  }
+
+  /// Un-cancels a task in the day plan.
+  /// Throws [PlanTaskNotFoundException] if not found.
+  Future<DayPlanTaskDocument> uncancelTask({
+    required String taskId,
+    String? day,
+  }) async {
+    final targetDay = day ?? _today();
+    final existing = await _tasksForDay(targetDay);
+    final match = existing.where((e) => e.taskId == taskId).toList();
+
+    if (match.isEmpty) {
+      throw PlanTaskNotFoundException(taskId, targetDay);
+    }
+
+    final entry = match.first;
+    entry.isCancelled = false;
+    await _savePlanTask(entry);
+    return entry;
+  }
+
   /// Lists non-deleted plan tasks for a day.
   Future<List<DayPlanTaskDocument>> listTasksForDay({String? day}) async {
     final targetDay = day ?? _today();
