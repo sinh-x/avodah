@@ -33,6 +33,20 @@ void main() {
   );
 
   pubspecFile.writeAsStringSync(updated);
+
+  // Also update version.dart so avo --version shows the build number
+  final versionFile = File('$rootDir/packages/avodah_core/lib/version.dart');
+  final versionContent = versionFile.readAsStringSync();
+  final buildPattern = RegExp(r'const int avodahBuildNumber = \d+;');
+  if (buildPattern.hasMatch(versionContent)) {
+    versionFile.writeAsStringSync(
+      versionContent.replaceFirst(
+        buildPattern,
+        'const int avodahBuildNumber = $newBuild;',
+      ),
+    );
+  }
+
   print('Bumped build: $version+$currentBuild → $version+$newBuild');
 }
 

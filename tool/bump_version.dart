@@ -38,6 +38,15 @@ void main(List<String> args) {
     "const String avodahVersion = '$currentVersion';",
     "const String avodahVersion = '$newVersion';",
   );
+  // Reset build number to 1 on semver bump
+  final versionFile = File('$rootDir/packages/avodah_core/lib/version.dart');
+  final vfContent = versionFile.readAsStringSync();
+  final buildPattern = RegExp(r'const int avodahBuildNumber = \d+;');
+  if (buildPattern.hasMatch(vfContent)) {
+    versionFile.writeAsStringSync(
+      vfContent.replaceFirst(buildPattern, 'const int avodahBuildNumber = 1;'),
+    );
+  }
 
   // 2. packages/avodah_core/pubspec.yaml
   _replacePubspecVersion(

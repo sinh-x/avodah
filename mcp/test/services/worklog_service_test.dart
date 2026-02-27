@@ -534,6 +534,30 @@ void main() {
       expect(updated.id, equals(created.id));
       expect(updated.comment, equals('prefix edit'));
     });
+
+    test('preserves jiraWorklogId when editing synced worklog', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      // Simulate Jira sync by linking
+      created.linkToJira('jira-12345');
+      await db
+          .into(db.worklogEntries)
+          .insertOnConflictUpdate(created.toDriftCompanion());
+
+      final updated = await service.editWorklog(
+        created.id,
+        comment: 'updated comment',
+      );
+
+      expect(updated.isSyncedToJira, isTrue);
+      expect(updated.jiraWorklogId, equals('jira-12345'));
+      expect(updated.comment, equals('updated comment'));
+    });
   });
 
   group('deleteWorklog', () {

@@ -179,7 +179,7 @@ class McpServer {
         {
           'name': 'tasks',
           'description':
-              'Manage tasks - list, add, show, done, undone, delete, undelete, set due date, set category',
+              'Manage tasks - list, add, show, done, undone, delete, undelete, set due date, set category, notes',
           'inputSchema': {
             'type': 'object',
             'properties': {
@@ -187,7 +187,7 @@ class McpServer {
                 'type': 'string',
                 'enum': [
                   'list', 'add', 'show', 'done', 'undone', 'delete',
-                  'undelete', 'due', 'cat'
+                  'undelete', 'due', 'cat', 'note'
                 ],
                 'description': 'Task action to perform',
               },
@@ -227,6 +227,16 @@ class McpServer {
                 'type': 'string',
                 'description':
                     'Category string, or null to clear (for cat action)',
+              },
+              'content': {
+                'type': 'string',
+                'description':
+                    'Note/description content (for note action)',
+              },
+              'append': {
+                'type': 'boolean',
+                'description':
+                    'Append as timestamped note instead of replacing (for note action)',
               },
             },
             'required': ['action'],
@@ -691,6 +701,7 @@ class McpServer {
               'projectId': task.projectId,
               'dueDay': task.dueDay,
               'category': task.category,
+              'description': task.description,
             },
           };
         } on TaskNotFoundException catch (e) {
@@ -845,6 +856,45 @@ class McpServer {
           return {'ok': false, 'error': e.toString()};
         }
 
+      case 'note':
+        final id = params['id'] as String?;
+        if (id == null || id.isEmpty) {
+          return {'ok': false, 'error': 'Task ID is required'};
+        }
+        try {
+          final content = params['content'] as String?;
+          final append = params['append'] as bool? ?? false;
+
+          if (content == null) {
+            // View mode
+            final task = await taskService.show(id);
+            return {
+              'ok': true,
+              'note': task.description,
+            };
+          }
+
+          if (append) {
+            final task = await taskService.appendNote(id, content);
+            return {
+              'ok': true,
+              'note': task.description,
+            };
+          }
+
+          // Set or clear
+          final task = await taskService.setDescription(
+              id, content.isEmpty ? null : content);
+          return {
+            'ok': true,
+            'note': task.description,
+          };
+        } on TaskNotFoundException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        } on AmbiguousTaskIdException catch (e) {
+          return {'ok': false, 'error': e.toString()};
+        }
+
       default:
         throw Exception('Unknown tasks action: $action');
     }
@@ -913,6 +963,13 @@ class McpServer {
                 : null,
             comment: comment,
           );
+
+          // Auto-update worklog on Jira if already synced
+          bool jiraUpdated = false;
+          if (worklog.isSyncedToJira) {
+            jiraUpdated = await jiraService.updateWorklog(worklog.id);
+          }
+
           return {
             'ok': true,
             'updated': {
@@ -921,6 +978,7 @@ class McpServer {
               'start': worklog.startTime.toIso8601String(),
               'durationMinutes': worklog.durationMs ~/ 60000,
               'comment': worklog.comment,
+              'jiraUpdated': jiraUpdated,
             },
           };
         } on WorklogNotFoundException catch (e) {

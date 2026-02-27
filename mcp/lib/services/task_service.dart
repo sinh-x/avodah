@@ -54,6 +54,30 @@ class TaskService {
     return task;
   }
 
+  /// Sets or clears the description/notes on a task.
+  Future<TaskDocument> setDescription(
+      String idOrPrefix, String? description) async {
+    final task = await show(idOrPrefix);
+    task.description = description;
+    await _saveTask(task);
+    return task;
+  }
+
+  /// Appends a timestamped note to the task's description.
+  Future<TaskDocument> appendNote(String idOrPrefix, String note) async {
+    final task = await show(idOrPrefix);
+    final now = DateTime.now();
+    final stamp =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final entry = '_${stamp}_ — $note';
+    final current = task.description;
+    task.description =
+        current == null || current.isEmpty ? entry : '$current\n\n---\n$entry';
+    await _saveTask(task);
+    return task;
+  }
+
   /// Returns active tasks that are overdue.
   Future<List<TaskDocument>> overdue() async {
     final tasks = await list();
