@@ -66,17 +66,17 @@ Reference: `lib/features/tasks/models/task_document.dart`
 
 ### CI behavior on push
 
-**Default (no `Bump:` trailer):** CI bumps only the build number `+N` in pubspec.yaml. No semver change, no tag, no GitHub release.
+**develop branch:** CI bumps only the build number `+N` in pubspec.yaml and version.dart. No semver change, no tag.
 
-**Explicit version bump:** Add `Bump: <type>` trailer to the commit body (on its own line):
+**main branch (no `Bump:` trailer):** CI runs tests only. No version changes, no commits.
+
+**main branch (with `Bump:` trailer):** Add `Bump: <type>` trailer to the commit body (on its own line):
 - `Bump: patch` → 0.4.0 → 0.4.1, reset `+N` to 1
 - `Bump: minor` → 0.4.1 → 0.5.0, reset `+N` to 1
 - `Bump: major` → 0.5.0 → 1.0.0, reset `+N` to 1
 - `Bump: X.Y.Z` → exact version, reset `+N` to 1
 
-Only explicit bumps create a git tag + GitHub Release.
-
-**Applies to both `main` and `develop`** — develop gets `+N` bumps on every push.
+Only explicit bumps create a git tag + GitHub Release. Build numbers (`+N`) are for develop tracking only.
 
 ### Workflow
 
@@ -84,6 +84,7 @@ Only explicit bumps create a git tag + GitHub Release.
 2. Merge feature PRs to `develop` (CI bumps `+N`)
 3. When ready to release, squash-merge `develop` → `main` with `Bump: patch|minor|major` in the commit body
 4. CI runs tests, bumps version, tags, and creates GitHub Release
+5. Sync develop from main after release (no conflicts — main doesn't auto-commit `+N`)
 
 ### Skip patterns
 
