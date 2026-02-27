@@ -57,47 +57,28 @@ jobs:
           fi
 
       - name: Bump version
+        if: steps.detect.outputs.semver == 'true'
         id: version
         run: |
           BUMP_TYPE="${{ steps.detect.outputs.type }}"
-          IS_SEMVER="${{ steps.detect.outputs.semver }}"
-
-          if [ "$IS_SEMVER" = "true" ]; then
-            # Semver bump (patch/minor/major/X.Y.Z) + reset build to +1
-            dart run tool/bump_version.dart "$BUMP_TYPE"
-            sed -i -E 's/(version:\s*[0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+/\1+1/' pubspec.yaml
-          else
-            # Build number bump only
-            dart run tool/bump_build.dart
-          fi
+          dart run tool/bump_version.dart "$BUMP_TYPE"
+          sed -i -E 's/(version:\s*[0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+/\1+1/' pubspec.yaml
 
           VERSION=$(grep -oP "avodahVersion\s*=\s*'\K[^']+" packages/avodah_core/lib/version.dart)
-          BUILD=$(grep -oP 'version:\s*[0-9]+\.[0-9]+\.[0-9]+\+\K[0-9]+' pubspec.yaml)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
-          echo "full=$VERSION+$BUILD" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION+$BUILD (semver=$IS_SEMVER)"
+          echo "Version: $VERSION"
 
       - name: Commit and tag
+        if: steps.detect.outputs.semver == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          IS_SEMVER="${{ steps.detect.outputs.semver }}"
           VERSION="${{ steps.version.outputs.version }}"
-          FULL="${{ steps.version.outputs.full }}"
-
           git add -A
-
-          if [ "$IS_SEMVER" = "true" ]; then
-            git commit -m "chore: bump version to $VERSION"
-            git tag -a "v$VERSION" -m "Release v$VERSION"
-            git push
-            git push origin "v$VERSION"
-          else
-            git commit -m "chore: bump build to +${{ steps.version.outputs.build }}"
-            git push
-          fi
+          git commit -m "chore: bump version to $VERSION"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push
+          git push origin "v$VERSION"
 
       - name: Create GitHub Release
         if: steps.detect.outputs.semver == 'true'
