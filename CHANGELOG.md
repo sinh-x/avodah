@@ -9,22 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version   | Theme                                               | Issues                  |
 |-----------|-----------------------------------------------------|-------------------------|
-| **0.3.2** | Safety — worklog guards, undone/undelete             | #72, #73                |
-| **0.3.3** | Reliability — Jira re-sync fix, markdown notes       | #70, #74                |
-| **0.3.4** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75           |
-| **0.3.5** | Jira — selective sync                                | #71                     |
-| **0.4.0** | Wire dormant schema — subtasks, tags, estimates      | #76, #77, #78, #79      |
-| **0.5.0** | Filtering & search                                   | #80, #81, #82           |
-| **0.6.0** | Reporting & export                                   | #83, #84                |
-| **0.7.0** | Data management — backup, import/export, soft-delete | #85, #86, #87           |
-| **0.8.0** | Recurring tasks                                      | #88                     |
-| **0.9.0** | Schema freeze & hardening                            | #89, #90, #91           |
+| **0.4.0** | Safety — worklog guards, undone/undelete             | #72, #73 ✅             |
+| **0.4.1** | Reliability — Jira re-sync fix, markdown notes       | #70, #74                |
+| **0.4.2** | CLI polish — picker fix, fish completions, db tools  | #60, #58, #75           |
+| **0.4.3** | Jira — selective sync                                | #71                     |
+| **0.5.0** | Wire dormant schema — subtasks, tags, estimates      | #76, #77, #78, #79      |
+| **0.6.0** | Filtering & search                                   | #80, #81, #82           |
+| **0.7.0** | Reporting & export                                   | #83, #84                |
+| **0.8.0** | Data management — backup, import/export, soft-delete | #85, #86, #87           |
+| **0.9.0** | Recurring tasks                                      | #88                     |
+| **0.10.0**| Schema freeze & hardening                            | #89, #90, #91           |
 | **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs        |
 | **2.0.0** | Flutter UI + multi-user + GitHub sync                | #54, #59, Flutter app   |
 
 ## [0.4.0] - 2026-02-27
 
-_No conventional commits since 0.3.1._
+### Added
+- Worklog guard on task deletion — warns when task has logged time, `--force` to skip (#72)
+- `avo task undone` — reverse a done task (#73)
+- `avo task undelete` — restore a soft-deleted task (#73)
+- `avo task list --deleted` — show only deleted tasks (#73)
+- MCP: `undone`, `undelete` actions, `force` param on delete, `includeDeleted` on list (#72, #73)
+- `WorklogService.worklogInfoForTask()` for count + total duration
+- `TaskNotDoneException`, `TaskNotDeletedException`
+- 19 new tests (220 total)
+
 
 ## [0.3.1] - 2026-02-25
 

@@ -54,7 +54,7 @@ Reference: `lib/features/tasks/models/task_document.dart`
 
 - Flutter app: `flutter test`
 - MCP/CLI: `cd mcp && dart test`
-- 201+ tests across 6 service suites (Timer, Task, Worklog, Project, Jira, Plan)
+- 220+ tests across 6 service suites (Timer, Task, Worklog, Project, Jira, Plan)
 
 ## Versioning & Release
 
@@ -64,29 +64,32 @@ Reference: `lib/features/tasks/models/task_document.dart`
 - `X.Y.Z+N` in root `pubspec.yaml` (`+N` is Flutter build number)
 - No beta suffixes — simple semver only
 
-### Automatic release (preferred)
+### CI behavior on push
 
-Version bumps are **fully automated** via CI on merge to `main`. **Do NOT bump versions manually.**
+**Default (no `Bump:` trailer):** CI bumps only the build number `+N` in pubspec.yaml. No semver change, no tag, no GitHub release.
+
+**Explicit version bump:** Add `Bump: <type>` trailer to the commit body (on its own line):
+- `Bump: patch` → 0.4.0 → 0.4.1, reset `+N` to 1
+- `Bump: minor` → 0.4.1 → 0.5.0, reset `+N` to 1
+- `Bump: major` → 0.5.0 → 1.0.0, reset `+N` to 1
+- `Bump: X.Y.Z` → exact version, reset `+N` to 1
+
+Only explicit bumps create a git tag + GitHub Release.
+
+**Applies to both `main` and `develop`** — develop gets `+N` bumps on every push.
+
+### Workflow
 
 1. Work on feature branches off `develop`
-2. Use conventional commit prefixes — these determine the bump type:
-   - `fix:` or `fix(scope):` → **patch** bump (e.g. 0.3.0 → 0.3.1)
-   - `feat:` or `feat(scope):` → **minor** bump (e.g. 0.3.1 → 0.4.0)
-   - `BREAKING CHANGE` in body or `feat!:` / `fix!:` → **major** bump
-   - `chore:`, `refactor:`, `docs:`, `test:` → **patch** (default)
-3. Merge feature PRs to `develop`
-4. When ready to release, merge `develop` → `main` via PR
-5. CI automatically:
-   - Detects bump type from commit messages since last tag
-   - Runs `tool/bump_version.dart` (updates 5 version files + CHANGELOG)
-   - Resets build number to `+1`
-   - Commits as `chore: bump version to X.Y.Z`
-   - Tags `vX.Y.Z` and creates GitHub Release
+2. Merge feature PRs to `develop` (CI bumps `+N`)
+3. When ready to release, squash-merge `develop` → `main` with `Bump: patch|minor|major` in the commit body
+4. CI runs tests, bumps version, tags, and creates GitHub Release
 
 ### Skip patterns
 
 CI skips commits starting with:
-- `chore: bump version` — prevents release workflow from re-triggering itself
+- `chore: bump version` — prevents release workflow re-trigger
+- `chore: bump build` — prevents build bump loops
 - `chore(ci):` — prevents CI loops
 
 ### Manual bump (escape hatch)
@@ -95,11 +98,8 @@ Only use if CI is broken or for non-standard version jumps:
 
 ```bash
 dart run tool/bump_version.dart patch|minor|major|X.Y.Z
+dart run tool/bump_build.dart                              # +N only
 ```
-
-### Build number
-
-`tool/bump_build.dart` increments the `+N` build number in pubspec.yaml. Used for Flutter builds only — not tied to releases.
 
 ## Current Phase
 
