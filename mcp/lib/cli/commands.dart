@@ -542,8 +542,10 @@ class TaskCommand extends Command<void> {
     addSubcommand(TaskAddCommand(taskService));
     addSubcommand(TaskListCommand(taskService, worklogService, projectService, jiraService));
     addSubcommand(TaskDoneCommand(taskService));
+    addSubcommand(TaskUndoneCommand(taskService));
     addSubcommand(TaskShowCommand(taskService, worklogService, projectService));
-    addSubcommand(TaskDeleteCommand(taskService));
+    addSubcommand(TaskDeleteCommand(taskService, worklogService));
+    addSubcommand(TaskUndeleteCommand(taskService));
     addSubcommand(TaskDueCommand(taskService));
     addSubcommand(TaskCatCommand(taskService));
   }
@@ -552,7 +554,8 @@ class TaskCommand extends Command<void> {
   String get name => 'task';
 
   @override
-  String get description => 'Task management (add, list, show, done, delete, due, cat)';
+  String get description =>
+      'Task management (add, list, show, done, undone, delete, undelete, due, cat)';
 }
 
 class TaskAddCommand extends TaskSubcommand {
@@ -622,6 +625,7 @@ class TaskListCommand extends TaskSubcommand {
   TaskListCommand(super.taskService, this.worklogService,
       this.projectService, this.jiraService) {
     argParser.addFlag('all', abbr: 'a', help: 'Include completed tasks');
+    argParser.addFlag('deleted', help: 'Show only soft-deleted tasks');
     argParser.addFlag('local', abbr: 'l',
         help: 'Show only local tasks (no external link)');
     argParser.addOption('source', abbr: 's',
@@ -655,10 +659,29 @@ class TaskListCommand extends TaskSubcommand {
   @override
   Future<void> run() async {
     final includeCompleted = argResults?['all'] as bool? ?? false;
+    final showDeleted = argResults?['deleted'] as bool? ?? false;
     final localOnly = argResults?['local'] as bool? ?? false;
     final source = argResults?['source'] as String?;
     final project = argResults?['project'] as String?;
     final profile = argResults?['profile'] as String?;
+
+    if (showDeleted) {
+      final deleted = await taskService.listDeleted();
+      if (deleted.isEmpty) {
+        print('No deleted tasks.');
+        return;
+      }
+      print('Deleted Tasks (${deleted.length}):');
+      for (final task in deleted) {
+        final id = task.id.substring(0, 8);
+        final doneTag = task.isDone ? ' [done]' : '';
+        print('  $id  ${task.title}$doneTag');
+      }
+      print('');
+      print(hint('avo task undelete <id>', 'to restore a task'));
+      return;
+    }
+
     var tasks = await taskService.list(includeCompleted: includeCompleted);
 
     // Apply filters (use issueId directly — hasIssueLink requires issueProviderId too)
@@ -818,20 +841,21 @@ class TaskDoneCommand extends TaskSubcommand {
   }
 }
 
-class TaskDeleteCommand extends TaskSubcommand {
-  TaskDeleteCommand(super.taskService);
+class TaskUndoneCommand extends TaskSubcommand {
+  TaskUndoneCommand(super.taskService);
 
   @override
-  String get name => 'delete';
+  String get name => 'undone';
 
   @override
-  String get description => 'Delete a task';
+  String get description => 'Mark a done task as not done';
 
   @override
-  String get invocation => 'avo task delete <id>';
+  String get invocation => 'avo task undone <id>';
 
   @override
-  String? get usageFooter => '\nPrompts for confirmation before deleting.';
+  String? get usageFooter => '\nReverses "avo task done". '
+      'ID can be a prefix (e.g. "a1b2" matches "a1b2c3d4...").';
 
   @override
   Future<void> run() async {
@@ -841,23 +865,145 @@ class TaskDeleteCommand extends TaskSubcommand {
     if (taskId == null) {
       print('Missing task ID.');
       print('');
-      print('  Usage: avo task delete <id>');
+      print('  Usage: avo task undone <id>');
+      print(hint('avo task list -a', 'to see completed tasks'));
+      return;
+    }
+
+    try {
+      final task = await taskService.undone(taskId);
+      print('Marked active: "${task.title}"');
+      print(kvRow('ID:', task.id.substring(0, 8)));
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list -a', 'to see all tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    } on TaskNotDoneException catch (e) {
+      print('Task "${e.task.title}" is not done.');
+      print('');
+      print(hint('avo task done ${taskId}', 'to mark it done first'));
+    }
+  }
+}
+
+class TaskUndeleteCommand extends TaskSubcommand {
+  TaskUndeleteCommand(super.taskService);
+
+  @override
+  String get name => 'undelete';
+
+  @override
+  String get description => 'Restore a deleted task';
+
+  @override
+  String get invocation => 'avo task undelete <id>';
+
+  @override
+  String? get usageFooter => '\nRestores a soft-deleted task.\n'
+      'Use "avo task list --deleted" to find deleted task IDs.';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskId = args.isNotEmpty ? args.first : null;
+
+    if (taskId == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task undelete <id>');
+      print(hint('avo task list --deleted', 'to see deleted tasks'));
+      return;
+    }
+
+    try {
+      final task = await taskService.undelete(taskId);
+      print('Restored: "${task.title}"');
+      print(kvRow('ID:', task.id.substring(0, 8)));
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list --deleted', 'to see deleted tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    } on TaskNotDeletedException catch (e) {
+      print('Task "${e.task.title}" is not deleted.');
+    }
+  }
+}
+
+class TaskDeleteCommand extends TaskSubcommand {
+  final WorklogService worklogService;
+
+  TaskDeleteCommand(super.taskService, this.worklogService) {
+    argParser.addFlag('force', abbr: 'f',
+        help: 'Skip worklog check and confirmation');
+  }
+
+  @override
+  String get name => 'delete';
+
+  @override
+  String get description => 'Delete a task';
+
+  @override
+  String get invocation => 'avo task delete <id> [-f]';
+
+  @override
+  String? get usageFooter => '\nPrompts for confirmation before deleting.\n'
+      'Warns if the task has logged worklogs.\n'
+      'Use --force to skip all checks.';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    final taskId = args.isNotEmpty ? args.first : null;
+    final force = argResults?['force'] as bool? ?? false;
+
+    if (taskId == null) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: avo task delete <id> [-f]');
       print(hint('avo task list', 'to see task IDs'));
       return;
     }
 
     try {
-      // Show task first for confirmation
       final task = await taskService.show(taskId);
-      stdout.write('Delete "${task.title}" (${task.id.substring(0, 8)})? [y/N] ');
-      final input = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
-      if (input != 'y') {
-        print('Cancelled.');
-        return;
+
+      if (!force) {
+        // Check for worklogs
+        final info = await worklogService.worklogInfoForTask(task.id);
+        if (info.count > 0) {
+          final dur = _formatDur(info.total);
+          print(
+              'Warning: This task has $dur logged across ${info.count} worklog(s).');
+        }
+
+        stdout.write(
+            'Delete "${task.title}" (${task.id.substring(0, 8)})? [y/N] ');
+        final input = stdin.readLineSync()?.trim().toLowerCase() ?? 'n';
+        if (input != 'y') {
+          print('Cancelled.');
+          return;
+        }
       }
 
       await taskService.delete(taskId);
       print('Deleted: "${task.title}"');
+      print('');
+      print(hint('avo task undelete ${task.id.substring(0, 8)}', 'to undo'));
     } on TaskNotFoundException {
       print('No task found matching "$taskId".');
       print('');
@@ -870,6 +1016,13 @@ class TaskDeleteCommand extends TaskSubcommand {
       print('');
       print(hintPlain('Use a longer prefix to be specific.'));
     }
+  }
+
+  static String _formatDur(Duration d) {
+    final hours = d.inHours;
+    final minutes = d.inMinutes % 60;
+    if (hours > 0) return '${hours}h ${minutes}m';
+    return '${minutes}m';
   }
 }
 
