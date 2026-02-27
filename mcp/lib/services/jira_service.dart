@@ -106,6 +106,7 @@ class WorklogMismatch {
   final JiraWorklogInfo remote;
   final bool durationDiffers;
   final bool commentDiffers;
+  final bool startTimeDiffers;
   SyncDirection resolution;
 
   WorklogMismatch({
@@ -113,6 +114,7 @@ class WorklogMismatch {
     required this.remote,
     required this.durationDiffers,
     required this.commentDiffers,
+    required this.startTimeDiffers,
     this.resolution = SyncDirection.skip,
   });
 }
@@ -398,9 +400,14 @@ class JiraService {
   }
 
   /// Builds a JQL string for the given config and optional issue key.
+  ///
+  /// When [updatedSinceDays] is non-null and [issueKey] is null, appends
+  /// `AND updated >= '-Nd'` to limit results to recently-changed issues.
+  /// Skipped when [config.jqlFilter] is set (user owns the full JQL).
   static String _buildJql({
     required JiraIntegrationDocument config,
     String? issueKey,
+    int? updatedSinceDays,
   }) {
     if (issueKey != null) return 'key = $issueKey';
     if (config.jqlFilter != null) return config.jqlFilter!;
@@ -409,10 +416,13 @@ class JiraService {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    if (keys.length == 1) {
-      return 'assignee=currentUser() AND project=${keys.first}';
+    final base = keys.length == 1
+        ? 'assignee=currentUser() AND project=${keys.first}'
+        : 'assignee=currentUser() AND project in (${keys.join(', ')})';
+    if (updatedSinceDays != null) {
+      return "$base AND updated >= '-${updatedSinceDays}d'";
     }
-    return 'assignee=currentUser() AND project in (${keys.join(', ')})';
+    return base;
   }
 
   /// Fetches issues from Jira via the search API with automatic pagination.
@@ -420,8 +430,9 @@ class JiraService {
     required JiraIntegrationDocument config,
     required JiraCredentials creds,
     String? issueKey,
+    int? updatedSinceDays,
   }) async {
-    final jql = _buildJql(config: config, issueKey: issueKey);
+    final jql = _buildJql(config: config, issueKey: issueKey, updatedSinceDays: updatedSinceDays);
     final allIssues = <Map<String, dynamic>>[];
     String? nextPageToken;
 
@@ -491,7 +502,8 @@ class JiraService {
   ///
   /// If [issueKey] is given, pulls that specific issue only.
   /// Otherwise pulls all assigned issues across configured project keys.
-  Future<PullResult> pull({String? issueKey}) async {
+  /// When [updatedSinceDays] is set, only fetches issues updated in the last N days.
+  Future<PullResult> pull({String? issueKey, int? updatedSinceDays}) async {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
@@ -500,7 +512,7 @@ class JiraService {
 
     List<Map<String, dynamic>> issues;
     try {
-      issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey);
+      issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey, updatedSinceDays: updatedSinceDays);
     } on JiraSyncException {
       config.recordSyncError('Pull failed');
       await _saveConfig(config);
@@ -734,11 +746,59 @@ class JiraService {
     }
   }
 
+  /// Updates an already-synced worklog on Jira by its local ID.
+  ///
+  /// Returns `true` if the worklog was successfully updated, `false` if not
+  /// applicable (not configured, not synced to Jira, HTTP error).
+  Future<bool> updateWorklog(String worklogId) async {
+    // 1. Load config/creds
+    final config = await getConfig();
+    if (config == null) return false;
+    final creds = await config.loadCredentials();
+    if (creds == null) return false;
+
+    // 2. Load worklog row
+    final rows = await db.select(db.worklogEntries).get();
+    final match = rows.where((w) => w.id == worklogId).toList();
+    if (match.isEmpty) return false;
+    final worklog = WorklogDocument.fromDrift(worklog: match.first, clock: clock);
+    if (worklog.isDeleted || !worklog.isSyncedToJira) return false;
+
+    // 3. Load task to get issueKey
+    final taskRows = await (db.select(db.tasks)
+          ..where((t) => t.id.equals(worklog.taskId)))
+        .get();
+    if (taskRows.isEmpty) return false;
+    final issueKey = taskRows.first.issueId;
+    if (issueKey == null) return false;
+
+    // 4. PUT to Jira
+    try {
+      final body = _buildWorklogBody(worklog);
+      final response = await _makeRequest(
+        config: config,
+        creds: creds,
+        method: 'PUT',
+        path: '/issue/$issueKey/worklog/${worklog.jiraWorklogId}',
+        body: body,
+      );
+      if (response.statusCode != 200) return false;
+
+      final respData = jsonDecode(response.body) as Map<String, dynamic>;
+      _reconcileDuration(worklog, respData);
+      await _saveWorklog(worklog);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Runs a full sync: pull then push.
   ///
   /// If [issueKey] is given, only pulls that specific issue.
-  Future<SyncResult> sync({String? issueKey}) async {
-    final pullResult = await pull(issueKey: issueKey);
+  /// When [updatedSinceDays] is set, only syncs issues updated in the last N days.
+  Future<SyncResult> sync({String? issueKey, int? updatedSinceDays}) async {
+    final pullResult = await pull(issueKey: issueKey, updatedSinceDays: updatedSinceDays);
     final pushResult = await push();
     return SyncResult(pull: pullResult, push: pushResult);
   }
@@ -749,6 +809,7 @@ class JiraService {
   /// to execute the plan later via [executeSyncPlan].
   Future<SyncContext> computeSyncPreview({
     String? issueKey,
+    int? updatedSinceDays,
     SyncProgressCallback? onProgress,
   }) async {
     final config = await getConfig();
@@ -757,7 +818,7 @@ class JiraService {
     final creds = await config.loadCredentials();
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
 
-    final issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey);
+    final issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey, updatedSinceDays: updatedSinceDays);
     onProgress?.call('Fetching issues', issues.length, issues.length);
 
     // Load local state
@@ -862,12 +923,14 @@ class JiraService {
           final localWl = localByJiraId[jiraId]!;
           final durationDiffers = localWl.durationMs ~/ 1000 != timeSpentSeconds;
           final commentDiffers = (localWl.comment ?? '') != (comment ?? '');
-          if (durationDiffers || commentDiffers) {
+          final startTimeDiffers = localWl.startMs != started.millisecondsSinceEpoch;
+          if (durationDiffers || commentDiffers || startTimeDiffers) {
             worklogMismatches.add(WorklogMismatch(
               local: localWl,
               remote: info,
               durationDiffers: durationDiffers,
               commentDiffers: commentDiffers,
+              startTimeDiffers: startTimeDiffers,
             ));
           }
         }
@@ -1025,6 +1088,7 @@ class JiraService {
             failed++;
           }
         case SyncDirection.pull:
+          m.local.startMs = m.remote.started.millisecondsSinceEpoch;
           m.local.durationMs = m.remote.durationMs;
           m.local.endMs = m.local.startMs + m.remote.durationMs;
           m.local.comment = m.remote.comment;

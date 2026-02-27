@@ -891,6 +891,190 @@ void main() {
     });
   });
 
+  group('updateWorklog', () {
+    test('updates a synced worklog via PUT', () async {
+      await writeProfileConfig();
+
+      // Create a linked task + synced worklog
+      final task = await taskService.add(title: 'Update worklog task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 60,
+        comment: 'Original comment',
+      );
+      worklog.linkToJira('5001');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      String? capturedMethod;
+      String? capturedPath;
+      String? capturedBody;
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/worklog')) {
+          capturedMethod = request.method;
+          capturedPath = request.url.path;
+          capturedBody = request.body;
+          return http.Response(jsonEncode({
+            'id': '5001',
+            'timeSpentSeconds': 3600,
+          }), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.updateWorklog(worklog.id);
+      expect(result, isTrue);
+      expect(capturedMethod, equals('PUT'));
+      expect(capturedPath, contains('/issue/AG-1/worklog/5001'));
+
+      // Verify body contains correct fields
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['timeSpentSeconds'], equals(3600));
+      expect(body, contains('comment'));
+    });
+
+    test('skips worklog not synced to Jira', () async {
+      await writeProfileConfig();
+
+      // Create a linked task + unsynced worklog
+      final task = await taskService.add(title: 'Unsynced worklog task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 30,
+      );
+
+      var requestMade = false;
+      final mockClient = MockClient((request) async {
+        requestMade = true;
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.updateWorklog(worklog.id);
+      expect(result, isFalse);
+      expect(requestMade, isFalse);
+    });
+
+    test('returns false on HTTP error', () async {
+      await writeProfileConfig();
+
+      final task = await taskService.add(title: 'HTTP error task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 45,
+      );
+      worklog.linkToJira('6001');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/worklog')) {
+          return http.Response('Server Error', 500);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.updateWorklog(worklog.id);
+      expect(result, isFalse);
+    });
+
+    test('reconciles duration from Jira response', () async {
+      await writeProfileConfig();
+
+      final task = await taskService.add(title: 'Reconcile update task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      // 91 minutes = 5460 seconds
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 91,
+      );
+      worklog.linkToJira('7001');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/worklog')) {
+          // Jira rounds to 90 minutes = 5400 seconds
+          return http.Response(jsonEncode({
+            'id': '7001',
+            'timeSpentSeconds': 5400,
+          }), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.updateWorklog(worklog.id);
+      expect(result, isTrue);
+
+      // Verify duration was reconciled
+      final worklogs = await db.select(db.worklogEntries).get();
+      final updated = worklogs.firstWhere((w) => w.jiraWorklogId == '7001');
+      expect(updated.duration, equals(5400000)); // 5400s * 1000
+    });
+  });
+
+    test('appends updated filter when updatedSinceDays given', () async {
+      await writeProfileConfig();
+
+      String? capturedBody;
+      final mockClient = MockClient((request) async {
+        capturedBody = request.body;
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      await service.pull(updatedSinceDays: 7);
+
+      expect(capturedBody, isNotNull);
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['jql'], contains("updated >= '-7d'"));
+      expect(body['jql'], contains('project in (AG, ABDE)'));
+    });
+
+    test('ignores updatedSinceDays when issueKey is given', () async {
+      await writeProfileConfig();
+
+      String? capturedBody;
+      final mockClient = MockClient((request) async {
+        capturedBody = request.body;
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      await service.pull(issueKey: 'AG-123', updatedSinceDays: 7);
+
+      expect(capturedBody, isNotNull);
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['jql'], equals('key = AG-123'));
+    });
+
   group('push', () {
     test('throws when not configured', () async {
       final service = createService();
@@ -1119,6 +1303,91 @@ void main() {
       expect(ctx.preview.worklogMismatches.first.durationDiffers, isFalse);
     });
 
+    test('detects start time mismatch', () async {
+      await writeProfileConfig();
+
+      final task = await taskService.add(title: 'Start time task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: DateTime(2026, 2, 10, 9).millisecondsSinceEpoch,
+        end: DateTime(2026, 2, 10, 10).millisecondsSinceEpoch,
+      );
+      worklog.linkToJira('7501');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = buildPreviewClient(
+        issues: [
+          {'key': 'AG-1', 'fields': {'summary': 'Start time task'}},
+        ],
+        worklogsByIssue: {
+          'AG-1': [
+            {
+              'id': '7501',
+              'author': {'accountId': 'user-123'},
+              'timeSpentSeconds': 3600, // same duration
+              'started': '2026-02-10T14:00:00.000+0000', // different start
+              'created': '2026-02-10T09:00:00.000+0000',
+            },
+          ],
+        },
+      );
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, hasLength(1));
+      expect(ctx.preview.worklogMismatches.first.startTimeDiffers, isTrue);
+      expect(ctx.preview.worklogMismatches.first.durationDiffers, isFalse);
+      expect(ctx.preview.worklogMismatches.first.commentDiffers, isFalse);
+    });
+
+    test('ignores matching start times', () async {
+      await writeProfileConfig();
+
+      final task = await taskService.add(title: 'Matching start task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch,
+        end: DateTime.utc(2026, 2, 10, 10).millisecondsSinceEpoch,
+      );
+      worklog.linkToJira('7502');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = buildPreviewClient(
+        issues: [
+          {'key': 'AG-1', 'fields': {'summary': 'Matching start task'}},
+        ],
+        worklogsByIssue: {
+          'AG-1': [
+            {
+              'id': '7502',
+              'author': {'accountId': 'user-123'},
+              'timeSpentSeconds': 7200, // different duration
+              'started': '2026-02-10T09:00:00.000+0000', // same start
+              'created': '2026-02-10T09:00:00.000+0000',
+            },
+          ],
+        },
+      );
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, hasLength(1));
+      expect(ctx.preview.worklogMismatches.first.durationDiffers, isTrue);
+      expect(ctx.preview.worklogMismatches.first.startTimeDiffers, isFalse);
+    });
+
     test('detects title mismatch', () async {
       await writeProfileConfig();
 
@@ -1150,8 +1419,8 @@ void main() {
       final worklog = WorklogDocument.create(
         clock: clock,
         taskId: task.id,
-        start: DateTime(2026, 2, 10, 9).millisecondsSinceEpoch,
-        end: DateTime(2026, 2, 10, 10).millisecondsSinceEpoch,
+        start: DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch,
+        end: DateTime.utc(2026, 2, 10, 10).millisecondsSinceEpoch,
       );
       worklog.linkToJira('8001');
       await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
@@ -1179,6 +1448,29 @@ void main() {
       expect(ctx.preview.hasChanges, isFalse);
       expect(ctx.preview.hasMismatches, isFalse);
       expect(ctx.preview.upToDateTasks, equals(1));
+    });
+
+    test('passes updatedSinceDays filter through to JQL', () async {
+      await writeProfileConfig();
+
+      String? capturedJql;
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/search/jql')) {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          capturedJql = body['jql'] as String?;
+          return http.Response(jsonEncode({'issues': []}), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      await service.computeSyncPreview(updatedSinceDays: 14);
+
+      expect(capturedJql, isNotNull);
+      expect(capturedJql, contains("updated >= '-14d'"));
+      expect(capturedJql, contains('project in (AG, ABDE)'));
     });
   });
 
@@ -1509,6 +1801,65 @@ void main() {
       final updated = worklogs.firstWhere((w) => w.jiraWorklogId == '12001');
       expect(updated.duration, equals(7200000)); // 2h in ms
       expect(updated.comment, equals('Updated comment'));
+    });
+
+    test('pulls start time from remote worklog mismatch', () async {
+      final task = await taskService.add(title: 'Start time pull task');
+      task.issueId = 'AG-51';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: DateTime(2026, 2, 10, 9).millisecondsSinceEpoch,
+        end: DateTime(2026, 2, 10, 10).millisecondsSinceEpoch,
+      );
+      worklog.linkToJira('12101');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/search/jql')) {
+          return http.Response(jsonEncode({
+            'issues': [
+              {'key': 'AG-51', 'fields': {'summary': 'Start time pull task'}},
+            ],
+          }), 200);
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(jsonEncode({
+            'worklogs': [
+              {
+                'id': '12101',
+                'author': {'accountId': 'user-123'},
+                'timeSpentSeconds': 3600, // same 1h duration
+                'started': '2026-02-10T14:00:00.000+0000', // different start
+                'created': '2026-02-10T09:00:00.000+0000',
+              },
+            ],
+          }), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+      final service = await setupService(client);
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, hasLength(1));
+      expect(ctx.preview.worklogMismatches.first.startTimeDiffers, isTrue);
+
+      ctx.preview.worklogMismatches.first.resolution = SyncDirection.pull;
+
+      final result = await service.executeSyncPlan(ctx);
+      expect(result.mismatchesPulled, equals(1));
+
+      final worklogs = await db.select(db.worklogEntries).get();
+      final updated = worklogs.firstWhere((w) => w.jiraWorklogId == '12101');
+      final expectedStart = DateTime.parse('2026-02-10T14:00:00.000+0000').millisecondsSinceEpoch;
+      expect(updated.start, equals(expectedStart));
+      expect(updated.duration, equals(3600000)); // 1h in ms
     });
 
     test('skips worklog mismatch (no HTTP, no DB change)', () async {
