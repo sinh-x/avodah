@@ -72,4 +72,5 @@ jobs:
           BUILD=$(grep -oP 'version:\s*[0-9]+\.[0-9]+\.[0-9]+\+\K[0-9]+' pubspec.yaml)
           git add pubspec.yaml
           git commit -m "chore: bump build to +$BUILD"
+          git pull --rebase
           git push
