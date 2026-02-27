@@ -455,6 +455,87 @@ void main() {
     });
   });
 
+  group('setDescription', () {
+    test('sets description on a task', () async {
+      final created = await service.add(title: 'Noted task');
+
+      final updated = await service.setDescription(created.id, 'My notes');
+
+      expect(updated.description, equals('My notes'));
+    });
+
+    test('persists description', () async {
+      final created = await service.add(title: 'Noted task');
+      await service.setDescription(created.id, 'Persisted notes');
+
+      final fetched = await service.show(created.id);
+      expect(fetched.description, equals('Persisted notes'));
+    });
+
+    test('clears description with null', () async {
+      final created = await service.add(title: 'Noted task');
+      await service.setDescription(created.id, 'Some notes');
+
+      final updated = await service.setDescription(created.id, null);
+
+      expect(updated.description, isNull);
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.setDescription('nonexistent', 'notes'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
+  group('appendNote', () {
+    test('appends to empty description', () async {
+      final created = await service.add(title: 'Append task');
+
+      final updated = await service.appendNote(created.id, 'First note');
+
+      expect(updated.description, contains('First note'));
+      // Should have timestamp prefix
+      expect(updated.description, matches(RegExp(r'_\d{4}-\d{2}-\d{2} \d{2}:\d{2}_')));
+    });
+
+    test('appends to existing description with separator', () async {
+      final created = await service.add(title: 'Append task');
+      await service.setDescription(created.id, 'Existing content');
+
+      final updated = await service.appendNote(created.id, 'Second note');
+
+      expect(updated.description, startsWith('Existing content'));
+      expect(updated.description, contains('---'));
+      expect(updated.description, contains('Second note'));
+    });
+
+    test('persists appended note', () async {
+      final created = await service.add(title: 'Persist append');
+      await service.appendNote(created.id, 'Persisted note');
+
+      final fetched = await service.show(created.id);
+      expect(fetched.description, contains('Persisted note'));
+    });
+
+    test('works with prefix match', () async {
+      final created = await service.add(title: 'Prefix append');
+
+      final updated = await service.appendNote(
+          created.id.substring(0, 8), 'Prefix note');
+
+      expect(updated.description, contains('Prefix note'));
+    });
+
+    test('throws TaskNotFoundException for unknown ID', () async {
+      expect(
+        () => service.appendNote('nonexistent', 'note'),
+        throwsA(isA<TaskNotFoundException>()),
+      );
+    });
+  });
+
   group('listDeleted', () {
     test('returns only deleted tasks', () async {
       await service.add(title: 'Active');

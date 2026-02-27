@@ -548,6 +548,7 @@ class TaskCommand extends Command<void> {
     addSubcommand(TaskUndeleteCommand(taskService));
     addSubcommand(TaskDueCommand(taskService));
     addSubcommand(TaskCatCommand(taskService));
+    addSubcommand(TaskNoteCommand(taskService));
   }
 
   @override
@@ -555,7 +556,7 @@ class TaskCommand extends Command<void> {
 
   @override
   String get description =>
-      'Task management (add, list, show, done, undone, delete, undelete, due, cat)';
+      'Task management (add, list, show, done, undone, delete, undelete, due, cat, note)';
 }
 
 class TaskAddCommand extends TaskSubcommand {
@@ -1150,6 +1151,110 @@ class TaskCatCommand extends TaskSubcommand {
         print('Set category on "${task.title}": $category');
       } else {
         print('Cleared category on "${task.title}".');
+      }
+    } on TaskNotFoundException {
+      print('No task found matching "$taskId".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskId":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
+  }
+}
+
+class TaskNoteCommand extends TaskSubcommand {
+  TaskNoteCommand(super.taskService) {
+    argParser.addFlag('add', abbr: 'a', help: 'Append a timestamped note');
+    argParser.addOption('file', abbr: 'f', help: 'Set description from file');
+    argParser.addFlag('clear', help: 'Clear description');
+  }
+
+  @override
+  String get name => 'note';
+
+  @override
+  String get description => 'View or edit task notes/description';
+
+  @override
+  String get invocation =>
+      'avo task note <id> [text] [--add "text"] [--file path] [--clear]';
+
+  @override
+  String? get usageFooter => '\nExamples:\n'
+      '  avo task note a1b2                 # view notes\n'
+      '  avo task note a1b2 "My notes"      # set description\n'
+      '  avo task note a1b2 -a "More info"  # append timestamped note\n'
+      '  avo task note a1b2 -f notes.md     # set from file\n'
+      '  avo task note a1b2 --clear         # clear description';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.isEmpty) {
+      print('Missing task ID.');
+      print('');
+      print('  Usage: $invocation');
+      print(hint('avo task list', 'to see task IDs'));
+      return;
+    }
+
+    final taskId = args.first;
+    final isAdd = argResults?['add'] as bool? ?? false;
+    final filePath = argResults?['file'] as String?;
+    final isClear = argResults?['clear'] as bool? ?? false;
+
+    try {
+      if (isClear) {
+        final task = await taskService.setDescription(taskId, null);
+        print('Cleared notes on "${task.title}".');
+        return;
+      }
+
+      if (filePath != null) {
+        final file = File(filePath);
+        if (!file.existsSync()) {
+          print('File not found: "$filePath"');
+          return;
+        }
+        final content = file.readAsStringSync();
+        final task = await taskService.setDescription(taskId, content);
+        print('Set notes on "${task.title}" from $filePath');
+        return;
+      }
+
+      final text = args.length > 1 ? args.sublist(1).join(' ') : null;
+
+      if (isAdd) {
+        if (text == null || text.isEmpty) {
+          print('Missing note text.');
+          print('');
+          print('  Usage: avo task note <id> -a "text"');
+          return;
+        }
+        final task = await taskService.appendNote(taskId, text);
+        print('Appended note to "${task.title}".');
+        return;
+      }
+
+      if (text != null) {
+        final task = await taskService.setDescription(taskId, text);
+        print('Set notes on "${task.title}".');
+        return;
+      }
+
+      // View mode
+      final task = await taskService.show(taskId);
+      if (task.description == null || task.description!.isEmpty) {
+        print('No notes on "${task.title}".');
+        print('');
+        print(hint('avo task note ${taskId} "text"', 'to add notes'));
+      } else {
+        print(task.description!);
       }
     } on TaskNotFoundException {
       print('No task found matching "$taskId".');
