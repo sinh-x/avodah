@@ -9,7 +9,8 @@ jobs:
     # Skip version bump commits and bot commits
     if: >-
       !startsWith(github.event.head_commit.message, 'chore: bump version') &&
-      !startsWith(github.event.head_commit.message, 'chore(ci):')
+      !startsWith(github.event.head_commit.message, 'chore(ci):') &&
+      !startsWith(github.event.head_commit.message, 'chore: bump build')
     runs-on: ubuntu-latest
 
     permissions:
@@ -38,61 +39,73 @@ jobs:
       - name: Detect bump type
         id: detect
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            RANGE="HEAD"
+          # Read full commit message (subject + body)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%B" HEAD)
+
+          # Look for explicit "Bump: <type>" trailer in commit message.
+          # Supported: Bump: patch, Bump: minor, Bump: major, Bump: X.Y.Z
+          BUMP=$(echo "$COMMIT_MSG" | grep -oP '^Bump:\s*\K\S+' || true)
+
+          if [ -n "$BUMP" ]; then
+            echo "type=$BUMP" >> "$GITHUB_OUTPUT"
+            echo "semver=true" >> "$GITHUB_OUTPUT"
+            echo "Explicit bump: $BUMP"
           else
-            RANGE="${LAST_TAG}..HEAD"
+            echo "type=build" >> "$GITHUB_OUTPUT"
+            echo "semver=false" >> "$GITHUB_OUTPUT"
+            echo "No Bump trailer — build number only"
           fi
-
-          COMMITS=$(git log "$RANGE" --pretty=format:"%s")
-
-          if echo "$COMMITS" | grep -qiE "BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:"; then
-            echo "type=major" >> "$GITHUB_OUTPUT"
-          elif echo "$COMMITS" | grep -qE "^feat(\([^)]*\))?:"; then
-            echo "type=minor" >> "$GITHUB_OUTPUT"
-          else
-            echo "type=patch" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "Detected bump type: $(grep type "$GITHUB_OUTPUT" | cut -d= -f2)"
 
       - name: Bump version
         id: version
         run: |
-          dart run tool/bump_version.dart ${{ steps.detect.outputs.type }}
+          BUMP_TYPE="${{ steps.detect.outputs.type }}"
+          IS_SEMVER="${{ steps.detect.outputs.semver }}"
 
-          # Reset build number to +1
-          sed -i -E 's/(version:\s*[0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+/\1+1/' pubspec.yaml
+          if [ "$IS_SEMVER" = "true" ]; then
+            # Semver bump (patch/minor/major/X.Y.Z) + reset build to +1
+            dart run tool/bump_version.dart "$BUMP_TYPE"
+            sed -i -E 's/(version:\s*[0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+/\1+1/' pubspec.yaml
+          else
+            # Build number bump only
+            dart run tool/bump_build.dart
+          fi
 
           VERSION=$(grep -oP "avodahVersion\s*=\s*'\K[^']+" packages/avodah_core/lib/version.dart)
+          BUILD=$(grep -oP 'version:\s*[0-9]+\.[0-9]+\.[0-9]+\+\K[0-9]+' pubspec.yaml)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "full=$VERSION+$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION+$BUILD (semver=$IS_SEMVER)"
 
       - name: Commit and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push
-          git push origin "v${{ steps.version.outputs.version }}"
 
-      - name: Extract changelog
-        id: changelog
-        run: |
+          IS_SEMVER="${{ steps.detect.outputs.semver }}"
           VERSION="${{ steps.version.outputs.version }}"
-          # Extract the section for this version from CHANGELOG.md
-          BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{ /^## \[$VERSION\]/d; /^## \[/d; p; }" CHANGELOG.md)
-          # Use a delimiter for multiline output
-          echo "body<<CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
-          echo "$BODY" >> "$GITHUB_OUTPUT"
-          echo "CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+          FULL="${{ steps.version.outputs.full }}"
+
+          git add -A
+
+          if [ "$IS_SEMVER" = "true" ]; then
+            git commit -m "chore: bump version to $VERSION"
+            git tag -a "v$VERSION" -m "Release v$VERSION"
+            git push
+            git push origin "v$VERSION"
+          else
+            git commit -m "chore: bump build to +${{ steps.version.outputs.build }}"
+            git push
+          fi
 
       - name: Create GitHub Release
+        if: steps.detect.outputs.semver == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
-            --title "v${{ steps.version.outputs.version }}" \
-            --notes "${{ steps.changelog.outputs.body }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          BODY=$(sed -n "/^## \[$VERSION\]/,/^## \[/{ /^## \[$VERSION\]/d; /^## \[/d; p; }" CHANGELOG.md)
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes "${BODY:-Release v$VERSION}"
