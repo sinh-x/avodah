@@ -1545,7 +1545,7 @@ class McpServer {
           return {
             'ok': true,
             'pull': {'created': result.pull.created, 'updated': result.pull.updated},
-            'push': {'pushed': result.push.pushed, 'failed': result.push.failed},
+            'push': {'pushed': result.push.pushed, 'updated': result.push.updated, 'failed': result.push.failed},
           };
         } on JiraNotConfiguredException catch (e) {
           return {'ok': false, 'error': e.toString()};

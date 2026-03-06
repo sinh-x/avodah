@@ -177,6 +177,10 @@ class WorklogService {
       worklog.comment = comment;
     }
 
+    if (worklog.isSyncedToJira) {
+      worklog.markJiraDirty();
+    }
+
     worklog.updatedMs = DateTime.now().millisecondsSinceEpoch;
     await _saveWorklog(worklog);
     return worklog;

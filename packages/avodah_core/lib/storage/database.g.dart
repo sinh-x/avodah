@@ -3672,6 +3672,21 @@ class $WorklogEntriesTable extends WorklogEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _jiraDirtyMeta = const VerificationMeta(
+    'jiraDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> jiraDirty = GeneratedColumn<bool>(
+    'jira_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("jira_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdMeta = const VerificationMeta(
     'created',
   );
@@ -3728,6 +3743,7 @@ class $WorklogEntriesTable extends WorklogEntries
     date,
     comment,
     jiraWorklogId,
+    jiraDirty,
     created,
     updated,
     crdtClock,
@@ -3805,6 +3821,12 @@ class $WorklogEntriesTable extends WorklogEntries
         ),
       );
     }
+    if (data.containsKey('jira_dirty')) {
+      context.handle(
+        _jiraDirtyMeta,
+        jiraDirty.isAcceptableOrUnknown(data['jira_dirty']!, _jiraDirtyMeta),
+      );
+    }
     if (data.containsKey('created')) {
       context.handle(
         _createdMeta,
@@ -3874,6 +3896,10 @@ class $WorklogEntriesTable extends WorklogEntries
         DriftSqlType.string,
         data['${effectivePrefix}jira_worklog_id'],
       ),
+      jiraDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}jira_dirty'],
+      )!,
       created: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created'],
@@ -3908,6 +3934,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
   final String date;
   final String? comment;
   final String? jiraWorklogId;
+  final bool jiraDirty;
   final int created;
   final int updated;
   final String crdtClock;
@@ -3921,6 +3948,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     required this.date,
     this.comment,
     this.jiraWorklogId,
+    required this.jiraDirty,
     required this.created,
     required this.updated,
     required this.crdtClock,
@@ -3941,6 +3969,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     if (!nullToAbsent || jiraWorklogId != null) {
       map['jira_worklog_id'] = Variable<String>(jiraWorklogId);
     }
+    map['jira_dirty'] = Variable<bool>(jiraDirty);
     map['created'] = Variable<int>(created);
     map['updated'] = Variable<int>(updated);
     map['crdt_clock'] = Variable<String>(crdtClock);
@@ -3962,6 +3991,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       jiraWorklogId: jiraWorklogId == null && nullToAbsent
           ? const Value.absent()
           : Value(jiraWorklogId),
+      jiraDirty: Value(jiraDirty),
       created: Value(created),
       updated: Value(updated),
       crdtClock: Value(crdtClock),
@@ -3983,6 +4013,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       date: serializer.fromJson<String>(json['date']),
       comment: serializer.fromJson<String?>(json['comment']),
       jiraWorklogId: serializer.fromJson<String?>(json['jiraWorklogId']),
+      jiraDirty: serializer.fromJson<bool>(json['jiraDirty']),
       created: serializer.fromJson<int>(json['created']),
       updated: serializer.fromJson<int>(json['updated']),
       crdtClock: serializer.fromJson<String>(json['crdtClock']),
@@ -4001,6 +4032,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       'date': serializer.toJson<String>(date),
       'comment': serializer.toJson<String?>(comment),
       'jiraWorklogId': serializer.toJson<String?>(jiraWorklogId),
+      'jiraDirty': serializer.toJson<bool>(jiraDirty),
       'created': serializer.toJson<int>(created),
       'updated': serializer.toJson<int>(updated),
       'crdtClock': serializer.toJson<String>(crdtClock),
@@ -4017,6 +4049,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     String? date,
     Value<String?> comment = const Value.absent(),
     Value<String?> jiraWorklogId = const Value.absent(),
+    bool? jiraDirty,
     int? created,
     int? updated,
     String? crdtClock,
@@ -4032,6 +4065,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     jiraWorklogId: jiraWorklogId.present
         ? jiraWorklogId.value
         : this.jiraWorklogId,
+    jiraDirty: jiraDirty ?? this.jiraDirty,
     created: created ?? this.created,
     updated: updated ?? this.updated,
     crdtClock: crdtClock ?? this.crdtClock,
@@ -4049,6 +4083,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       jiraWorklogId: data.jiraWorklogId.present
           ? data.jiraWorklogId.value
           : this.jiraWorklogId,
+      jiraDirty: data.jiraDirty.present ? data.jiraDirty.value : this.jiraDirty,
       created: data.created.present ? data.created.value : this.created,
       updated: data.updated.present ? data.updated.value : this.updated,
       crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
@@ -4067,6 +4102,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
           ..write('date: $date, ')
           ..write('comment: $comment, ')
           ..write('jiraWorklogId: $jiraWorklogId, ')
+          ..write('jiraDirty: $jiraDirty, ')
           ..write('created: $created, ')
           ..write('updated: $updated, ')
           ..write('crdtClock: $crdtClock, ')
@@ -4085,6 +4121,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     date,
     comment,
     jiraWorklogId,
+    jiraDirty,
     created,
     updated,
     crdtClock,
@@ -4102,6 +4139,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
           other.date == this.date &&
           other.comment == this.comment &&
           other.jiraWorklogId == this.jiraWorklogId &&
+          other.jiraDirty == this.jiraDirty &&
           other.created == this.created &&
           other.updated == this.updated &&
           other.crdtClock == this.crdtClock &&
@@ -4117,6 +4155,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
   final Value<String> date;
   final Value<String?> comment;
   final Value<String?> jiraWorklogId;
+  final Value<bool> jiraDirty;
   final Value<int> created;
   final Value<int> updated;
   final Value<String> crdtClock;
@@ -4131,6 +4170,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     this.date = const Value.absent(),
     this.comment = const Value.absent(),
     this.jiraWorklogId = const Value.absent(),
+    this.jiraDirty = const Value.absent(),
     this.created = const Value.absent(),
     this.updated = const Value.absent(),
     this.crdtClock = const Value.absent(),
@@ -4146,6 +4186,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     required String date,
     this.comment = const Value.absent(),
     this.jiraWorklogId = const Value.absent(),
+    this.jiraDirty = const Value.absent(),
     required int created,
     required int updated,
     this.crdtClock = const Value.absent(),
@@ -4168,6 +4209,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     Expression<String>? date,
     Expression<String>? comment,
     Expression<String>? jiraWorklogId,
+    Expression<bool>? jiraDirty,
     Expression<int>? created,
     Expression<int>? updated,
     Expression<String>? crdtClock,
@@ -4183,6 +4225,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
       if (date != null) 'date': date,
       if (comment != null) 'comment': comment,
       if (jiraWorklogId != null) 'jira_worklog_id': jiraWorklogId,
+      if (jiraDirty != null) 'jira_dirty': jiraDirty,
       if (created != null) 'created': created,
       if (updated != null) 'updated': updated,
       if (crdtClock != null) 'crdt_clock': crdtClock,
@@ -4200,6 +4243,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     Value<String>? date,
     Value<String?>? comment,
     Value<String?>? jiraWorklogId,
+    Value<bool>? jiraDirty,
     Value<int>? created,
     Value<int>? updated,
     Value<String>? crdtClock,
@@ -4215,6 +4259,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
       date: date ?? this.date,
       comment: comment ?? this.comment,
       jiraWorklogId: jiraWorklogId ?? this.jiraWorklogId,
+      jiraDirty: jiraDirty ?? this.jiraDirty,
       created: created ?? this.created,
       updated: updated ?? this.updated,
       crdtClock: crdtClock ?? this.crdtClock,
@@ -4250,6 +4295,9 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     if (jiraWorklogId.present) {
       map['jira_worklog_id'] = Variable<String>(jiraWorklogId.value);
     }
+    if (jiraDirty.present) {
+      map['jira_dirty'] = Variable<bool>(jiraDirty.value);
+    }
     if (created.present) {
       map['created'] = Variable<int>(created.value);
     }
@@ -4279,6 +4327,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
           ..write('date: $date, ')
           ..write('comment: $comment, ')
           ..write('jiraWorklogId: $jiraWorklogId, ')
+          ..write('jiraDirty: $jiraDirty, ')
           ..write('created: $created, ')
           ..write('updated: $updated, ')
           ..write('crdtClock: $crdtClock, ')
@@ -8739,6 +8788,7 @@ typedef $$WorklogEntriesTableCreateCompanionBuilder =
       required String date,
       Value<String?> comment,
       Value<String?> jiraWorklogId,
+      Value<bool> jiraDirty,
       required int created,
       required int updated,
       Value<String> crdtClock,
@@ -8755,6 +8805,7 @@ typedef $$WorklogEntriesTableUpdateCompanionBuilder =
       Value<String> date,
       Value<String?> comment,
       Value<String?> jiraWorklogId,
+      Value<bool> jiraDirty,
       Value<int> created,
       Value<int> updated,
       Value<String> crdtClock,
@@ -8808,6 +8859,11 @@ class $$WorklogEntriesTableFilterComposer
 
   ColumnFilters<String> get jiraWorklogId => $composableBuilder(
     column: $table.jiraWorklogId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get jiraDirty => $composableBuilder(
+    column: $table.jiraDirty,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8881,6 +8937,11 @@ class $$WorklogEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get jiraDirty => $composableBuilder(
+    column: $table.jiraDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get created => $composableBuilder(
     column: $table.created,
     builder: (column) => ColumnOrderings(column),
@@ -8937,6 +8998,9 @@ class $$WorklogEntriesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get jiraDirty =>
+      $composableBuilder(column: $table.jiraDirty, builder: (column) => column);
+
   GeneratedColumn<int> get created =>
       $composableBuilder(column: $table.created, builder: (column) => column);
 
@@ -8991,6 +9055,7 @@ class $$WorklogEntriesTableTableManager
                 Value<String> date = const Value.absent(),
                 Value<String?> comment = const Value.absent(),
                 Value<String?> jiraWorklogId = const Value.absent(),
+                Value<bool> jiraDirty = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<int> updated = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
@@ -9005,6 +9070,7 @@ class $$WorklogEntriesTableTableManager
                 date: date,
                 comment: comment,
                 jiraWorklogId: jiraWorklogId,
+                jiraDirty: jiraDirty,
                 created: created,
                 updated: updated,
                 crdtClock: crdtClock,
@@ -9021,6 +9087,7 @@ class $$WorklogEntriesTableTableManager
                 required String date,
                 Value<String?> comment = const Value.absent(),
                 Value<String?> jiraWorklogId = const Value.absent(),
+                Value<bool> jiraDirty = const Value.absent(),
                 required int created,
                 required int updated,
                 Value<String> crdtClock = const Value.absent(),
@@ -9035,6 +9102,7 @@ class $$WorklogEntriesTableTableManager
                 date: date,
                 comment: comment,
                 jiraWorklogId: jiraWorklogId,
+                jiraDirty: jiraDirty,
                 created: created,
                 updated: updated,
                 crdtClock: crdtClock,

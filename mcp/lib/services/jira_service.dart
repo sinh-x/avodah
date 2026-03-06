@@ -31,12 +31,13 @@ class PullResult {
 /// Result of a Jira push operation.
 class PushResult {
   final int pushed;
+  final int updated;
   final int failed;
 
-  const PushResult({required this.pushed, required this.failed});
+  const PushResult({required this.pushed, this.updated = 0, required this.failed});
 
   @override
-  String toString() => 'PushResult(pushed: $pushed, failed: $failed)';
+  String toString() => 'PushResult(pushed: $pushed, updated: $updated, failed: $failed)';
 }
 
 /// Combined result of a full sync (pull + push).
@@ -689,12 +690,34 @@ class JiraService {
       }
     }
 
-    if (pushed > 0) {
+    // Also re-sync dirty (edited) worklogs that are already linked to Jira
+    var updated = 0;
+    final dirtyWorklogs = allWorklogs.where((w) {
+      return w.jiraWorklogId != null && w.jiraDirty;
+    }).toList();
+
+    for (final row in dirtyWorklogs) {
+      final worklog = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      if (worklog.isDeleted) continue;
+
+      try {
+        final success = await updateWorklog(worklog.id);
+        if (success) {
+          updated++;
+        } else {
+          failed++;
+        }
+      } catch (_) {
+        failed++;
+      }
+    }
+
+    if (pushed > 0 || updated > 0) {
       config.recordSyncSuccess();
       await _saveConfig(config);
     }
 
-    return PushResult(pushed: pushed, failed: failed);
+    return PushResult(pushed: pushed, updated: updated, failed: failed);
   }
 
   /// Pushes a single worklog to Jira by its local ID.
@@ -786,6 +809,7 @@ class JiraService {
 
       final respData = jsonDecode(response.body) as Map<String, dynamic>;
       _reconcileDuration(worklog, respData);
+      worklog.clearJiraDirty();
       await _saveWorklog(worklog);
       return true;
     } catch (_) {
@@ -1079,6 +1103,7 @@ class JiraService {
             if (response.statusCode == 200) {
               final respData = jsonDecode(response.body) as Map<String, dynamic>;
               _reconcileDuration(m.local, respData);
+              m.local.clearJiraDirty();
               await _saveWorklog(m.local);
               mismatchesPushed++;
             } else {

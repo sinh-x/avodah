@@ -1961,7 +1961,7 @@ class WorklogListCommand extends WorklogSubcommand {
       final dur = formatDuration(Duration(milliseconds: w.durationMs));
       final startDate = formatRelativeDate(w.startTime);
       final startTime = formatTime(w.startTime);
-      final syncIcon = w.isSyncedToJira ? ' [synced]' : '';
+      final syncIcon = w.jiraDirty ? ' [modified]' : w.isSyncedToJira ? ' [synced]' : '';
       final commentStr = w.comment != null && w.comment!.isNotEmpty
           ? '  "${w.comment}"'
           : '';
