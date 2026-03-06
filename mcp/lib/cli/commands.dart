@@ -636,6 +636,9 @@ class TaskListCommand extends TaskSubcommand {
         help: 'Filter by project (Jira key with -s jira, local project otherwise)');
     argParser.addOption('profile',
         help: 'Filter by Jira profile name (e.g. work, personal)');
+    argParser.addOption('format',
+        help: 'Output format (completion: id<TAB>title for shell completions)',
+        allowed: ['completion']);
   }
 
   @override
@@ -665,6 +668,16 @@ class TaskListCommand extends TaskSubcommand {
     final source = argResults?['source'] as String?;
     final project = argResults?['project'] as String?;
     final profile = argResults?['profile'] as String?;
+    final format = argResults?['format'] as String?;
+
+    // Shell completion output: raw id<TAB>title lines
+    if (format == 'completion') {
+      final tasks = await taskService.list();
+      for (final task in tasks) {
+        print('${task.id.substring(0, 8)}\t${task.title}');
+      }
+      return;
+    }
 
     if (showDeleted) {
       final deleted = await taskService.listDeleted();
@@ -1961,7 +1974,7 @@ class WorklogListCommand extends WorklogSubcommand {
       final dur = formatDuration(Duration(milliseconds: w.durationMs));
       final startDate = formatRelativeDate(w.startTime);
       final startTime = formatTime(w.startTime);
-      final syncIcon = w.isSyncedToJira ? ' [synced]' : '';
+      final syncIcon = w.jiraDirty ? ' [modified]' : w.isSyncedToJira ? ' [synced]' : '';
       final commentStr = w.comment != null && w.comment!.isNotEmpty
           ? '  "${w.comment}"'
           : '';
@@ -3446,4 +3459,360 @@ class JiraSetupCommand extends JiraSubcommand {
     print(hintPlain('Credentials saved to: $credPath'));
     print(hint('avo jira sync', 'to pull issues and push worklogs'));
   }
+}
+
+// ============================================================
+// DB Inspection Commands
+// ============================================================
+
+/// DB inspection command group.
+class DbCommand extends Command<void> {
+  DbCommand({
+    required AppDatabase db,
+    required HybridLogicalClock clock,
+    required AvodahPaths paths,
+  }) {
+    addSubcommand(DbStatsCommand(db: db, clock: clock, paths: paths));
+    addSubcommand(DbOrphansCommand(db: db, clock: clock));
+    addSubcommand(DbIntegrityCommand(db: db, clock: clock));
+    addSubcommand(DbDumpCommand(db: db));
+  }
+
+  @override
+  String get name => 'db';
+
+  @override
+  String get description => 'Database inspection tools (stats, orphans, integrity, dump)';
+}
+
+class DbStatsCommand extends Command<void> {
+  final AppDatabase db;
+  final HybridLogicalClock clock;
+  final AvodahPaths paths;
+
+  DbStatsCommand({required this.db, required this.clock, required this.paths});
+
+  @override
+  String get name => 'stats';
+
+  @override
+  String get description => 'Show database statistics';
+
+  @override
+  Future<void> run() async {
+    // Tasks
+    final taskRows = await db.select(db.tasks).get();
+    final tasks = taskRows
+        .map((r) => TaskDocument.fromDrift(task: r, clock: clock))
+        .toList();
+    final activeTasks = tasks.where((t) => !t.isDeleted && !t.isDone).length;
+    final doneTasks = tasks.where((t) => !t.isDeleted && t.isDone).length;
+    final deletedTasks = tasks.where((t) => t.isDeleted).length;
+
+    // Worklogs
+    final wlRows = await db.select(db.worklogEntries).get();
+    final worklogs = wlRows
+        .map((r) => WorklogDocument.fromDrift(worklog: r, clock: clock))
+        .toList();
+    final activeWorklogs = worklogs.where((w) => !w.isDeleted).length;
+    final deletedWorklogs = worklogs.where((w) => w.isDeleted).length;
+    final syncedWorklogs = worklogs
+        .where((w) => !w.isDeleted && w.jiraWorklogId != null)
+        .length;
+    final dirtyWorklogs = worklogs
+        .where((w) => !w.isDeleted && w.jiraDirty)
+        .length;
+
+    // Projects
+    final projRows = await db.select(db.projects).get();
+    final projects = projRows
+        .map((r) => ProjectDocument.fromDrift(project: r, clock: clock))
+        .toList();
+    final activeProjects = projects.where((p) => !p.isDeleted && !p.isArchived).length;
+    final archivedProjects = projects.where((p) => !p.isDeleted && p.isArchived).length;
+
+    // DB file size
+    final dbFile = File(paths.databasePath);
+    final dbSize = dbFile.existsSync() ? dbFile.lengthSync() : 0;
+    final dbSizeStr = _formatBytes(dbSize);
+
+    print(sectionHeader('DB STATS'));
+    print('');
+    print(kvRow('Schema:', 'v${db.schemaVersion}'));
+    print(kvRow('DB size:', dbSizeStr));
+    print('');
+    print('Tasks:');
+    print(kvRow('  Active:', '$activeTasks'));
+    print(kvRow('  Done:', '$doneTasks'));
+    print(kvRow('  Deleted:', '$deletedTasks'));
+    print('');
+    print('Worklogs:');
+    print(kvRow('  Active:', '$activeWorklogs'));
+    print(kvRow('  Deleted:', '$deletedWorklogs'));
+    print(kvRow('  Synced:', '$syncedWorklogs'));
+    print(kvRow('  Dirty:', '$dirtyWorklogs'));
+    print('');
+    print('Projects:');
+    print(kvRow('  Active:', '$activeProjects'));
+    print(kvRow('  Archived:', '$archivedProjects'));
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+class DbOrphansCommand extends Command<void> {
+  final AppDatabase db;
+  final HybridLogicalClock clock;
+
+  DbOrphansCommand({required this.db, required this.clock});
+
+  @override
+  String get name => 'orphans';
+
+  @override
+  String get description => 'Find orphaned records (worklogs/plans referencing missing tasks)';
+
+  @override
+  Future<void> run() async {
+    final taskRows = await db.select(db.tasks).get();
+    final taskIds = taskRows.map((r) => r.id).toSet();
+
+    // Orphaned worklogs
+    final wlRows = await db.select(db.worklogEntries).get();
+    final orphanedWorklogs = <WorklogDocument>[];
+    for (final row in wlRows) {
+      final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      if (!doc.isDeleted && !taskIds.contains(doc.taskId)) {
+        orphanedWorklogs.add(doc);
+      }
+    }
+
+    // Orphaned day plan tasks
+    final dptRows = await db.select(db.dayPlanTasks).get();
+    final orphanedPlanTasks = <DayPlanTask>[];
+    for (final row in dptRows) {
+      if (!taskIds.contains(row.taskId)) {
+        orphanedPlanTasks.add(row);
+      }
+    }
+
+    if (orphanedWorklogs.isEmpty && orphanedPlanTasks.isEmpty) {
+      print('No orphaned records found.');
+      return;
+    }
+
+    if (orphanedWorklogs.isNotEmpty) {
+      print('Orphaned Worklogs (${orphanedWorklogs.length}):');
+      for (final wl in orphanedWorklogs) {
+        final id = wl.id.substring(0, 8);
+        final dur = formatDuration(Duration(milliseconds: wl.durationMs));
+        print('  $id  ${wl.date}  $dur  task=${wl.taskId.substring(0, 8)}');
+      }
+      print('');
+    }
+
+    if (orphanedPlanTasks.isNotEmpty) {
+      print('Orphaned Day Plan Tasks (${orphanedPlanTasks.length}):');
+      for (final dpt in orphanedPlanTasks) {
+        final id = dpt.id.substring(0, 8);
+        print('  $id  ${dpt.day}  task=${dpt.taskId.substring(0, 8)}');
+      }
+    }
+  }
+}
+
+class DbIntegrityCommand extends Command<void> {
+  final AppDatabase db;
+  final HybridLogicalClock clock;
+
+  DbIntegrityCommand({required this.db, required this.clock});
+
+  @override
+  String get name => 'integrity';
+
+  @override
+  String get description => 'Run integrity checks on the database';
+
+  @override
+  Future<void> run() async {
+    var totalIssues = 0;
+
+    // 1. Orphan check
+    final taskRows = await db.select(db.tasks).get();
+    final taskIds = taskRows.map((r) => r.id).toSet();
+
+    final wlRows = await db.select(db.worklogEntries).get();
+    final worklogs = wlRows
+        .map((r) => WorklogDocument.fromDrift(worklog: r, clock: clock))
+        .where((w) => !w.isDeleted)
+        .toList();
+    final orphanedWl = worklogs.where((w) => !taskIds.contains(w.taskId)).length;
+    totalIssues += orphanedWl;
+
+    final dptRows = await db.select(db.dayPlanTasks).get();
+    final orphanedDpt = dptRows.where((r) => !taskIds.contains(r.taskId)).length;
+    totalIssues += orphanedDpt;
+
+    _printCheck('Orphaned worklogs', orphanedWl);
+    _printCheck('Orphaned day plan tasks', orphanedDpt);
+
+    // 2. Worklogs with zero/negative duration
+    final badDuration = worklogs.where((w) => w.durationMs <= 0).length;
+    totalIssues += badDuration;
+    _printCheck('Worklogs with zero/negative duration', badDuration);
+
+    // 3. Worklogs with end < start
+    final badRange = worklogs.where((w) => w.endMs < w.startMs).length;
+    totalIssues += badRange;
+    _printCheck('Worklogs with end < start', badRange);
+
+    // 4. Tasks with issueId but null issueType (or vice versa)
+    final tasks = taskRows
+        .map((r) => TaskDocument.fromDrift(task: r, clock: clock))
+        .where((t) => !t.isDeleted)
+        .toList();
+    final mismatchedIssue = tasks.where((t) {
+      final hasId = t.issueId != null;
+      final hasType = t.issueType != null;
+      return hasId != hasType;
+    }).length;
+    totalIssues += mismatchedIssue;
+    _printCheck('Tasks with mismatched issue fields', mismatchedIssue);
+
+    print('');
+    if (totalIssues == 0) {
+      print('All checks passed.');
+    } else {
+      print('$totalIssues issue${totalIssues == 1 ? '' : 's'} found.');
+    }
+  }
+
+  void _printCheck(String label, int count) {
+    final status = count == 0 ? 'PASS' : 'FAIL ($count)';
+    print('  [$status]  $label');
+  }
+}
+
+class DbDumpCommand extends Command<void> {
+  final AppDatabase db;
+
+  DbDumpCommand({required this.db}) {
+    argParser.addOption('table',
+        abbr: 't',
+        help: 'Table to dump',
+        allowed: ['tasks', 'worklogs', 'projects', 'timer', 'plans', 'all'],
+        defaultsTo: 'all');
+  }
+
+  @override
+  String get name => 'dump';
+
+  @override
+  String get description => 'Dump database tables as JSON to stdout';
+
+  @override
+  Future<void> run() async {
+    final table = argResults?['table'] as String? ?? 'all';
+
+    final result = <String, dynamic>{};
+
+    if (table == 'all' || table == 'tasks') {
+      final rows = await db.select(db.tasks).get();
+      result['tasks'] = rows.map(_taskToMap).toList();
+    }
+    if (table == 'all' || table == 'worklogs') {
+      final rows = await db.select(db.worklogEntries).get();
+      result['worklogs'] = rows.map(_worklogToMap).toList();
+    }
+    if (table == 'all' || table == 'projects') {
+      final rows = await db.select(db.projects).get();
+      result['projects'] = rows.map(_projectToMap).toList();
+    }
+    if (table == 'all' || table == 'timer') {
+      final rows = await db.select(db.timerEntries).get();
+      result['timer'] = rows.map(_timerToMap).toList();
+    }
+    if (table == 'all' || table == 'plans') {
+      final plans = await db.select(db.dailyPlanEntries).get();
+      final planTasks = await db.select(db.dayPlanTasks).get();
+      result['plans'] = plans.map(_planToMap).toList();
+      result['plan_tasks'] = planTasks.map(_planTaskToMap).toList();
+    }
+
+    const encoder = JsonEncoder.withIndent('  ');
+    print(encoder.convert(result));
+  }
+
+  Map<String, dynamic> _taskToMap(Task row) => {
+        'id': row.id,
+        'projectId': row.projectId,
+        'title': row.title,
+        'description': row.description,
+        'isDone': row.isDone,
+        'created': row.created,
+        'timeSpent': row.timeSpent,
+        'timeEstimate': row.timeEstimate,
+        'dueDay': row.dueDay,
+        'category': row.category,
+        'issueId': row.issueId,
+        'issueType': row.issueType,
+        'modified': row.modified,
+      };
+
+  Map<String, dynamic> _worklogToMap(WorklogEntry row) => {
+        'id': row.id,
+        'taskId': row.taskId,
+        'start': row.start,
+        'end': row.end,
+        'duration': row.duration,
+        'date': row.date,
+        'comment': row.comment,
+        'jiraWorklogId': row.jiraWorklogId,
+        'jiraDirty': row.jiraDirty,
+        'created': row.created,
+        'updated': row.updated,
+      };
+
+  Map<String, dynamic> _projectToMap(Project row) => {
+        'id': row.id,
+        'title': row.title,
+        'isArchived': row.isArchived,
+        'icon': row.icon,
+        'created': row.created,
+        'modified': row.modified,
+      };
+
+  Map<String, dynamic> _timerToMap(TimerEntry row) => {
+        'id': row.id,
+        'taskId': row.taskId,
+        'taskTitle': row.taskTitle,
+        'projectId': row.projectId,
+        'projectTitle': row.projectTitle,
+        'startedAt': row.startedAt,
+        'isRunning': row.isRunning,
+        'pausedAt': row.pausedAt,
+        'accumulatedMs': row.accumulatedMs,
+        'note': row.note,
+      };
+
+  Map<String, dynamic> _planToMap(DailyPlanEntry row) => {
+        'id': row.id,
+        'category': row.category,
+        'day': row.day,
+        'durationMs': row.durationMs,
+        'created': row.created,
+      };
+
+  Map<String, dynamic> _planTaskToMap(DayPlanTask row) => {
+        'id': row.id,
+        'taskId': row.taskId,
+        'day': row.day,
+        'estimateMs': row.estimateMs,
+        'cancelled': row.cancelled,
+        'created': row.created,
+      };
 }

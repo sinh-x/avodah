@@ -40,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -90,6 +90,9 @@ class AppDatabase extends _$AppDatabase {
           } on Exception catch (_) {
             // Column already exists from createTable
           }
+        }
+        if (from < 10) {
+          await m.addColumn(worklogEntries, worklogEntries.jiraDirty);
         }
       },
     );
