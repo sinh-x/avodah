@@ -105,7 +105,8 @@ Future<void> main(List<String> args) async {
           categories: avoConfig.effectiveCategories,
           taskService: taskService,
           worklogService: worklogService))
-      ..addCommand(JiraCommand(jiraService, paths));
+      ..addCommand(JiraCommand(jiraService, paths))
+      ..addCommand(DbCommand(db: db, clock: clock, paths: paths));
 
     // No args → run status + hint
     if (args.isEmpty) {
@@ -122,6 +123,12 @@ Future<void> main(List<String> args) async {
       await runner.run(['jira', 'status']);
       print('');
       print('  -> avo jira --help         for all subcommands');
+    }
+    // `avo db` with no subcommand → run db stats + hint
+    else if (args.length == 1 && args.first == 'db') {
+      await runner.run(['db', 'stats']);
+      print('');
+      print('  -> avo db --help           for all subcommands');
     } else {
       await runner.run(args);
     }
