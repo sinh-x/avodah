@@ -557,6 +557,51 @@ void main() {
       expect(updated.isSyncedToJira, isTrue);
       expect(updated.jiraWorklogId, equals('jira-12345'));
       expect(updated.comment, equals('updated comment'));
+      expect(updated.jiraDirty, isTrue);
+    });
+
+    test('editWorklog sets jiraDirty on synced worklog', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      // Link to Jira
+      created.linkToJira('jira-99');
+      await db
+          .into(db.worklogEntries)
+          .insertOnConflictUpdate(created.toDriftCompanion());
+
+      final updated = await service.editWorklog(
+        created.id,
+        duration: const Duration(hours: 2),
+      );
+
+      expect(updated.jiraDirty, isTrue);
+      expect(updated.isSyncedToJira, isTrue);
+
+      // Verify persisted to DB
+      final reloaded = await service.show(created.id);
+      expect(reloaded.jiraDirty, isTrue);
+    });
+
+    test('editWorklog does not set jiraDirty on unsynced worklog', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final created = await service.createWorklog(
+        taskId: 'task-1',
+        start: start,
+        duration: const Duration(hours: 1),
+      );
+
+      final updated = await service.editWorklog(
+        created.id,
+        comment: 'local only',
+      );
+
+      expect(updated.jiraDirty, isFalse);
+      expect(updated.isSyncedToJira, isFalse);
     });
   });
 

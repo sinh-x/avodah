@@ -1034,6 +1034,49 @@ void main() {
       final updated = worklogs.firstWhere((w) => w.jiraWorklogId == '7001');
       expect(updated.duration, equals(5400000)); // 5400s * 1000
     });
+
+    test('clears jiraDirty after successful update', () async {
+      await writeProfileConfig();
+
+      final task = await taskService.add(title: 'Dirty clear task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 60,
+      );
+      worklog.linkToJira('8001');
+      worklog.markJiraDirty();
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      // Verify dirty before update
+      final beforeRows = await db.select(db.worklogEntries).get();
+      final beforeDoc = WorklogDocument.fromDrift(worklog: beforeRows.first, clock: clock);
+      expect(beforeDoc.jiraDirty, isTrue);
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/worklog')) {
+          return http.Response(jsonEncode({
+            'id': '8001',
+            'timeSpentSeconds': 3600,
+          }), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.updateWorklog(worklog.id);
+      expect(result, isTrue);
+
+      // Verify dirty is cleared
+      final afterRows = await db.select(db.worklogEntries).get();
+      final afterDoc = WorklogDocument.fromDrift(worklog: afterRows.first, clock: clock);
+      expect(afterDoc.jiraDirty, isFalse);
+    });
   });
 
     test('appends updated filter when updatedSinceDays given', () async {
@@ -1079,6 +1122,53 @@ void main() {
     test('throws when not configured', () async {
       final service = createService();
       expect(() => service.push(), throwsA(isA<JiraNotConfiguredException>()));
+    });
+
+    test('updates dirty synced worklogs', () async {
+      await writeProfileConfig();
+
+      // Create a linked task
+      final task = await taskService.add(title: 'Push dirty task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      // Create a synced worklog and mark it dirty
+      final worklog = await worklogService.manualLog(
+        taskId: task.id,
+        durationMinutes: 45,
+      );
+      worklog.linkToJira('9001');
+      worklog.markJiraDirty();
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      String? capturedMethod;
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/worklog')) {
+          capturedMethod = request.method;
+          return http.Response(jsonEncode({
+            'id': '9001',
+            'timeSpentSeconds': 2700,
+          }), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      final result = await service.push();
+
+      // Should have updated 1 dirty worklog (not pushed as new)
+      expect(result.pushed, equals(0));
+      expect(result.updated, equals(1));
+      expect(result.failed, equals(0));
+      expect(capturedMethod, equals('PUT'));
+
+      // Verify dirty is cleared
+      final rows = await db.select(db.worklogEntries).get();
+      final doc = WorklogDocument.fromDrift(worklog: rows.first, clock: clock);
+      expect(doc.jiraDirty, isFalse);
     });
   });
 

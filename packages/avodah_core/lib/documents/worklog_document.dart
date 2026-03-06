@@ -22,6 +22,7 @@ class WorklogFields {
   static const String date = 'date';
   static const String comment = 'comment';
   static const String jiraWorklogId = 'jiraWorklogId';
+  static const String jiraDirty = 'jiraDirty';
   static const String created = 'created';
   static const String updated = 'updated';
 }
@@ -117,6 +118,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
     setString(WorklogFields.date, worklog.date);
     setString(WorklogFields.comment, worklog.comment);
     setString(WorklogFields.jiraWorklogId, worklog.jiraWorklogId);
+    setBool(WorklogFields.jiraDirty, worklog.jiraDirty);
     setInt(WorklogFields.created, worklog.created);
     setInt(WorklogFields.updated, worklog.updated);
   }
@@ -193,6 +195,16 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
   /// Whether this worklog is synced to Jira.
   bool get isSyncedToJira => jiraWorklogId != null;
 
+  /// Whether this worklog has local edits pending Jira re-sync.
+  bool get jiraDirty => getBool(WorklogFields.jiraDirty) ?? false;
+  set jiraDirty(bool value) => setBool(WorklogFields.jiraDirty, value);
+
+  /// Marks this worklog as needing Jira re-sync.
+  void markJiraDirty() => jiraDirty = true;
+
+  /// Clears the dirty flag after successful Jira update.
+  void clearJiraDirty() => jiraDirty = false;
+
   /// Links this worklog to a Jira worklog.
   void linkToJira(String worklogId) {
     jiraWorklogId = worklogId;
@@ -244,6 +256,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       date: Value(date),
       comment: Value(comment),
       jiraWorklogId: Value(jiraWorklogId),
+      jiraDirty: Value(jiraDirty),
       created: Value(createdMs),
       updated: Value(updatedMs),
       crdtClock: Value(clock.lastTimestamp.pack()),
@@ -262,6 +275,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       date: date,
       comment: comment,
       isSyncedToJira: isSyncedToJira,
+      jiraDirty: jiraDirty,
       isDeleted: isDeleted,
     );
   }
@@ -285,6 +299,7 @@ class WorklogModel {
   final String date;
   final String? comment;
   final bool isSyncedToJira;
+  final bool jiraDirty;
   final bool isDeleted;
 
   const WorklogModel({
@@ -296,6 +311,7 @@ class WorklogModel {
     required this.date,
     this.comment,
     required this.isSyncedToJira,
+    this.jiraDirty = false,
     required this.isDeleted,
   });
 

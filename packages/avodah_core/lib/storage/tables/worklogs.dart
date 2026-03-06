@@ -19,6 +19,7 @@ class WorklogEntries extends Table {
 
   // External provider sync
   TextColumn get jiraWorklogId => text().nullable()();
+  BoolColumn get jiraDirty => boolean().withDefault(const Constant(false))();
 
   // Timestamps
   IntColumn get created => integer()(); // Unix ms
