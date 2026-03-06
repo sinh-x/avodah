@@ -114,9 +114,13 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
       state: state,
     );
 
-    // If no CRDT state exists, initialize from Drift fields
     if (state.isEmpty) {
+      // No CRDT state at all — initialize everything from Drift fields
       doc._initializeFromDrift(task);
+    } else {
+      // Backfill fields added in later schema versions that may be missing
+      // from CRDT state (e.g. category added in v7, description in v3).
+      doc._backfillFromDrift(task);
     }
 
     return doc;
@@ -149,6 +153,20 @@ class TaskDocument extends CrdtDocument<TaskDocument> {
     setInt(TaskFields.issueAttachmentNr, task.issueAttachmentNr);
     setRaw(TaskFields.issueTimeTracked, task.issueTimeTracked);
     setInt(TaskFields.issuePoints, task.issuePoints);
+  }
+
+  /// Backfills fields from Drift columns when they are missing from CRDT
+  /// state. This handles fields added in later schema versions (e.g.
+  /// description in v3, category in v7) for tasks whose CRDT state was
+  /// written before those fields existed.
+  void _backfillFromDrift(Task task) {
+    final keys = fieldKeys.toSet();
+    if (!keys.contains(TaskFields.category) && task.category != null) {
+      setString(TaskFields.category, task.category);
+    }
+    if (!keys.contains(TaskFields.description) && task.description != null) {
+      setString(TaskFields.description, task.description);
+    }
   }
 
   // ============================================================

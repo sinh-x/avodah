@@ -101,9 +101,12 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       state: state,
     );
 
-    // If no CRDT state exists, initialize from Drift fields
     if (state.isEmpty) {
+      // No CRDT state at all — initialize everything from Drift fields
       doc._initializeFromDrift(worklog);
+    } else {
+      // Backfill fields added in later schema versions
+      doc._backfillFromDrift(worklog);
     }
 
     return doc;
@@ -121,6 +124,14 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
     setBool(WorklogFields.jiraDirty, worklog.jiraDirty);
     setInt(WorklogFields.created, worklog.created);
     setInt(WorklogFields.updated, worklog.updated);
+  }
+
+  /// Backfills fields added in later schema versions (e.g. jiraDirty in v10).
+  void _backfillFromDrift(WorklogEntry worklog) {
+    final keys = fieldKeys.toSet();
+    if (!keys.contains(WorklogFields.jiraDirty) && worklog.jiraDirty) {
+      setBool(WorklogFields.jiraDirty, worklog.jiraDirty);
+    }
   }
 
   static String _dateFromMs(int ms) {
