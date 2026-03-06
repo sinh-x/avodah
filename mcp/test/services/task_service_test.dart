@@ -1,6 +1,7 @@
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:test/test.dart';
 
 void main() {
@@ -566,6 +567,46 @@ void main() {
       expect(deleted, hasLength(1));
       expect(deleted.first.isDone, isTrue);
       expect(deleted.first.isDeleted, isTrue);
+    });
+  });
+
+  group('CRDT backfill (#99)', () {
+    test('category is backfilled from Drift when missing from CRDT state',
+        () async {
+      // Simulate a pre-v7 task: CRDT state has title but no category,
+      // yet the Drift column has category set (added via migration/SQL).
+      final doc = TaskDocument.create(clock: clock, title: 'Old task');
+      await db.into(db.tasks).insert(doc.toDriftCompanion());
+
+      // Manually set category in the Drift column without updating CRDT state,
+      // simulating a task whose category was set via SQL migration or direct
+      // column update (as happened with schema v7).
+      await (db.update(db.tasks)..where((t) => t.id.equals(doc.id))).write(
+        const TasksCompanion(category: Value('Working')),
+      );
+
+      // Now fetch via fromDrift — category should be backfilled
+      final row =
+          await (db.select(db.tasks)..where((t) => t.id.equals(doc.id)))
+              .getSingle();
+      final loaded = TaskDocument.fromDrift(task: row, clock: clock);
+
+      expect(loaded.category, equals('Working'));
+    });
+
+    test('category from CRDT state takes precedence over Drift column',
+        () async {
+      // Task with category set properly via CRDT
+      final doc = TaskDocument.create(clock: clock, title: 'New task');
+      doc.category = 'Learning';
+      await db.into(db.tasks).insert(doc.toDriftCompanion());
+
+      final row =
+          await (db.select(db.tasks)..where((t) => t.id.equals(doc.id)))
+              .getSingle();
+      final loaded = TaskDocument.fromDrift(task: row, clock: clock);
+
+      expect(loaded.category, equals('Learning'));
     });
   });
 }
