@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs        |
 | **2.0.0** | Flutter UI + multi-user + GitHub sync                | #54, #59, Flutter app   |
 
+## [0.4.2] - 2026-03-06
+
+### Added
+- Fish dynamic completions + db inspection tools (#58, #75)
+
+### Changed
+- [skip ci] fix(ci): only bump +N on develop, main requires explicit Bump trailer
+
 ## [0.4.1] - 2026-02-27
 
 ### Added
