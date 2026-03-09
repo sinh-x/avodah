@@ -152,6 +152,20 @@
 
             exec "$BIN" "$@"
           '';
+          avodah-sync = pkgs.writeShellScriptBin "avodah-sync" ''
+            MCP_DIR="$(git rev-parse --show-toplevel)/mcp"
+            BIN="$MCP_DIR/build/sync/bundle/bin/sync_server"
+
+            ROOT="$(git rev-parse --show-toplevel)"
+
+            # Recompile if binary is missing or any dart source is newer
+            if [ ! -f "$BIN" ] || [ -n "$(find "$MCP_DIR/lib" "$MCP_DIR/bin/sync_server.dart" "$ROOT/packages/avodah_core/lib" -newer "$BIN" 2>/dev/null | head -1)" ]; then
+              echo "Compiling avodah-sync..." >&2
+              (cd "$MCP_DIR" && dart build cli -t bin/sync_server.dart -o build/sync) >&2
+            fi
+
+            exec "$BIN" "$@"
+          '';
         in
         {
           default = pkgs.mkShell {
@@ -177,6 +191,7 @@
               avo-build-mcp
               avo
               avodah-mcp
+              avodah-sync
             ]
             ++ deps;
 
@@ -209,6 +224,7 @@
               echo ""
               echo "  avo <command>     - Run Avodah CLI (native, auto-compiles)"
               echo "  avodah-mcp        - Run MCP server (native, auto-compiles)"
+              echo "  avodah-sync       - Run sync server for phone (native, auto-compiles)"
               echo ""
 
               # Reset terminal line discipline — flutter/dart can corrupt stty settings
