@@ -92,7 +92,12 @@ class AppDatabase extends _$AppDatabase {
           }
         }
         if (from < 10) {
-          await m.addColumn(worklogEntries, worklogEntries.jiraDirty);
+          // Guard: column may already exist if previous migration partially completed
+          try {
+            await m.addColumn(worklogEntries, worklogEntries.jiraDirty);
+          } on Exception catch (_) {
+            // Column already exists
+          }
         }
       },
     );
