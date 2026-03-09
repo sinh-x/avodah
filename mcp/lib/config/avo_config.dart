@@ -14,6 +14,12 @@ class AvoConfig {
   /// If empty, defaults are used.
   final List<String> categories;
 
+  /// Port for the sync WebSocket server.
+  final int syncPort;
+
+  /// Interval in seconds between snapshot pushes to connected clients.
+  final int syncInterval;
+
   static const defaultCategories = [
     'Learning',
     'Working',
@@ -24,6 +30,8 @@ class AvoConfig {
 
   const AvoConfig({
     this.categories = const [],
+    this.syncPort = 9847,
+    this.syncInterval = 30,
   });
 
   /// Effective categories list — user's if set, otherwise defaults.
@@ -51,6 +59,15 @@ class AvoConfig {
     final categoriesRaw = json['categories'] as List<dynamic>?;
     final categories =
         categoriesRaw?.map((e) => e as String).toList() ?? [];
-    return AvoConfig(categories: categories);
+
+    final syncMap = json['sync'] as Map<String, dynamic>?;
+    final syncPort = (syncMap?['port'] as int?) ?? 9847;
+    final syncInterval = (syncMap?['intervalSeconds'] as int?) ?? 30;
+
+    return AvoConfig(
+      categories: categories,
+      syncPort: syncPort,
+      syncInterval: syncInterval,
+    );
   }
 }
