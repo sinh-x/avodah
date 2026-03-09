@@ -40,3 +40,4 @@ dev_dependencies:
 
 executables:
   avo: avo
+  avodah-sync: sync_server
