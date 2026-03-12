@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'screens/dashboard_screen.dart';
+import 'screens/deployment_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'services/agent_api_client.dart';
+import 'services/deployment_provider.dart';
 import 'services/review_provider.dart';
 import 'services/sync_client.dart';
 import 'settings/settings_screen.dart';
@@ -22,6 +24,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   SyncClient? _syncClient;
   AgentApiClient? _apiClient;
   ReviewProvider? _reviewProvider;
+  DeploymentProvider? _deploymentProvider;
 
   @override
   void initState() {
@@ -38,15 +41,20 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
+    final deploymentProvider = DeploymentProvider(apiClient);
+    deploymentProvider.refresh();
+
     setState(() {
       _syncClient = client;
       _apiClient = apiClient;
       _reviewProvider = reviewProvider;
+      _deploymentProvider = deploymentProvider;
     });
   }
 
   @override
   void dispose() {
+    _deploymentProvider?.dispose();
     _reviewProvider?.dispose();
     _apiClient?.dispose();
     _syncClient?.dispose();
@@ -75,19 +83,22 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
           : _HomeShell(
               syncClient: _syncClient!,
               reviewProvider: _reviewProvider!,
+              deploymentProvider: _deploymentProvider!,
             ),
     );
   }
 }
 
-/// Shell with bottom navigation between Dashboard and Agent Review.
+/// Shell with bottom navigation between Dashboard, Agent Review, and Deployments.
 class _HomeShell extends StatefulWidget {
   final SyncClient syncClient;
   final ReviewProvider reviewProvider;
+  final DeploymentProvider deploymentProvider;
 
   const _HomeShell({
     required this.syncClient,
     required this.reviewProvider,
+    required this.deploymentProvider,
   });
 
   @override
@@ -139,6 +150,19 @@ class _HomeShellState extends State<_HomeShell> {
             body: ReviewQueueScreen(
                 reviewProvider: widget.reviewProvider),
           ),
+          Scaffold(
+            appBar: AppBar(
+              title: const Text('Deployments'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => widget.deploymentProvider.refresh(),
+                ),
+              ],
+            ),
+            body: DeploymentScreen(
+                deploymentProvider: widget.deploymentProvider),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -165,6 +189,11 @@ class _HomeShellState extends State<_HomeShell> {
                   )
                 : const Icon(Icons.assignment_turned_in),
             label: 'Agent Review',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.rocket_launch_outlined),
+            selectedIcon: Icon(Icons.rocket_launch),
+            label: 'Deployments',
           ),
         ],
       ),
