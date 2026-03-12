@@ -55,6 +55,11 @@ class TeamBrowserProvider extends ChangeNotifier {
     }
   }
 
+  /// Fetch files in a team folder and return directly (no shared state update).
+  Future<List<TeamFile>> fetchFolder(String team, String folder) async {
+    return _client.listTeamFolder(team, folder);
+  }
+
   /// Read a file from a team folder.
   Future<ReviewItem> readFile(
       String team, String folder, String filename) async {

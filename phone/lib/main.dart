@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/review_queue_screen.dart';
+import 'screens/team_browser_screen.dart';
 import 'services/agent_api_client.dart';
 import 'services/deployment_provider.dart';
 import 'services/review_provider.dart';
+import 'services/team_browser_provider.dart';
 import 'services/sync_client.dart';
 import 'settings/settings_screen.dart';
 
@@ -25,6 +27,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   AgentApiClient? _apiClient;
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
+  TeamBrowserProvider? _teamBrowserProvider;
 
   @override
   void initState() {
@@ -44,16 +47,21 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     final deploymentProvider = DeploymentProvider(apiClient);
     deploymentProvider.refresh();
 
+    final teamBrowserProvider = TeamBrowserProvider(apiClient);
+    teamBrowserProvider.refreshTeams();
+
     setState(() {
       _syncClient = client;
       _apiClient = apiClient;
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
+      _teamBrowserProvider = teamBrowserProvider;
     });
   }
 
   @override
   void dispose() {
+    _teamBrowserProvider?.dispose();
     _deploymentProvider?.dispose();
     _reviewProvider?.dispose();
     _apiClient?.dispose();
@@ -84,21 +92,24 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               syncClient: _syncClient!,
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
+              teamBrowserProvider: _teamBrowserProvider!,
             ),
     );
   }
 }
 
-/// Shell with bottom navigation between Dashboard, Agent Review, and Deployments.
+/// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
 class _HomeShell extends StatefulWidget {
   final SyncClient syncClient;
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
+  final TeamBrowserProvider teamBrowserProvider;
 
   const _HomeShell({
     required this.syncClient,
     required this.reviewProvider,
     required this.deploymentProvider,
+    required this.teamBrowserProvider,
   });
 
   @override
@@ -163,6 +174,19 @@ class _HomeShellState extends State<_HomeShell> {
             body: DeploymentScreen(
                 deploymentProvider: widget.deploymentProvider),
           ),
+          Scaffold(
+            appBar: AppBar(
+              title: const Text('Teams'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => widget.teamBrowserProvider.refreshTeams(),
+                ),
+              ],
+            ),
+            body: TeamBrowserScreen(
+                teamProvider: widget.teamBrowserProvider),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -194,6 +218,11 @@ class _HomeShellState extends State<_HomeShell> {
             icon: Icon(Icons.rocket_launch_outlined),
             selectedIcon: Icon(Icons.rocket_launch),
             label: 'Deployments',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.group_work_outlined),
+            selectedIcon: Icon(Icons.group_work),
+            label: 'Teams',
           ),
         ],
       ),
