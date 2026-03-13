@@ -97,6 +97,7 @@
             platformToolsVersion = "35.0.2";
             buildToolsVersions = [ "35.0.0" ];
             platformVersions = [
+              "36"
               "35"
               "34"
             ];
@@ -112,9 +113,9 @@
 
           # Dev command scripts
           avo-run = pkgs.writeShellScriptBin "avo-run" "flutter run -d linux";
-          avo-run-android = pkgs.writeShellScriptBin "avo-run-android" "flutter run -d android";
+          avo-run-android = pkgs.writeShellScriptBin "avo-run-android" "cd $(git rev-parse --show-toplevel)/phone && flutter run -d android";
           avo-build = pkgs.writeShellScriptBin "avo-build" "flutter build linux --release";
-          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "flutter build apk --release";
+          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "cd $(git rev-parse --show-toplevel)/phone && flutter build apk --release";
           avo-test = pkgs.writeShellScriptBin "avo-test" "flutter test";
           avo-analyze = pkgs.writeShellScriptBin "avo-analyze" "flutter analyze";
           avo-clean = pkgs.writeShellScriptBin "avo-clean" "flutter clean && flutter pub get";
