@@ -104,7 +104,9 @@
             includeEmulator = false;
             includeSources = false;
             includeSystemImages = false;
-            includeNDK = false;
+            includeNDK = true;
+            ndkVersions = [ "27.0.12077973" ];
+            cmakeVersions = [ "3.22.1" ];
           };
           androidSdk = androidComposition.androidsdk;
 
