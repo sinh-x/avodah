@@ -1,9 +1,9 @@
 #!/usr/bin/env dart
 
-/// Avodah Sync Server — WebSocket server for phone sync.
+/// Avodah Sync Server — WebSocket + HTTP API server.
 ///
-/// Sends periodic snapshots of today's plan data to connected clients.
-/// One-way: server → client only.
+/// WebSocket: Sends periodic snapshots of today's plan data to connected clients.
+/// HTTP API: Agent workflow endpoints (inbox review, deployments, team browsing).
 ///
 /// Usage:
 ///   dart run mcp/bin/sync_server.dart [--port 9847] [--interval 30]
@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
+import 'package:avodah_mcp/services/agent_api_service.dart';
 import 'package:avodah_mcp/services/plan_service.dart';
 import 'package:avodah_mcp/services/sync_snapshot_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
@@ -63,6 +64,9 @@ Future<void> main(List<String> args) async {
     planService: planService,
   );
 
+  // Agent workflow API service
+  final agentApi = AgentApiService();
+
   // Track connected clients
   final clients = <WebSocket>[];
 
@@ -70,6 +74,7 @@ Future<void> main(List<String> args) async {
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   stderr.writeln('Avodah Sync Server listening on 0.0.0.0:$port');
   stderr.writeln('Push interval: ${interval}s');
+  stderr.writeln('Agent API: http://0.0.0.0:$port/api/');
 
   // Periodic snapshot push
   String? lastSnapshot;
@@ -132,12 +137,15 @@ Future<void> main(List<String> args) async {
         },
       );
     } else {
-      // Non-WebSocket request — simple health check
-      request.response
-        ..statusCode = HttpStatus.ok
-        ..headers.contentType = ContentType.json
-        ..write('{"status":"ok","service":"avodah-sync"}')
-        ..close();
+      // Non-WebSocket request — try Agent API, fall back to health check
+      final handled = await agentApi.handleRequest(request);
+      if (!handled) {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write('{"status":"ok","service":"avodah-sync"}')
+          ..close();
+      }
     }
   }
 }

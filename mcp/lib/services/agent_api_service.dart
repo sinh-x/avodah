@@ -1,0 +1,431 @@
+/// HTTP API service for agent workflow operations.
+///
+/// Provides endpoints for reviewing inbox items, viewing deployment status,
+/// and browsing agent team folders. All file access is sandboxed to
+/// `~/Documents/ai-usage/`.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+import 'markdown_parser.dart';
+import 'registry_parser.dart';
+
+/// Handles HTTP requests for the agent workflow API.
+class AgentApiService {
+  /// Base path for all ai-usage data. All file access is sandboxed here.
+  final String aiUsagePath;
+
+  /// Path to the registry JSONL file.
+  final String registryPath;
+
+  AgentApiService({
+    String? aiUsagePath,
+    String? registryPath,
+  })  : aiUsagePath = aiUsagePath ??
+            p.join(Platform.environment['HOME'] ?? '/home', 'Documents',
+                'ai-usage'),
+        registryPath = registryPath ??
+            p.join(
+                Platform.environment['HOME'] ?? '/home',
+                'Documents',
+                'ai-usage',
+                'deployments',
+                'registry.jsonl');
+
+  String get _inboxPath => p.join(aiUsagePath, 'sinh-inputs', 'inbox');
+  String get _approvedPath => p.join(aiUsagePath, 'sinh-inputs', 'approved');
+  String get _rejectedPath => p.join(aiUsagePath, 'sinh-inputs', 'rejected');
+  String get _deferredPath => p.join(aiUsagePath, 'sinh-inputs', 'deferred');
+  String get _teamsPath => p.join(aiUsagePath, 'agent-teams');
+
+  /// Route an HTTP request to the appropriate handler.
+  ///
+  /// Returns true if the request was handled, false if not an API route.
+  Future<bool> handleRequest(HttpRequest request) async {
+    final path = request.uri.path;
+    final method = request.method;
+
+    // CORS headers for development
+    request.response.headers.add('Access-Control-Allow-Origin', '*');
+    request.response.headers
+        .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    request.response.headers
+        .add('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (method == 'OPTIONS') {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..close();
+      return true;
+    }
+
+    if (!path.startsWith('/api/')) return false;
+
+    try {
+      // Route matching
+      if (path == '/api/inbox' && method == 'GET') {
+        await _handleListInbox(request);
+      } else if (path.startsWith('/api/inbox/') && method == 'GET') {
+        await _handleGetInboxItem(request);
+      } else if (path.endsWith('/approve') && method == 'POST') {
+        await _handleApprove(request);
+      } else if (path.endsWith('/reject') && method == 'POST') {
+        await _handleReject(request);
+      } else if (path.endsWith('/defer') && method == 'POST') {
+        await _handleDefer(request);
+      } else if (path == '/api/deployments' && method == 'GET') {
+        await _handleListDeployments(request);
+      } else if (path == '/api/teams' && method == 'GET') {
+        await _handleListTeams(request);
+      } else if (path.startsWith('/api/teams/') && method == 'GET') {
+        await _handleTeamBrowse(request);
+      } else {
+        _jsonResponse(request, HttpStatus.notFound, {'error': 'Not found'});
+      }
+    } catch (e, stack) {
+      stderr.writeln('API error: $e\n$stack');
+      _jsonResponse(
+          request, HttpStatus.internalServerError, {'error': e.toString()});
+    }
+
+    return true;
+  }
+
+  /// GET /api/inbox — List inbox items with parsed metadata.
+  Future<void> _handleListInbox(HttpRequest request) async {
+    final dir = Directory(_inboxPath);
+    if (!dir.existsSync()) {
+      _jsonResponse(request, HttpStatus.ok, {'items': []});
+      return;
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final entity in dir.listSync()) {
+      if (entity is! File || !entity.path.endsWith('.md')) continue;
+      try {
+        final filename = p.basename(entity.path);
+        final content = entity.readAsStringSync();
+        final metadata = parseMarkdownMetadata(content, filename: filename);
+        final stat = entity.statSync();
+        items.add({
+          'id': filename,
+          ...metadata.toJson(),
+          'size': stat.size,
+          'modified': stat.modified.toIso8601String(),
+        });
+      } catch (e) {
+        stderr.writeln('Skipping malformed inbox file ${entity.path}: $e');
+      }
+    }
+
+    // Sort by date descending (newest first)
+    items.sort((a, b) {
+      final aDate = a['date'] as String? ?? '';
+      final bDate = b['date'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    _jsonResponse(request, HttpStatus.ok, {'items': items});
+  }
+
+  /// GET /api/inbox/:filename — Read single inbox item content.
+  Future<void> _handleGetInboxItem(HttpRequest request) async {
+    final filename = _extractFilename(request.uri.path, '/api/inbox/');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final file = File(p.join(_inboxPath, filename));
+    if (!file.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    final content = file.readAsStringSync();
+    final metadata = parseMarkdownMetadata(content, filename: filename);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'id': filename,
+      ...metadata.toJson(),
+      'content': content,
+    });
+  }
+
+  /// POST /api/inbox/:filename/approve — Move file to approved/.
+  Future<void> _handleApprove(HttpRequest request) async {
+    final filename =
+        _extractActionFilename(request.uri.path, '/api/inbox/', '/approve');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    _ensureDir(_approvedPath);
+    final dest = File(p.join(_approvedPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(
+        request, HttpStatus.ok, {'status': 'approved', 'file': filename});
+  }
+
+  /// POST /api/inbox/:filename/reject — Append reason and move to rejected/.
+  Future<void> _handleReject(HttpRequest request) async {
+    final filename =
+        _extractActionFilename(request.uri.path, '/api/inbox/', '/reject');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Parse reason from request body
+    String reason = 'No reason provided';
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      if (body.isNotEmpty) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        reason = json['reason'] as String? ?? reason;
+      }
+    } catch (_) {
+      // Use default reason if body parsing fails
+    }
+
+    // Append rejection block
+    final content = source.readAsStringSync();
+    final timestamp = DateTime.now().toIso8601String();
+    final updated =
+        '$content\n\n> **Rejected:** $reason\n> **Rejected at:** $timestamp\n';
+    source.writeAsStringSync(updated);
+
+    // Move to rejected/
+    _ensureDir(_rejectedPath);
+    final dest = File(p.join(_rejectedPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(request, HttpStatus.ok,
+        {'status': 'rejected', 'file': filename, 'reason': reason});
+  }
+
+  /// POST /api/inbox/:filename/defer — Move file to deferred/.
+  Future<void> _handleDefer(HttpRequest request) async {
+    final filename =
+        _extractActionFilename(request.uri.path, '/api/inbox/', '/defer');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    _ensureDir(_deferredPath);
+    final dest = File(p.join(_deferredPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(
+        request, HttpStatus.ok, {'status': 'deferred', 'file': filename});
+  }
+
+  /// GET /api/deployments — List deployments from registry.jsonl.
+  Future<void> _handleListDeployments(HttpRequest request) async {
+    final events = parseRegistryFile(registryPath);
+    final deployments = computeDeploymentStatuses(events);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'deployments': deployments.map((d) => d.toJson()).toList(),
+    });
+  }
+
+  /// GET /api/teams — List agent teams.
+  Future<void> _handleListTeams(HttpRequest request) async {
+    final dir = Directory(_teamsPath);
+    if (!dir.existsSync()) {
+      _jsonResponse(request, HttpStatus.ok, {'teams': []});
+      return;
+    }
+
+    final teams = <Map<String, dynamic>>[];
+    for (final entity in dir.listSync()) {
+      if (entity is! Directory) continue;
+      final name = p.basename(entity.path);
+      // List available subfolders
+      final folders = <String>[];
+      for (final sub in entity.listSync()) {
+        if (sub is Directory) {
+          folders.add(p.basename(sub.path));
+        }
+      }
+      teams.add({'name': name, 'folders': folders});
+    }
+
+    teams.sort((a, b) =>
+        (a['name'] as String).compareTo(b['name'] as String));
+    _jsonResponse(request, HttpStatus.ok, {'teams': teams});
+  }
+
+  /// GET /api/teams/:name/:folder — List files in a team folder.
+  /// GET /api/teams/:name/:folder/:filename — Read file content.
+  Future<void> _handleTeamBrowse(HttpRequest request) async {
+    final segments = request.uri.pathSegments;
+    // /api/teams/:name/:folder[/:filename]
+    // segments: [api, teams, name, folder, ?filename]
+
+    if (segments.length < 4) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Missing team or folder'});
+      return;
+    }
+
+    final teamName = segments[2];
+    final folderName = segments[3];
+
+    // Validate path safety
+    if (!_isSafeFilename(teamName) || !_isSafeFilename(folderName)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final folderPath = p.join(_teamsPath, teamName, folderName);
+    final folderDir = Directory(folderPath);
+
+    // Verify resolved path stays within ai-usage
+    if (!_isWithinSandbox(folderDir.path)) {
+      _jsonResponse(
+          request, HttpStatus.forbidden, {'error': 'Path traversal blocked'});
+      return;
+    }
+
+    if (!folderDir.existsSync()) {
+      _jsonResponse(
+          request, HttpStatus.notFound, {'error': 'Folder not found'});
+      return;
+    }
+
+    // Read specific file
+    if (segments.length >= 5) {
+      final filename = segments.sublist(4).join('/');
+      if (!_isSafeFilename(filename)) {
+        _jsonResponse(
+            request, HttpStatus.forbidden, {'error': 'Invalid path'});
+        return;
+      }
+
+      final file = File(p.join(folderPath, filename));
+      if (!_isWithinSandbox(file.path) || !file.existsSync()) {
+        _jsonResponse(
+            request, HttpStatus.notFound, {'error': 'File not found'});
+        return;
+      }
+
+      final content = file.readAsStringSync();
+      final metadata = parseMarkdownMetadata(content, filename: filename);
+      _jsonResponse(request, HttpStatus.ok, {
+        'id': filename,
+        ...metadata.toJson(),
+        'content': content,
+      });
+      return;
+    }
+
+    // List files in folder
+    final files = <Map<String, dynamic>>[];
+    for (final entity in folderDir.listSync()) {
+      if (entity is! File) continue;
+      final filename = p.basename(entity.path);
+      try {
+        final stat = entity.statSync();
+        files.add({
+          'name': filename,
+          'size': stat.size,
+          'modified': stat.modified.toIso8601String(),
+        });
+      } catch (e) {
+        stderr.writeln('Error reading file stat $filename: $e');
+      }
+    }
+
+    files.sort((a, b) {
+      final aDate = a['modified'] as String;
+      final bDate = b['modified'] as String;
+      return bDate.compareTo(aDate);
+    });
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'team': teamName,
+      'folder': folderName,
+      'files': files,
+    });
+  }
+
+  // --- Helpers ---
+
+  /// Send a JSON response.
+  void _jsonResponse(
+      HttpRequest request, int statusCode, Map<String, dynamic> body) {
+    request.response
+      ..statusCode = statusCode
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode(body))
+      ..close();
+  }
+
+  /// Ensure a directory exists, creating it if needed.
+  void _ensureDir(String path) {
+    final dir = Directory(path);
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+  }
+
+  /// Extract filename from a path like `/api/inbox/some-file.md`.
+  String? _extractFilename(String path, String prefix) {
+    if (!path.startsWith(prefix)) return null;
+    final rest = path.substring(prefix.length);
+    if (rest.isEmpty) return null;
+    return Uri.decodeComponent(rest);
+  }
+
+  /// Extract filename from an action path like `/api/inbox/file.md/approve`.
+  String? _extractActionFilename(
+      String path, String prefix, String actionSuffix) {
+    if (!path.startsWith(prefix) || !path.endsWith(actionSuffix)) return null;
+    final rest =
+        path.substring(prefix.length, path.length - actionSuffix.length);
+    if (rest.isEmpty) return null;
+    return Uri.decodeComponent(rest);
+  }
+
+  /// Check if a filename is safe (no path traversal).
+  bool _isSafeFilename(String name) {
+    if (name.contains('..') || name.contains('/') || name.contains('\\')) {
+      return false;
+    }
+    if (name.startsWith('.')) return false;
+    return name.isNotEmpty;
+  }
+
+  /// Check if a resolved path is within the ai-usage sandbox.
+  bool _isWithinSandbox(String filePath) {
+    final resolved = p.canonicalize(filePath);
+    final sandbox = p.canonicalize(aiUsagePath);
+    return resolved.startsWith(sandbox);
+  }
+}
