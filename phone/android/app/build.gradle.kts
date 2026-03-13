@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.sinh_x.avodah_viewer"
-    compileSdk = 35
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
