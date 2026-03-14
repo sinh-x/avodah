@@ -1,3 +1,32 @@
+/// Canonical document type for inbox items.
+///
+/// Mirrors the server-side detection in `markdown_parser.dart`.
+/// Unknown values fall back to [workReport] (tolerant).
+enum DocumentType {
+  workReport,
+  reviewRequest,
+  planDraft,
+  fyi,
+  decisionNeeded;
+
+  static DocumentType fromString(String? type) {
+    switch (type) {
+      case 'work-report':
+        return DocumentType.workReport;
+      case 'review-request':
+        return DocumentType.reviewRequest;
+      case 'plan-draft':
+        return DocumentType.planDraft;
+      case 'fyi':
+        return DocumentType.fyi;
+      case 'decision-needed':
+        return DocumentType.decisionNeeded;
+      default:
+        return DocumentType.workReport;
+    }
+  }
+}
+
 /// Data model for an inbox review item from the agent workflow API.
 class ReviewItem {
   final String id; // filename
@@ -25,6 +54,9 @@ class ReviewItem {
     this.modified,
     this.content,
   });
+
+  /// Parsed document type; defaults to [DocumentType.workReport] for unknown values.
+  DocumentType get documentType => DocumentType.fromString(type);
 
   factory ReviewItem.fromJson(Map<String, dynamic> json) {
     return ReviewItem(

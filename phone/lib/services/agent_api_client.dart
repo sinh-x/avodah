@@ -81,6 +81,18 @@ class AgentApiClient {
     await _post('/api/inbox/$encoded/save-for-later');
   }
 
+  /// Acknowledge a work-report or fyi item (moves to done/).
+  ///
+  /// Fast-path: omit [note] for a clean move with no annotation written.
+  /// With [note]: writes `human_feedback.action: acknowledged` + note to YAML
+  /// frontmatter only — no `## Human Review` section.
+  Future<void> acknowledgeItem(String filename, {String? note}) async {
+    final encoded = Uri.encodeComponent(filename);
+    final body =
+        (note != null && note.isNotEmpty) ? <String, dynamic>{'note': note} : null;
+    await _post('/api/inbox/$encoded/acknowledge', body: body);
+  }
+
   /// Append a named section to an inbox item (file stays in inbox).
   Future<void> appendSection(
       String filename, String title, String content) async {

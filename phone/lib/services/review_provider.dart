@@ -101,6 +101,15 @@ class ReviewProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Acknowledge a work-report or fyi item and remove from the local list.
+  ///
+  /// Pass [note] to add an optional acknowledgment note to the YAML frontmatter.
+  Future<void> acknowledge(String filename, {String? note}) async {
+    await _client.acknowledgeItem(filename, note: note);
+    _items.removeWhere((item) => item.id == filename);
+    notifyListeners();
+  }
+
   /// Append a named section to an item (item stays in inbox).
   Future<void> appendSection(
       String filename, String title, String content) async {
