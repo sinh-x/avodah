@@ -5,8 +5,10 @@ import '../config/document_type_config.dart';
 import '../models/review_item.dart';
 import '../services/review_provider.dart';
 import '../widgets/document_type_badge.dart';
+import 'dialogs/acknowledge_dialog.dart';
 import 'dialogs/approve_dialog.dart';
 import 'dialogs/defer_dialog.dart';
+import 'dialogs/plan_confirm_dialog.dart';
 import 'dialogs/reject_dialog.dart';
 
 /// Shows full markdown content for a review item with action buttons.
@@ -294,12 +296,16 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   /// Work-report action bar: [✅ Acknowledge] [🔖 Later]
+  ///
+  /// Tap = fast-path acknowledge (no annotation, AC24).
+  /// Long-press = open [AcknowledgeDialog] for optional note (AC25).
   Widget _buildWorkReportBar(ThemeData theme) {
     return Row(
       children: [
         Expanded(
           child: FilledButton.icon(
             onPressed: _acting ? null : _onAcknowledge,
+            onLongPress: _acting ? null : _onAcknowledgeWithNote,
             icon: const Icon(Icons.check_circle_outline, size: 18),
             label: const Text('Acknowledge'),
             style: FilledButton.styleFrom(
@@ -406,6 +412,29 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     }
   }
 
+  /// Acknowledge with optional note: opens [AcknowledgeDialog], then moves to done/ (AC25).
+  Future<void> _onAcknowledgeWithNote() async {
+    final note = await AcknowledgeDialog.show(context);
+    if (note == null || !mounted) return;
+
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider
+          .acknowledge(widget.item.id, note: note.isNotEmpty ? note : null);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Acknowledged')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to acknowledge: $e')));
+      }
+    }
+  }
+
   /// Got It: clean move to done/ for FYI items.
   Future<void> _onGotIt() async {
     setState(() => _acting = true);
@@ -444,17 +473,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     }
   }
 
-  /// Plan "Has Changes": prompt for a note, then move to done/ (F18 / AC29).
+  /// Plan "Has Changes": opens [PlanConfirmDialog] for a note, then moves to done/ (F18 / AC29).
   ///
   /// Note: the server writes `action: acknowledged` in frontmatter; a future
   /// phase may add a dedicated API param to write `plan-confirmed-with-changes`.
   Future<void> _onPlanHasChanges() async {
-    final noteController = TextEditingController();
-    final note = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _PlanChangesDialog(controller: noteController),
-    );
-    noteController.dispose();
+    final note = await PlanConfirmDialog.show(context);
     if (note == null || !mounted) return;
 
     setState(() => _acting = true);
@@ -644,48 +668,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         );
       }
     }
-  }
-}
-
-/// Inline dialog for "Has Changes" on a plan-draft item.
-///
-/// Returns the note text (may be empty string) or null if cancelled.
-/// Phase 5 will replace this with a dedicated [PlanConfirmDialog] widget.
-class _PlanChangesDialog extends StatefulWidget {
-  final TextEditingController controller;
-  const _PlanChangesDialog({required this.controller});
-
-  @override
-  State<_PlanChangesDialog> createState() => _PlanChangesDialogState();
-}
-
-class _PlanChangesDialogState extends State<_PlanChangesDialog> {
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('What needs to change?'),
-      content: TextField(
-        controller: widget.controller,
-        decoration: const InputDecoration(
-          hintText: 'Describe the changes needed...',
-          border: OutlineInputBorder(),
-        ),
-        maxLines: 4,
-        autofocus: true,
-        onChanged: (_) => setState(() {}),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.pop(context, widget.controller.text.trim()),
-          child: const Text('Confirm'),
-        ),
-      ],
-    );
   }
 }
 
