@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/deployment.dart';
+import '../models/feedback_payload.dart';
 import '../models/review_item.dart';
 import '../models/team_folder.dart';
 
@@ -47,22 +48,60 @@ class AgentApiClient {
   }
 
   /// Approve an inbox item (moves to approved/).
-  Future<void> approveItem(String filename) async {
+  ///
+  /// Pass [feedback] to include optional note and chips.
+  /// Annotation is written only when feedback is non-empty (fast-path: no body sent).
+  Future<void> approveItem(String filename, {ApproveFeedback? feedback}) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/inbox/$encoded/approve');
+    final body = (feedback != null && feedback.hasContent) ? feedback.toJson() : null;
+    await _post('/api/inbox/$encoded/approve', body: body);
   }
 
-  /// Reject an inbox item with a reason (appends reason, moves to rejected/).
-  Future<void> rejectItem(String filename, {String? reason}) async {
+  /// Reject an inbox item with structured feedback (moves to rejected/).
+  ///
+  /// Use [RejectFeedback.pendingOnly()] to create a pending-reject-feedback state.
+  Future<void> rejectItem(String filename, RejectFeedback feedback) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/inbox/$encoded/reject',
-        body: reason != null ? {'reason': reason} : null);
+    await _post('/api/inbox/$encoded/reject', body: feedback.toJson());
   }
 
   /// Defer an inbox item (moves to deferred/).
-  Future<void> deferItem(String filename) async {
+  ///
+  /// Pass [feedback] to include optional note, date, and chips.
+  /// Annotation is written only when feedback is non-empty (fast-path: no body sent).
+  Future<void> deferItem(String filename, {DeferFeedback? feedback}) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/inbox/$encoded/defer');
+    final body = (feedback != null && feedback.hasContent) ? feedback.toJson() : null;
+    await _post('/api/inbox/$encoded/defer', body: body);
+  }
+
+  /// Save an inbox item for later (moves to for-later/, writes minimal YAML frontmatter).
+  Future<void> saveForLater(String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/inbox/$encoded/save-for-later');
+  }
+
+  /// Append a named section to an inbox item (file stays in inbox).
+  Future<void> appendSection(
+      String filename, String title, String content) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/inbox/$encoded/append-section',
+        body: {'title': title, 'content': content});
+  }
+
+  /// Fetch feedback chip labels from server config.
+  ///
+  /// Returns empty list if config is missing or malformed.
+  Future<List<String>> getFeedbackChips() async {
+    final response = await _get('/api/config/feedback-chips');
+    final chips = response['chips'] as List? ?? [];
+    return chips.map((e) => e as String).toList();
+  }
+
+  /// Fetch the existing human_feedback block for a pending-reject-feedback item.
+  Future<Map<String, dynamic>> getItemFeedback(String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    return _get('/api/inbox/$encoded/feedback');
   }
 
   // --- Deployments ---

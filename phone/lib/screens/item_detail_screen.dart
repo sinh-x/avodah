@@ -3,10 +3,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/review_item.dart';
 import '../services/review_provider.dart';
+import 'dialogs/approve_dialog.dart';
+import 'dialogs/defer_dialog.dart';
+import 'dialogs/reject_dialog.dart';
 
 /// Shows full markdown content for a review item with action buttons.
 ///
-/// Actions: Approve (green), Defer (orange), Reject (red with reason dialog).
+/// Actions: Approve (green), Defer (orange), Reject (red), Save for Later (neutral).
+/// Each action opens a rich feedback dialog; fast-path still supported.
 class ItemDetailScreen extends StatefulWidget {
   final ReviewItem item;
   final ReviewProvider reviewProvider;
@@ -26,11 +30,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   bool _loading = true;
   String? _error;
   bool _acting = false;
+  List<String> _chips = [];
 
   @override
   void initState() {
     super.initState();
     _loadDetail();
+    _loadChips();
   }
 
   Future<void> _loadDetail() async {
@@ -52,10 +58,20 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     }
   }
 
+  Future<void> _loadChips() async {
+    try {
+      final chips = await widget.reviewProvider.getFeedbackChips();
+      if (mounted) setState(() => _chips = chips);
+    } catch (_) {
+      // Chips are best-effort; missing chips don't break the workflow
+    }
+  }
+
+  bool get _isPendingReject =>
+      (widget.item.status ?? _detail?.status) == 'pending-reject-feedback';
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -63,27 +79,33 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          if (!_loading && _error == null)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: 'Add Section',
+              onPressed: _acting ? null : _onAddSection,
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildError(theme)
-              : _buildContent(theme),
-      bottomNavigationBar: _loading || _error != null
-          ? null
-          : _buildActionBar(theme),
+              ? _buildError()
+              : _buildContent(),
+      bottomNavigationBar: _loading || _error != null ? null : _buildActionBar(),
     );
   }
 
-  Widget _buildError(ThemeData theme) {
+  Widget _buildError() {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
           const SizedBox(height: 16),
-          Text('Failed to load content',
-              style: theme.textTheme.titleMedium),
+          Text('Failed to load content', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(_error!, style: theme.textTheme.bodySmall),
           const SizedBox(height: 24),
@@ -103,15 +125,14 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  Widget _buildContent(ThemeData theme) {
+  Widget _buildContent() {
     final content = _detail?.content ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Metadata bar
-        _buildMetadataBar(theme),
-        // Markdown content
+        _buildMetadataBar(),
+        if (_isPendingReject) _buildPendingRejectBanner(),
         Expanded(
           child: Markdown(
             data: content,
@@ -123,7 +144,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  Widget _buildMetadataBar(ThemeData theme) {
+  Widget _buildMetadataBar() {
     final item = _detail ?? widget.item;
     final chips = <Widget>[];
 
@@ -157,7 +178,40 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
-  Widget _buildActionBar(ThemeData theme) {
+  Widget _buildPendingRejectBanner() {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: Colors.amber.shade100,
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber, color: Colors.amber.shade800, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Rejected — feedback pending',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: Colors.amber.shade900),
+            ),
+          ),
+          TextButton(
+            onPressed: _acting ? null : _onReject,
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Add feedback'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionBar() {
+    final theme = Theme.of(context);
+
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -173,7 +227,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _acting ? null : _onReject,
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close, size: 18),
                 label: const Text('Reject'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.colorScheme.error,
@@ -183,14 +237,24 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
             const SizedBox(width: 8),
             // Defer
-            Expanded(
-              child: FilledButton.tonal(
-                onPressed: _acting ? null : _onDefer,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.orange.withValues(alpha: 0.15),
-                  foregroundColor: Colors.orange.shade800,
-                ),
-                child: const Text('Defer'),
+            IconButton.outlined(
+              onPressed: _acting ? null : _onDefer,
+              icon: const Icon(Icons.schedule),
+              tooltip: 'Defer',
+              style: IconButton.styleFrom(
+                foregroundColor: Colors.orange.shade800,
+                side: BorderSide(color: Colors.orange.shade300),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Save for Later
+            IconButton.outlined(
+              onPressed: _acting ? null : _onSaveForLater,
+              icon: const Icon(Icons.bookmark_outline),
+              tooltip: 'Save for Later',
+              style: IconButton.styleFrom(
+                foregroundColor: theme.colorScheme.secondary,
+                side: BorderSide(color: theme.colorScheme.outlineVariant),
               ),
             ),
             const SizedBox(width: 8),
@@ -198,7 +262,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             Expanded(
               child: FilledButton.icon(
                 onPressed: _acting ? null : _onApprove,
-                icon: const Icon(Icons.check),
+                icon: const Icon(Icons.check, size: 18),
                 label: const Text('Approve'),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.green,
@@ -213,29 +277,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _onApprove() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Approve item?'),
-        content: Text('This will approve "${widget.item.title}".'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Approve'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
+    final feedback = await ApproveDialog.show(context, availableChips: _chips);
+    if (feedback == null || !mounted) return;
 
     setState(() => _acting = true);
     try {
-      await widget.reviewProvider.approve(widget.item.id);
+      await widget.reviewProvider.approve(
+        widget.item.id,
+        feedback: feedback.hasContent ? feedback : null,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Item approved')),
@@ -253,29 +303,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _onDefer() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Defer item?'),
-        content: Text('This will defer "${widget.item.title}" for later review.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Defer'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
+    final feedback = await DeferDialog.show(context, availableChips: _chips);
+    if (feedback == null || !mounted) return;
 
     setState(() => _acting = true);
     try {
-      await widget.reviewProvider.defer(widget.item.id);
+      await widget.reviewProvider.defer(
+        widget.item.id,
+        feedback: feedback.hasContent ? feedback : null,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Item deferred')),
@@ -293,62 +329,25 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _onReject() async {
-    final reasonController = TextEditingController();
-
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Rejecting "${widget.item.title}".'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Reason (optional)',
-                hintText: 'Why are you rejecting this?',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, reasonController.text),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-
-    reasonController.dispose();
-
-    if (reason == null || !mounted) return;
+    final feedback = await RejectDialog.show(context, availableChips: _chips);
+    if (feedback == null || !mounted) return;
 
     setState(() => _acting = true);
     try {
-      await widget.reviewProvider.reject(
-        widget.item.id,
-        reason: reason.isNotEmpty ? reason : null,
-      );
+      await widget.reviewProvider.reject(widget.item.id, feedback);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Item rejected')),
-        );
-        Navigator.pop(context);
+        if (feedback.pending) {
+          // Item stays in inbox with pending status
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Rejected — feedback pending')),
+          );
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item rejected')),
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -358,5 +357,164 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _onSaveForLater() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Save for Later?'),
+        content: const Text(
+          'The item will be moved to your for-later folder. '
+          'It will not count toward your inbox badge.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.bookmark, size: 18),
+            label: const Text('Save for Later'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider.saveForLater(widget.item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved for later')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save for later: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _onAddSection() async {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => _AddSectionDialog(
+        titleController: titleController,
+        contentController: contentController,
+      ),
+    );
+
+    titleController.dispose();
+    contentController.dispose();
+
+    if (result == null || !mounted) return;
+
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider.appendSection(
+        widget.item.id,
+        result['title']!,
+        result['content']!,
+      );
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Section added')),
+        );
+        // Reload detail to show new section
+        _loadDetail();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add section: $e')),
+        );
+      }
+    }
+  }
+}
+
+/// Inline dialog for appending a named section to a document.
+class _AddSectionDialog extends StatefulWidget {
+  final TextEditingController titleController;
+  final TextEditingController contentController;
+
+  const _AddSectionDialog({
+    required this.titleController,
+    required this.contentController,
+  });
+
+  @override
+  State<_AddSectionDialog> createState() => _AddSectionDialogState();
+}
+
+class _AddSectionDialogState extends State<_AddSectionDialog> {
+  bool get _canAdd =>
+      widget.titleController.text.trim().isNotEmpty &&
+      widget.contentController.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Section'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Section title'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: widget.titleController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. "Follow-up Notes"',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            const Text('Content'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: widget.contentController,
+              decoration: const InputDecoration(
+                hintText: 'Section content...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _canAdd
+              ? () => Navigator.pop(context, {
+                    'title': widget.titleController.text.trim(),
+                    'content': widget.contentController.text.trim(),
+                  })
+              : null,
+          child: const Text('Add'),
+        ),
+      ],
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/feedback_payload.dart';
 import '../models/review_item.dart';
 import 'agent_api_client.dart';
 
@@ -59,24 +60,54 @@ class ReviewProvider extends ChangeNotifier {
   }
 
   /// Approve an item and remove it from the local list.
-  Future<void> approve(String filename) async {
-    await _client.approveItem(filename);
+  ///
+  /// Pass [feedback] to include optional note and chips.
+  Future<void> approve(String filename, {ApproveFeedback? feedback}) async {
+    await _client.approveItem(filename, feedback: feedback);
     _items.removeWhere((item) => item.id == filename);
     notifyListeners();
   }
 
-  /// Reject an item with a reason and remove it from the local list.
-  Future<void> reject(String filename, {String? reason}) async {
-    await _client.rejectItem(filename, reason: reason);
-    _items.removeWhere((item) => item.id == filename);
-    notifyListeners();
+  /// Reject an item with structured feedback and remove it from the local list.
+  ///
+  /// Use [RejectFeedback.pendingOnly()] to create a pending-reject-feedback state;
+  /// the item stays in the inbox in that case and the list refreshes.
+  Future<void> reject(String filename, RejectFeedback feedback) async {
+    await _client.rejectItem(filename, feedback);
+    if (feedback.pending) {
+      // Item stays in inbox with pending status — refresh to get updated state
+      await refresh();
+    } else {
+      _items.removeWhere((item) => item.id == filename);
+      notifyListeners();
+    }
   }
 
   /// Defer an item and remove it from the local list.
-  Future<void> defer(String filename) async {
-    await _client.deferItem(filename);
+  ///
+  /// Pass [feedback] to include optional note, date, and chips.
+  Future<void> defer(String filename, {DeferFeedback? feedback}) async {
+    await _client.deferItem(filename, feedback: feedback);
     _items.removeWhere((item) => item.id == filename);
     notifyListeners();
+  }
+
+  /// Move an item to for-later/ and remove it from the local list.
+  Future<void> saveForLater(String filename) async {
+    await _client.saveForLater(filename);
+    _items.removeWhere((item) => item.id == filename);
+    notifyListeners();
+  }
+
+  /// Append a named section to an item (item stays in inbox).
+  Future<void> appendSection(
+      String filename, String title, String content) async {
+    await _client.appendSection(filename, title, content);
+  }
+
+  /// Fetch feedback chip labels from server config.
+  Future<List<String>> getFeedbackChips() async {
+    return _client.getFeedbackChips();
   }
 
   @override
