@@ -40,6 +40,7 @@ class ReviewItem {
   final int? size;
   final DateTime? modified;
   final String? content; // full markdown, only present in detail view
+  final String? requeueAfter; // deferred items: ISO date string (YYYY-MM-DD)
 
   const ReviewItem({
     required this.id,
@@ -53,6 +54,7 @@ class ReviewItem {
     this.size,
     this.modified,
     this.content,
+    this.requeueAfter,
   });
 
   /// Parsed document type; defaults to [DocumentType.workReport] for unknown values.
@@ -73,6 +75,7 @@ class ReviewItem {
           ? DateTime.tryParse(json['modified'] as String)
           : null,
       content: json['content'] as String?,
+      requeueAfter: json['requeue_after'] as String?,
     );
   }
 }

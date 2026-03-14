@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/create_idea_payload.dart';
 import '../models/deployment.dart';
 import '../models/feedback_payload.dart';
 import '../models/review_item.dart';
@@ -170,6 +171,75 @@ class AgentApiClient {
       String team, String folder, String filename) async {
     final response = await _get('/api/teams/$team/$folder/$filename');
     return ReviewItem.fromJson(response);
+  }
+
+  // --- sinh-inputs Folder Browser ---
+
+  /// List items in a sinh-inputs folder.
+  ///
+  /// [folder] ∈ {approved, rejected, deferred, done, ideas}.
+  /// Done folder supports [q] keyword search and [limit]/[offset] pagination.
+  Future<List<ReviewItem>> listFolder(
+    String folder, {
+    String? q,
+    int? limit,
+    int? offset,
+  }) async {
+    final params = <String, String>{};
+    if (q != null && q.isNotEmpty) params['q'] = q;
+    if (limit != null) params['limit'] = '$limit';
+    if (offset != null) params['offset'] = '$offset';
+    final query =
+        params.isNotEmpty ? '?${Uri(queryParameters: params).query}' : '';
+    final response = await _get('/api/sinh-inputs/$folder$query');
+    final items = response['items'] as List;
+    return items
+        .map((e) => ReviewItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get a single item from a sinh-inputs folder with full markdown content.
+  Future<ReviewItem> getFolderItem(String folder, String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    final response = await _get('/api/sinh-inputs/$folder/$encoded');
+    return ReviewItem.fromJson(response);
+  }
+
+  /// Re-queue an item from a resolved folder back to inbox/.
+  ///
+  /// Adds `requeued_from: <folder>` to YAML frontmatter and moves the file.
+  Future<void> requeueItem(String folder, String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/sinh-inputs/$folder/$encoded/requeue');
+  }
+
+  /// Archive an item from any folder by moving it to done/.
+  Future<void> archiveItem(String folder, String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/sinh-inputs/$folder/$encoded/archive');
+  }
+
+  /// Save an approved item for later (moves from approved/ to for-later/).
+  ///
+  /// Distinct from [saveForLater] which operates on inbox items.
+  Future<void> saveApprovedForLater(String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/sinh-inputs/approved/$encoded/save-for-later');
+  }
+
+  /// Create a new idea in ideas/ folder.
+  ///
+  /// The generated file format matches `pa idea` CLI output exactly.
+  Future<void> createIdea(CreateIdeaPayload payload) async {
+    await _post('/api/sinh-inputs/ideas', body: payload.toJson());
+  }
+
+  /// Append a named section to an idea file.
+  Future<void> appendToIdea(
+      String filename, String title, String content) async {
+    final encoded = Uri.encodeComponent(filename);
+    await _post('/api/sinh-inputs/ideas/$encoded/append-section',
+        body: {'title': title, 'content': content});
   }
 
   // --- HTTP helpers ---
