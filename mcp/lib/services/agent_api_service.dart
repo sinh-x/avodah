@@ -101,6 +101,8 @@ class AgentApiService {
         await _handleListTeams(request);
       } else if (path.startsWith('/api/teams/') && method == 'GET') {
         await _handleTeamBrowse(request);
+      } else if (path.startsWith('/api/sinh-inputs')) {
+        await _handleSinhInputsRoute(request);
       } else {
         _jsonResponse(request, HttpStatus.notFound, {'error': 'Not found'});
       }
@@ -564,6 +566,15 @@ class AgentApiService {
     }
 
     final source = File(p.join(_inboxPath, filename));
+    await _doAppendSection(request, source, filename);
+  }
+
+  /// Core logic to append a named `### Section` to any file.
+  ///
+  /// Used by both inbox append-section and ideas append-section.
+  /// Body (JSON): `{"title": "Section Title", "content": "Section content..."}`
+  Future<void> _doAppendSection(
+      HttpRequest request, File source, String filename) async {
     if (!source.existsSync()) {
       _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
       return;
@@ -803,6 +814,462 @@ class AgentApiService {
     });
   }
 
+  // --- sinh-inputs folder API ---
+
+  /// Route /api/sinh-inputs/:folder[/:filename[/:action]] requests.
+  ///
+  /// Handles GET (list, read) and POST (requeue, archive, save-for-later,
+  /// append-section, create-idea) for all 5 non-inbox sinh-inputs folders:
+  /// approved | rejected | deferred | done | ideas
+  Future<void> _handleSinhInputsRoute(HttpRequest request) async {
+    final path = request.uri.path;
+    final method = request.method;
+
+    final prefix = '/api/sinh-inputs';
+    final afterPrefix =
+        path.length > prefix.length ? path.substring(prefix.length) : '';
+
+    if (afterPrefix.isEmpty || afterPrefix == '/') {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Folder required'});
+      return;
+    }
+
+    // afterPrefix always starts with '/'
+    final rest = afterPrefix.substring(1);
+    final rawSegments = rest.split('/');
+
+    if (rawSegments.isEmpty || rawSegments[0].isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Folder required'});
+      return;
+    }
+
+    final folder = Uri.decodeComponent(rawSegments[0]);
+    const allowedFolders = {
+      'approved',
+      'rejected',
+      'deferred',
+      'done',
+      'ideas'
+    };
+    if (!allowedFolders.contains(folder)) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'Unknown folder'});
+      return;
+    }
+
+    if (rawSegments.length == 1) {
+      // /api/sinh-inputs/:folder
+      if (method == 'GET') {
+        await _handleSinhInputsListFolder(request, folder);
+      } else if (method == 'POST' && folder == 'ideas') {
+        await _handleSinhInputsCreateIdea(request);
+      } else {
+        _jsonResponse(request, HttpStatus.methodNotAllowed,
+            {'error': 'Method not allowed'});
+      }
+      return;
+    }
+
+    final filename = Uri.decodeComponent(rawSegments[1]);
+    if (!_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    if (rawSegments.length == 2) {
+      // /api/sinh-inputs/:folder/:filename
+      if (method == 'GET') {
+        await _handleSinhInputsGetItem(request, folder, filename);
+      } else {
+        _jsonResponse(request, HttpStatus.methodNotAllowed,
+            {'error': 'Method not allowed'});
+      }
+      return;
+    }
+
+    if (rawSegments.length == 3 && method == 'POST') {
+      // /api/sinh-inputs/:folder/:filename/:action
+      final action = rawSegments[2];
+      switch (action) {
+        case 'requeue':
+          await _handleSinhInputsRequeue(request, folder, filename);
+        case 'archive':
+          await _handleSinhInputsArchive(request, folder, filename);
+        case 'save-for-later':
+          if (folder != 'approved') {
+            _jsonResponse(request, HttpStatus.badRequest, {
+              'error': 'save-for-later is only available for approved items'
+            });
+          } else {
+            await _handleSinhInputsSaveForLater(request, filename);
+          }
+        case 'append-section':
+          await _handleSinhInputsAppendSection(request, folder, filename);
+        default:
+          _jsonResponse(
+              request, HttpStatus.notFound, {'error': 'Unknown action'});
+      }
+      return;
+    }
+
+    _jsonResponse(request, HttpStatus.notFound, {'error': 'Not found'});
+  }
+
+  /// GET /api/sinh-inputs/:folder — List items in a sinh-inputs folder.
+  ///
+  /// Done folder supports: `?q=<keyword>&limit=<n>&offset=<n>`
+  /// Done response: `{folder, items, total, hasMore}`
+  /// Other folders: `{folder, items}`
+  Future<void> _handleSinhInputsListFolder(
+      HttpRequest request, String folder) async {
+    final dirPath = _sinhInputsFolderPath(folder);
+    final dir = Directory(dirPath);
+
+    if (!dir.existsSync()) {
+      if (folder == 'done') {
+        _jsonResponse(request, HttpStatus.ok, {
+          'folder': folder,
+          'items': <dynamic>[],
+          'total': 0,
+          'hasMore': false,
+        });
+      } else {
+        _jsonResponse(request, HttpStatus.ok, {
+          'folder': folder,
+          'items': <dynamic>[],
+        });
+      }
+      return;
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final entity in dir.listSync()) {
+      if (entity is! File || !entity.path.endsWith('.md')) continue;
+      try {
+        final filename = p.basename(entity.path);
+        final content = entity.readAsStringSync();
+        final metadata = parseMarkdownMetadata(content, filename: filename);
+        final docType = detectDocumentType(content, filename);
+        final stat = entity.statSync();
+
+        final item = <String, dynamic>{
+          'id': filename,
+          ...metadata.toJson(),
+          'type': docType,
+          'size': stat.size,
+          'modified': stat.modified.toIso8601String(),
+        };
+
+        // For deferred, surface requeue_after at top level for easy UI access
+        if (folder == 'deferred') {
+          final requeueAfter = metadata.humanFeedback?.requeueAfter;
+          if (requeueAfter != null) {
+            item['requeue_after'] = requeueAfter;
+          }
+        }
+
+        items.add(item);
+      } catch (e) {
+        stderr
+            .writeln('Skipping malformed $folder file ${entity.path}: $e');
+      }
+    }
+
+    // Sort by date descending (newest first)
+    items.sort((a, b) {
+      final aDate = a['date'] as String? ?? '';
+      final bDate = b['date'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    if (folder == 'done') {
+      // Apply keyword search and pagination
+      final q = request.uri.queryParameters['q'];
+      final limit =
+          int.tryParse(request.uri.queryParameters['limit'] ?? '') ?? 20;
+      final offset =
+          int.tryParse(request.uri.queryParameters['offset'] ?? '') ?? 0;
+
+      var filtered = items;
+      if (q != null && q.isNotEmpty) {
+        final qLower = q.toLowerCase();
+        filtered = items.where((item) {
+          final id = (item['id'] as String? ?? '').toLowerCase();
+          final title = (item['title'] as String? ?? '').toLowerCase();
+          return id.contains(qLower) || title.contains(qLower);
+        }).toList();
+      }
+
+      final total = filtered.length;
+      final paginated = filtered.skip(offset).take(limit).toList();
+      final hasMore = offset + limit < total;
+
+      _jsonResponse(request, HttpStatus.ok, {
+        'folder': folder,
+        'items': paginated,
+        'total': total,
+        'hasMore': hasMore,
+      });
+    } else {
+      _jsonResponse(request, HttpStatus.ok, {
+        'folder': folder,
+        'items': items,
+      });
+    }
+  }
+
+  /// GET /api/sinh-inputs/:folder/:filename — Read single item content.
+  Future<void> _handleSinhInputsGetItem(
+      HttpRequest request, String folder, String filename) async {
+    final filePath = p.join(_sinhInputsFolderPath(folder), filename);
+    if (!_isWithinSandbox(filePath)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final file = File(filePath);
+    if (!file.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    final content = file.readAsStringSync();
+    final metadata = parseMarkdownMetadata(content, filename: filename);
+    final docType = detectDocumentType(content, filename);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'id': filename,
+      'folder': folder,
+      ...metadata.toJson(),
+      'type': docType,
+      'content': content,
+    });
+  }
+
+  /// POST /api/sinh-inputs/:folder/:filename/requeue — Move item back to inbox.
+  ///
+  /// Adds `requeued_from: <folder>` to YAML frontmatter.
+  /// Preserves all existing content and annotations intact.
+  Future<void> _handleSinhInputsRequeue(
+      HttpRequest request, String folder, String filename) async {
+    final sourcePath = p.join(_sinhInputsFolderPath(folder), filename);
+    if (!_isWithinSandbox(sourcePath)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(sourcePath);
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Add requeued_from frontmatter key, preserving all existing content
+    final content = source.readAsStringSync();
+    final updated = _insertFrontmatterKey(content, 'requeued_from', folder);
+    source.writeAsStringSync(updated);
+
+    // Move to inbox (atomic rename on same filesystem)
+    _ensureDir(_inboxPath);
+    final dest = File(p.join(_inboxPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'status': 'requeued',
+      'file': filename,
+      'from': folder,
+    });
+  }
+
+  /// POST /api/sinh-inputs/:folder/:filename/archive — Move item to done/.
+  Future<void> _handleSinhInputsArchive(
+      HttpRequest request, String folder, String filename) async {
+    final sourcePath = p.join(_sinhInputsFolderPath(folder), filename);
+    if (!_isWithinSandbox(sourcePath)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(sourcePath);
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    _ensureDir(_donePath);
+    final dest = File(p.join(_donePath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'status': 'archived',
+      'file': filename,
+      'from': folder,
+    });
+  }
+
+  /// POST /api/sinh-inputs/approved/:filename/save-for-later
+  ///
+  /// Moves approved item to for-later/, adds `saved_from: approved` frontmatter.
+  Future<void> _handleSinhInputsSaveForLater(
+      HttpRequest request, String filename) async {
+    final sourcePath = p.join(_sinhInputsFolderPath('approved'), filename);
+    if (!_isWithinSandbox(sourcePath)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(sourcePath);
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Add saved_from frontmatter key
+    final content = source.readAsStringSync();
+    final updated = _insertFrontmatterKey(content, 'saved_from', 'approved');
+    source.writeAsStringSync(updated);
+
+    _ensureDir(_forLaterPath);
+    final dest = File(p.join(_forLaterPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'status': 'saved-for-later',
+      'file': filename,
+    });
+  }
+
+  /// POST /api/sinh-inputs/ideas — Create a new idea.
+  ///
+  /// Body (JSON): `{title*, category?, effort?, what?, why?, who?, notes?, tags?}`
+  /// Generated file format matches `pa idea` CLI output exactly.
+  /// `tags` accepts a JSON array or a space-separated string.
+  Future<void> _handleSinhInputsCreateIdea(HttpRequest request) async {
+    String body;
+    try {
+      body = await utf8.decoder.bind(request).join();
+    } catch (e) {
+      _jsonResponse(request, HttpStatus.internalServerError,
+          {'error': 'Failed to read request body'});
+      return;
+    }
+
+    if (body.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Body required'});
+      return;
+    }
+
+    Map<String, dynamic> json;
+    try {
+      json = jsonDecode(body) as Map<String, dynamic>;
+    } catch (e) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Invalid JSON body'});
+      return;
+    }
+
+    final title = json['title'] as String?;
+    if (title == null || title.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'title is required'});
+      return;
+    }
+
+    final category = (json['category'] as String?)?.trim() ?? 'personal';
+    final effort = (json['effort'] as String?)?.trim() ?? 'M';
+    final what = (json['what'] as String?)?.trim();
+    final why = (json['why'] as String?)?.trim();
+    final who = (json['who'] as String?)?.trim() ?? 'Sinh';
+    final notes = (json['notes'] as String?)?.trim();
+
+    // Tags: accept array or space-separated string — matches pa idea CLI format
+    String tagsFormatted;
+    final tagsRaw = json['tags'];
+    if (tagsRaw is List && tagsRaw.isNotEmpty) {
+      final tags =
+          tagsRaw.whereType<String>().where((t) => t.isNotEmpty).toList();
+      tagsFormatted =
+          tags.isNotEmpty ? tags.map((t) => '`$t`').join(' ') : '(none yet)';
+    } else if (tagsRaw is String && tagsRaw.trim().isNotEmpty) {
+      tagsFormatted = tagsRaw
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((t) => t.isNotEmpty)
+          .map((t) => '`$t`')
+          .join(' ');
+    } else {
+      tagsFormatted = '(none yet)';
+    }
+
+    // Generate filename — matches pa idea CLI slugify logic
+    final now = DateTime.now();
+    final today = _formatDate(now);
+    final timestamp = _formatTimestamp(now);
+    final slug = _slugify(title);
+
+    final ideasDir = _sinhInputsFolderPath('ideas');
+    _ensureDir(ideasDir);
+
+    var filename = '$today-$slug.md';
+    if (File(p.join(ideasDir, filename)).existsSync()) {
+      var counter = 2;
+      while (
+          File(p.join(ideasDir, '$today-$slug-$counter.md')).existsSync()) {
+        counter++;
+      }
+      filename = '$today-$slug-$counter.md';
+    }
+
+    // Build file content — identical structure to pa idea CLI output
+    final buf = StringBuffer();
+    buf.writeln('# Idea: $title');
+    buf.writeln();
+    buf.writeln('> **Date:** $timestamp');
+    buf.writeln('> **Category:** $category');
+    buf.writeln('> **Status:** new');
+    buf.writeln('> **Effort:** $effort');
+    buf.writeln();
+    buf.writeln('## What');
+    buf.writeln(what != null && what.isNotEmpty ? what : title);
+    buf.writeln();
+    buf.writeln('## Why');
+    buf.writeln(why != null && why.isNotEmpty ? why : '_(not specified)_');
+    buf.writeln();
+    buf.writeln('## Who');
+    buf.writeln(who);
+    buf.writeln();
+    buf.writeln('## Notes');
+    buf.writeln(notes != null && notes.isNotEmpty ? notes : '_(none)_');
+    buf.writeln();
+    buf.writeln('## Tags');
+    buf.write(tagsFormatted);
+    buf.writeln();
+
+    File(p.join(ideasDir, filename)).writeAsStringSync(buf.toString());
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'status': 'created',
+      'file': filename,
+    });
+  }
+
+  /// POST /api/sinh-inputs/:folder/:filename/append-section
+  ///
+  /// Appends a `### Section` to a file in any sinh-inputs folder.
+  /// Primarily used for ideas. Reuses `_doAppendSection` logic.
+  Future<void> _handleSinhInputsAppendSection(
+      HttpRequest request, String folder, String filename) async {
+    final filePath = p.join(_sinhInputsFolderPath(folder), filename);
+    if (!_isWithinSandbox(filePath)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+    final source = File(filePath);
+    await _doAppendSection(request, source, filename);
+  }
+
   // --- Helpers ---
 
   /// Parse a `chips:` YAML list from a config file.
@@ -838,6 +1305,89 @@ class AgentApiService {
       }
     }
     return chips;
+  }
+
+  /// Compute the filesystem path for a sinh-inputs folder.
+  String _sinhInputsFolderPath(String folder) =>
+      p.join(aiUsagePath, 'sinh-inputs', folder);
+
+  /// Insert or update a top-level key-value pair in YAML frontmatter.
+  ///
+  /// Creates a new frontmatter block if none exists.
+  /// Replaces any existing key with the same name.
+  String _insertFrontmatterKey(String content, String key, String value) {
+    if (content.startsWith('---\n')) {
+      final endIdx = content.indexOf('\n---\n', 4);
+      if (endIdx != -1) {
+        var fm = content.substring(4, endIdx);
+        final after = content.substring(endIdx + 5);
+        fm = _dropFrontmatterKey(fm, key);
+        if (fm.isNotEmpty && !fm.endsWith('\n')) fm = '$fm\n';
+        fm = '$fm$key: $value';
+        return '---\n$fm\n---\n$after';
+      }
+    }
+    return '---\n$key: $value\n---\n$content';
+  }
+
+  /// Remove all lines for a top-level key (and its indented children)
+  /// from a raw YAML string (no surrounding `---` delimiters).
+  String _dropFrontmatterKey(String yaml, String key) {
+    final lines = yaml.split('\n');
+    final result = <String>[];
+    bool inKey = false;
+    for (final line in lines) {
+      if (line == '$key:' ||
+          line.startsWith('$key: ') ||
+          line.startsWith('$key:\t')) {
+        inKey = true;
+        continue;
+      }
+      if (inKey) {
+        if (line.startsWith(' ') || line.startsWith('\t') || line.isEmpty) {
+          continue;
+        }
+        inKey = false;
+      }
+      result.add(line);
+    }
+    while (result.isNotEmpty && result.last.isEmpty) {
+      result.removeLast();
+    }
+    return result.join('\n');
+  }
+
+  /// Slugify a title to a URL-safe filename component (max 50 chars).
+  ///
+  /// Matches the slugify logic used by the `pa idea` CLI.
+  String _slugify(String title) {
+    var slug = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '-')
+        .replaceAll(RegExp(r'-+'), '-');
+    if (slug.startsWith('-')) slug = slug.substring(1);
+    if (slug.endsWith('-')) slug = slug.substring(0, slug.length - 1);
+    if (slug.length > 50) {
+      slug = slug.substring(0, 50);
+      while (slug.endsWith('-')) {
+        slug = slug.substring(0, slug.length - 1);
+      }
+    }
+    return slug;
+  }
+
+  /// Format a [DateTime] as `YYYY-MM-DD`.
+  String _formatDate(DateTime dt) {
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '${dt.year}-$m-$d';
+  }
+
+  /// Format a [DateTime] as `YYYY-MM-DD HH:MM` — matches `pa idea` CLI format.
+  String _formatTimestamp(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '${_formatDate(dt)} $h:$min';
   }
 
   /// Send a JSON response.
