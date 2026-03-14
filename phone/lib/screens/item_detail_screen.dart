@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../config/document_type_config.dart';
 import '../models/review_item.dart';
 import '../services/review_provider.dart';
+import '../widgets/document_type_badge.dart';
 import 'dialogs/approve_dialog.dart';
 import 'dialogs/defer_dialog.dart';
 import 'dialogs/reject_dialog.dart';
 
 /// Shows full markdown content for a review item with action buttons.
 ///
-/// Actions: Approve (green), Defer (orange), Reject (red), Save for Later (neutral).
-/// Each action opens a rich feedback dialog; fast-path still supported.
+/// The action bar is type-conditional: review-request items get the full
+/// d-40e61d rich feedback bar (Reject/Defer/SaveForLater/Approve); other types
+/// get a lighter workflow (Acknowledge, Got It, Looks Good / Has Changes, etc.)
+/// based on [DocumentTypeConfig].
 class ItemDetailScreen extends StatefulWidget {
   final ReviewItem item;
   final ReviewProvider reviewProvider;
@@ -162,13 +166,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         visualDensity: VisualDensity.compact,
       ));
     }
-    if (item.type != null) {
-      chips.add(Chip(
-        avatar: const Icon(Icons.label, size: 16),
-        label: Text(item.type!),
-        visualDensity: VisualDensity.compact,
-      ));
-    }
+    chips.add(DocumentTypeBadge(type: item.documentType));
 
     if (chips.isEmpty) return const SizedBox.shrink();
 
@@ -211,6 +209,20 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   Widget _buildActionBar() {
     final theme = Theme.of(context);
+    final docType = widget.item.documentType;
+
+    Widget barContent;
+    switch (docType) {
+      case DocumentType.reviewRequest:
+      case DocumentType.decisionNeeded:
+        barContent = _buildReviewRequestBar(theme);
+      case DocumentType.workReport:
+        barContent = _buildWorkReportBar(theme);
+      case DocumentType.planDraft:
+        barContent = _buildPlanDraftBar(theme);
+      case DocumentType.fyi:
+        barContent = _buildFyiBar(theme);
+    }
 
     return SafeArea(
       child: Container(
@@ -221,60 +233,249 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             top: BorderSide(color: theme.colorScheme.outlineVariant),
           ),
         ),
-        child: Row(
-          children: [
-            // Reject
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _acting ? null : _onReject,
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Reject'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
-                  side: BorderSide(color: theme.colorScheme.error),
-                ),
-              ),
+        child: barContent,
+      ),
+    );
+  }
+
+  /// Full d-40e61d action bar: [Reject] [⏳] [🔖] [Approve]
+  Widget _buildReviewRequestBar(ThemeData theme) {
+    return Row(
+      children: [
+        // Reject
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _acting ? null : _onReject,
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Reject'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(color: theme.colorScheme.error),
             ),
-            const SizedBox(width: 8),
-            // Defer
-            IconButton.outlined(
-              onPressed: _acting ? null : _onDefer,
-              icon: const Icon(Icons.schedule),
-              tooltip: 'Defer',
-              style: IconButton.styleFrom(
-                foregroundColor: Colors.orange.shade800,
-                side: BorderSide(color: Colors.orange.shade300),
-              ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Defer
+        IconButton.outlined(
+          onPressed: _acting ? null : _onDefer,
+          icon: const Icon(Icons.schedule),
+          tooltip: 'Defer',
+          style: IconButton.styleFrom(
+            foregroundColor: Colors.orange.shade800,
+            side: BorderSide(color: Colors.orange.shade300),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Save for Later
+        IconButton.outlined(
+          onPressed: _acting ? null : _onSaveForLater,
+          icon: const Icon(Icons.bookmark_outline),
+          tooltip: 'Save for Later',
+          style: IconButton.styleFrom(
+            foregroundColor: theme.colorScheme.secondary,
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Approve
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _acting ? null : _onApprove,
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Approve'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(width: 8),
-            // Save for Later
-            IconButton.outlined(
-              onPressed: _acting ? null : _onSaveForLater,
-              icon: const Icon(Icons.bookmark_outline),
-              tooltip: 'Save for Later',
-              style: IconButton.styleFrom(
-                foregroundColor: theme.colorScheme.secondary,
-                side: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Work-report action bar: [✅ Acknowledge] [🔖 Later]
+  Widget _buildWorkReportBar(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _acting ? null : _onAcknowledge,
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Acknowledge'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(width: 8),
-            // Approve
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _acting ? null : _onApprove,
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('Approve'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.outlined(
+          onPressed: _acting ? null : _onSaveForLater,
+          icon: const Icon(Icons.bookmark_outline),
+          tooltip: 'Save for Later',
+          style: IconButton.styleFrom(
+            foregroundColor: theme.colorScheme.secondary,
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Plan-draft action bar: [✅ Looks Good] [📝 Has Changes] [⏳ Defer] [🔖 Later]
+  Widget _buildPlanDraftBar(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _acting ? null : _onPlanLooksGood,
+            icon: const Icon(Icons.thumb_up_outlined, size: 18),
+            label: const Text('Looks Good'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
             ),
-          ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _acting ? null : _onPlanHasChanges,
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('Has Changes'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.outlined(
+          onPressed: _acting ? null : _onDefer,
+          icon: const Icon(Icons.schedule),
+          tooltip: 'Defer',
+          style: IconButton.styleFrom(
+            foregroundColor: Colors.orange.shade800,
+            side: BorderSide(color: Colors.orange.shade300),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.outlined(
+          onPressed: _acting ? null : _onSaveForLater,
+          icon: const Icon(Icons.bookmark_outline),
+          tooltip: 'Save for Later',
+          style: IconButton.styleFrom(
+            foregroundColor: theme.colorScheme.secondary,
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// FYI action bar: [👍 Got It]
+  Widget _buildFyiBar(ThemeData theme) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _acting ? null : _onGotIt,
+        icon: const Icon(Icons.thumb_up, size: 18),
+        label: const Text('Got It'),
+        style: FilledButton.styleFrom(
+          backgroundColor: theme.colorScheme.secondary,
+          foregroundColor: theme.colorScheme.onSecondary,
         ),
       ),
     );
   }
+
+  // --- New type-specific handlers ---
+
+  /// Acknowledge fast-path: clean move to done/ with no annotation (AC24).
+  Future<void> _onAcknowledge() async {
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider.acknowledge(widget.item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Acknowledged')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to acknowledge: $e')));
+      }
+    }
+  }
+
+  /// Got It: clean move to done/ for FYI items.
+  Future<void> _onGotIt() async {
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider.acknowledge(widget.item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Got it')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  /// Plan "Looks Good": clean move to done/ with no annotation (F19 / AC28).
+  Future<void> _onPlanLooksGood() async {
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider.acknowledge(widget.item.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Plan confirmed')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  /// Plan "Has Changes": prompt for a note, then move to done/ (F18 / AC29).
+  ///
+  /// Note: the server writes `action: acknowledged` in frontmatter; a future
+  /// phase may add a dedicated API param to write `plan-confirmed-with-changes`.
+  Future<void> _onPlanHasChanges() async {
+    final noteController = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _PlanChangesDialog(controller: noteController),
+    );
+    noteController.dispose();
+    if (note == null || !mounted) return;
+
+    setState(() => _acting = true);
+    try {
+      await widget.reviewProvider
+          .acknowledge(widget.item.id, note: note.isNotEmpty ? note : null);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Plan noted')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  // --- Existing d-40e61d handlers (unchanged) ---
 
   Future<void> _onApprove() async {
     final feedback = await ApproveDialog.show(context, availableChips: _chips);
@@ -443,6 +644,48 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         );
       }
     }
+  }
+}
+
+/// Inline dialog for "Has Changes" on a plan-draft item.
+///
+/// Returns the note text (may be empty string) or null if cancelled.
+/// Phase 5 will replace this with a dedicated [PlanConfirmDialog] widget.
+class _PlanChangesDialog extends StatefulWidget {
+  final TextEditingController controller;
+  const _PlanChangesDialog({required this.controller});
+
+  @override
+  State<_PlanChangesDialog> createState() => _PlanChangesDialogState();
+}
+
+class _PlanChangesDialogState extends State<_PlanChangesDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('What needs to change?'),
+      content: TextField(
+        controller: widget.controller,
+        decoration: const InputDecoration(
+          hintText: 'Describe the changes needed...',
+          border: OutlineInputBorder(),
+        ),
+        maxLines: 4,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, widget.controller.text.trim()),
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
   }
 }
 
