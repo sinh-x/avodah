@@ -4,6 +4,7 @@ import '../config/document_type_config.dart';
 import '../models/review_item.dart';
 import '../services/review_provider.dart';
 import '../widgets/document_type_badge.dart';
+import 'folder_list_view.dart';
 import 'item_detail_screen.dart';
 
 /// Agent Review tab: 6 subtabs for all sinh-inputs folders.
@@ -38,13 +39,12 @@ class ReviewQueueScreen extends StatelessWidget {
             child: TabBarView(
               children: [
                 _InboxTabView(reviewProvider: reviewProvider),
-                const _PlaceholderTabView(
-                    label: 'Approved',
-                    icon: Icons.check_circle_outline),
-                const _PlaceholderTabView(
-                    label: 'Rejected', icon: Icons.cancel_outlined),
-                const _PlaceholderTabView(
-                    label: 'Deferred', icon: Icons.schedule_outlined),
+                FolderListView(
+                    folder: 'approved', client: reviewProvider.client),
+                FolderListView(
+                    folder: 'rejected', client: reviewProvider.client),
+                FolderListView(
+                    folder: 'deferred', client: reviewProvider.client),
                 const _PlaceholderTabView(
                     label: 'Done', icon: Icons.archive_outlined),
                 const _PlaceholderTabView(

@@ -20,6 +20,8 @@ class ReviewProvider extends ChangeNotifier {
 
   ReviewProvider(this._client);
 
+  AgentApiClient get client => _client;
+
   List<ReviewItem> get items => _items;
   List<ReviewItem> get forLaterItems => _forLaterItems;
   bool get loading => _loading;
