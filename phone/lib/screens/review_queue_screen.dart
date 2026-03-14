@@ -6,22 +6,107 @@ import '../services/review_provider.dart';
 import '../widgets/document_type_badge.dart';
 import 'item_detail_screen.dart';
 
-/// Lists inbox items for agent workflow review.
+/// Agent Review tab: 6 subtabs for all sinh-inputs folders.
 ///
-/// Supports pull-to-refresh, auto-refresh (via [ReviewProvider]),
-/// filter between inbox and for-later views, type filter chips,
-/// sort by urgency (pending-reject → type priority → date desc),
-/// and shows error/empty states.
-class ReviewQueueScreen extends StatefulWidget {
+/// Subtabs: Inbox | Approved | Rejected | Deferred | Done | Ideas
+/// The Inbox subtab preserves the existing inbox + for-later review workflow.
+/// The remaining tabs are placeholders; implemented in subsequent phases.
+class ReviewQueueScreen extends StatelessWidget {
   final ReviewProvider reviewProvider;
 
   const ReviewQueueScreen({super.key, required this.reviewProvider});
 
   @override
-  State<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 6,
+      child: Column(
+        children: [
+          const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: 'Inbox'),
+              Tab(text: 'Approved'),
+              Tab(text: 'Rejected'),
+              Tab(text: 'Deferred'),
+              Tab(text: 'Done'),
+              Tab(text: 'Ideas'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _InboxTabView(reviewProvider: reviewProvider),
+                const _PlaceholderTabView(
+                    label: 'Approved',
+                    icon: Icons.check_circle_outline),
+                const _PlaceholderTabView(
+                    label: 'Rejected', icon: Icons.cancel_outlined),
+                const _PlaceholderTabView(
+                    label: 'Deferred', icon: Icons.schedule_outlined),
+                const _PlaceholderTabView(
+                    label: 'Done', icon: Icons.archive_outlined),
+                const _PlaceholderTabView(
+                    label: 'Ideas', icon: Icons.lightbulb_outline),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
+/// Temporary placeholder for tabs not yet implemented (phases 4–6).
+class _PlaceholderTabView extends StatelessWidget {
+  final String label;
+  final IconData icon;
+
+  const _PlaceholderTabView({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 16),
+          Text(
+            label,
+            style: theme.textTheme.titleMedium
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Coming soon',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Inbox subtab — preserves the existing inbox + for-later review workflow.
+///
+/// Supports pull-to-refresh, auto-refresh (via [ReviewProvider]),
+/// filter between inbox and for-later views, type filter chips,
+/// sort by urgency (pending-reject → type priority → date desc),
+/// and shows error/empty states.
+class _InboxTabView extends StatefulWidget {
+  final ReviewProvider reviewProvider;
+
+  const _InboxTabView({required this.reviewProvider});
+
+  @override
+  State<_InboxTabView> createState() => _InboxTabViewState();
+}
+
+class _InboxTabViewState extends State<_InboxTabView> {
   bool _showForLater = false;
   bool _forLaterLoading = false;
   DocumentType? _typeFilter; // null = All
