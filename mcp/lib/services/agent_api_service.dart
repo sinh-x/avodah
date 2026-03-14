@@ -40,6 +40,7 @@ class AgentApiService {
   String get _rejectedPath => p.join(aiUsagePath, 'sinh-inputs', 'rejected');
   String get _deferredPath => p.join(aiUsagePath, 'sinh-inputs', 'deferred');
   String get _forLaterPath => p.join(aiUsagePath, 'sinh-inputs', 'for-later');
+  String get _donePath => p.join(aiUsagePath, 'sinh-inputs', 'done');
   String get _chipConfigPath => p.join(aiUsagePath, 'feedback-chips.yaml');
   String get _teamsPath => p.join(aiUsagePath, 'agent-teams');
 
@@ -84,6 +85,8 @@ class AgentApiService {
         await _handleDefer(request);
       } else if (path.endsWith('/save-for-later') && method == 'POST') {
         await _handleSaveForLater(request);
+      } else if (path.endsWith('/acknowledge') && method == 'POST') {
+        await _handleAcknowledge(request);
       } else if (path.endsWith('/append-section') && method == 'POST') {
         await _handleAppendSection(request);
       } else if (path == '/api/for-later' && method == 'GET') {
@@ -111,10 +114,15 @@ class AgentApiService {
   }
 
   /// GET /api/inbox — List inbox items with parsed metadata.
+  ///
+  /// Each item includes a canonical `type` field (work-report, review-request,
+  /// plan-draft, fyi, decision-needed) computed via type detection algorithm.
+  /// Response also includes `count_by_type` breakdown.
   Future<void> _handleListInbox(HttpRequest request) async {
     final dir = Directory(_inboxPath);
     if (!dir.existsSync()) {
-      _jsonResponse(request, HttpStatus.ok, {'items': []});
+      _jsonResponse(
+          request, HttpStatus.ok, {'items': [], 'count_by_type': {}});
       return;
     }
 
@@ -125,10 +133,12 @@ class AgentApiService {
         final filename = p.basename(entity.path);
         final content = entity.readAsStringSync();
         final metadata = parseMarkdownMetadata(content, filename: filename);
+        final docType = detectDocumentType(content, filename);
         final stat = entity.statSync();
         items.add({
           'id': filename,
           ...metadata.toJson(),
+          'type': docType, // canonical type overwrites raw metadata.type
           'size': stat.size,
           'modified': stat.modified.toIso8601String(),
         });
@@ -144,7 +154,17 @@ class AgentApiService {
       return bDate.compareTo(aDate);
     });
 
-    _jsonResponse(request, HttpStatus.ok, {'items': items});
+    // Count items by type
+    final countByType = <String, int>{};
+    for (final item in items) {
+      final t = item['type'] as String? ?? 'work-report';
+      countByType[t] = (countByType[t] ?? 0) + 1;
+    }
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'items': items,
+      'count_by_type': countByType,
+    });
   }
 
   /// GET /api/inbox/:filename — Read single inbox item content.
@@ -163,10 +183,12 @@ class AgentApiService {
 
     final content = file.readAsStringSync();
     final metadata = parseMarkdownMetadata(content, filename: filename);
+    final docType = detectDocumentType(content, filename);
 
     _jsonResponse(request, HttpStatus.ok, {
       'id': filename,
       ...metadata.toJson(),
+      'type': docType,
       'content': content,
     });
   }
@@ -448,6 +470,55 @@ class AgentApiService {
 
     _jsonResponse(request, HttpStatus.ok,
         {'status': 'saved-for-later', 'file': filename});
+  }
+
+  /// POST /api/inbox/:filename/acknowledge — Acknowledge a work-report or FYI
+  /// item and move it to done/.
+  ///
+  /// Body (optional JSON): `{"note": "..."}`
+  /// - No note → clean move to done/ with no annotation (fast-path).
+  /// - Note provided → writes `human_feedback.action: acknowledged` + note to
+  ///   YAML frontmatter; no `## Human Review` section written.
+  Future<void> _handleAcknowledge(HttpRequest request) async {
+    final filename = _extractActionFilename(
+        request.uri.path, '/api/inbox/', '/acknowledge');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Parse optional note body
+    String? note;
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      if (body.isNotEmpty) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        note = json['note'] as String?;
+      }
+    } catch (_) {
+      // Use no note if body parsing fails
+    }
+
+    // Write annotation only if note provided (fast-path: clean move)
+    final content = source.readAsStringSync();
+    final updated = writeFeedbackAnnotation(
+        content, AcknowledgeFeedbackAnnotation(note: note));
+    if (updated != content) {
+      source.writeAsStringSync(updated);
+    }
+
+    _ensureDir(_donePath);
+    final dest = File(p.join(_donePath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(
+        request, HttpStatus.ok, {'status': 'acknowledged', 'file': filename});
   }
 
   /// POST /api/inbox/:filename/append-section — Append a named section to file.

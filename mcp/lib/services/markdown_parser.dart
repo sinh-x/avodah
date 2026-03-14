@@ -12,6 +12,8 @@
 /// of the requirements. See [writeFeedbackAnnotation] for details.
 library;
 
+import 'package:path/path.dart' as p;
+
 // --- Public data classes ---
 
 /// Parsed metadata from a markdown file.
@@ -143,6 +145,16 @@ class DeferFeedbackAnnotation extends FeedbackAnnotation {
 
 class SaveForLaterAnnotation extends FeedbackAnnotation {
   const SaveForLaterAnnotation();
+}
+
+/// Acknowledge a work-report or FYI item.
+///
+/// - No note → fast-path: no annotation written (clean move).
+/// - Note provided → YAML frontmatter only (`action: acknowledged` + note).
+///   No `## Human Review` section is ever written for acknowledgments.
+class AcknowledgeFeedbackAnnotation extends FeedbackAnnotation {
+  final String? note;
+  const AcknowledgeFeedbackAnnotation({this.note});
 }
 
 // --- Parsing ---
@@ -281,6 +293,56 @@ HumanFeedback? _parseFrontmatterFeedback(String content) {
   );
 }
 
+// --- Document type detection ---
+
+/// Detect the canonical document type from content and filename.
+///
+/// Detection order:
+/// 1. Parse `> **Type:** <value>` from header block; normalize via alias map.
+/// 2. Filename fallback: `review-*` prefix → `review-request`;
+///    `plan-draft` in name → `plan-draft`.
+/// 3. Default: `work-report`.
+///
+/// Unknown `Type:` values fall back to `work-report` (tolerant).
+String detectDocumentType(String content, String filename) {
+  // Strip frontmatter before scanning body (handles annotated files)
+  final body = _stripFrontmatter(content);
+  final lines = body.split('\n');
+  for (final line in lines) {
+    if (line.startsWith('> **Type:**')) {
+      final value = line.replaceFirst('> **Type:**', '').trim();
+      return _normalizeDocumentType(value);
+    }
+    // Stop at first non-blockquote, non-title, non-empty line (end of header)
+    if (line.isNotEmpty &&
+        !line.startsWith('#') &&
+        !line.startsWith('>') &&
+        line.trim().isNotEmpty) break;
+  }
+
+  // Filename fallback: strip YYYY-MM-DD- date prefix
+  final base = p.basename(filename);
+  final withoutDate = base.replaceFirst(RegExp(r'^\d{4}-\d{2}-\d{2}-'), '');
+  if (withoutDate.startsWith('review-')) return 'review-request';
+  if (withoutDate.contains('plan-draft')) return 'plan-draft';
+
+  // Default
+  return 'work-report';
+}
+
+/// Normalize a raw `Type:` value to its canonical type ID.
+///
+/// Case-insensitive. Unknown values fall back to `work-report`.
+String _normalizeDocumentType(String raw) {
+  final lower = raw.toLowerCase().trim();
+  if (lower == 'work-report' || lower == 'work report') return 'work-report';
+  if (lower.startsWith('review')) return 'review-request';
+  if (lower.startsWith('plan')) return 'plan-draft';
+  if (lower.startsWith('fyi') || lower == 'notification') return 'fyi';
+  if (lower.startsWith('decision')) return 'decision-needed';
+  return 'work-report'; // tolerant fallback
+}
+
 // --- Annotation writing ---
 
 /// Write a feedback annotation to file content, returning the updated content.
@@ -383,6 +445,18 @@ String writeFeedbackAnnotation(String content, FeedbackAnnotation annotation) {
         action: 'saved-for-later',
         by: by,
         at: now,
+      );
+      return _applyAnnotation(content, yaml, null);
+
+    case AcknowledgeFeedbackAnnotation(:final note):
+      // Fast-path: no note → clean move (no annotation written)
+      if (note == null || note.isEmpty) return content;
+      // Note provided → YAML frontmatter only; NO ## Human Review section
+      final yaml = _buildFeedbackYaml(
+        action: 'acknowledged',
+        by: by,
+        at: now,
+        note: note,
       );
       return _applyAnnotation(content, yaml, null);
   }
