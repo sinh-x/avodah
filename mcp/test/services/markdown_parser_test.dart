@@ -442,4 +442,139 @@ human_feedback:
           contains('note: "Secretary: create task"'));
     });
   });
+
+  group('detectDocumentType — type detection algorithm (AC33, AC34, AC36, NF1, NF2)', () {
+    // AC33: no Type: field + no review- prefix → work-report (default)
+    test('AC33: file with no Type field and no review- prefix defaults to work-report', () {
+      const content = '''# Work Report: Builder Phase 2
+
+> **Date:** 2026-03-14
+> **From:** builder / team-manager
+> **Status:** success
+
+## What Was Done
+- Built something
+''';
+      expect(detectDocumentType(content, '2026-03-14-builder-phase-2.md'),
+          equals('work-report'));
+    });
+
+    // AC34: filename starts with review- after date prefix → review-request
+    test('AC34: filename with review- prefix (no Type field) → review-request', () {
+      const content = '''# Review Request: PA Rich Feedback
+
+> **Date:** 2026-03-14
+> **From:** requirements / team-manager
+
+## What Was Done
+- Built something
+''';
+      expect(
+          detectDocumentType(content, '2026-03-14-review-pa-rich-feedback.md'),
+          equals('review-request'));
+    });
+
+    // AC36: legacy alias "FYI + Optional Review" → fyi
+    test('AC36: legacy alias "FYI + Optional Review" in Type field → fyi', () {
+      const content = '''# FYI: Mockups Routed
+
+> **Date:** 2026-03-14
+> **From:** requirements / manager
+> **Type:** FYI + Optional Review
+
+Informational content.
+''';
+      expect(detectDocumentType(content, '2026-03-14-fyi-mockups-routed.md'),
+          equals('fyi'));
+    });
+
+    // NF1: backward-compat — existing plan-draft in filename → plan-draft
+    test('NF1: filename contains plan-draft → plan-draft', () {
+      const content = '''# Daily Plan — 2026-03-14
+
+Goals for today.
+''';
+      expect(
+          detectDocumentType(content, '2026-03-14-plan-draft.md'),
+          equals('plan-draft'));
+    });
+
+    // NF2: tolerant — unknown Type value falls back to work-report
+    test('NF2: unknown Type value falls back to work-report', () {
+      const content = '''# Some Document
+
+> **Type:** unknown-future-type
+
+Content.
+''';
+      expect(detectDocumentType(content, '2026-03-14-some-document.md'),
+          equals('work-report'));
+    });
+
+    test('canonical type values parsed correctly', () {
+      for (final testCase in [
+        ('> **Type:** work-report', 'work-report'),
+        ('> **Type:** review-request', 'review-request'),
+        ('> **Type:** plan-draft', 'plan-draft'),
+        ('> **Type:** fyi', 'fyi'),
+        ('> **Type:** Review & Feedback', 'review-request'),
+        ('> **Type:** Plan Draft', 'plan-draft'),
+        ('> **Type:** notification', 'fyi'),
+      ]) {
+        final (typeLine, expected) = testCase;
+        final content = '# Title\n\n$typeLine\n\nContent.\n';
+        expect(detectDocumentType(content, '2026-03-14-doc.md'), equals(expected),
+            reason: 'Type line "$typeLine" should map to "$expected"');
+      }
+    });
+
+    // Type field takes precedence over filename
+    test('explicit Type: field overrides filename fallback', () {
+      const content = '''# Review Request: Something
+
+> **Type:** work-report
+
+Content.
+''';
+      // Filename says review- but Type: says work-report → explicit field wins
+      expect(
+          detectDocumentType(content, '2026-03-14-review-something.md'),
+          equals('work-report'));
+    });
+  });
+
+  group('AcknowledgeFeedbackAnnotation — acknowledge workflow (AC24, AC25)', () {
+    // AC24: acknowledge with no note → no annotation written (fast-path clean move)
+    test('AC24: acknowledge with no note writes no annotation (fast-path)', () {
+      final result = writeFeedbackAnnotation(
+        _plainMarkdown,
+        const AcknowledgeFeedbackAnnotation(),
+      );
+      // No YAML frontmatter prepended (no annotation written)
+      expect(result.startsWith('---\n'), isFalse);
+      // No Human Review section
+      expect(result, isNot(contains('## Human Review')));
+      // Content unchanged
+      expect(result, equals(_plainMarkdown));
+    });
+
+    // AC25: acknowledge with note → YAML frontmatter with action: acknowledged + note
+    //       NO ## Human Review section
+    test('AC25: acknowledge with note writes frontmatter only (no Human Review section)', () {
+      final result = writeFeedbackAnnotation(
+        _plainMarkdown,
+        const AcknowledgeFeedbackAnnotation(note: 'Good work on Phase 2'),
+      );
+      // YAML frontmatter present
+      expect(result.startsWith('---\n'), isTrue);
+      // action: acknowledged
+      expect(result, contains('action: acknowledged'));
+      // note is recorded
+      expect(result, contains('note: Good work on Phase 2'));
+      // NO ## Human Review section
+      expect(result, isNot(contains('## Human Review')));
+      // Original content still present
+      expect(result, contains('# Test Document'));
+    });
+  });
 }
