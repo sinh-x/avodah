@@ -39,6 +39,8 @@ class AgentApiService {
   String get _approvedPath => p.join(aiUsagePath, 'sinh-inputs', 'approved');
   String get _rejectedPath => p.join(aiUsagePath, 'sinh-inputs', 'rejected');
   String get _deferredPath => p.join(aiUsagePath, 'sinh-inputs', 'deferred');
+  String get _forLaterPath => p.join(aiUsagePath, 'sinh-inputs', 'for-later');
+  String get _chipConfigPath => p.join(aiUsagePath, 'feedback-chips.yaml');
   String get _teamsPath => p.join(aiUsagePath, 'agent-teams');
 
   /// Route an HTTP request to the appropriate handler.
@@ -68,6 +70,10 @@ class AgentApiService {
       // Route matching
       if (path == '/api/inbox' && method == 'GET') {
         await _handleListInbox(request);
+      } else if (path.startsWith('/api/inbox/') &&
+          path.endsWith('/feedback') &&
+          method == 'GET') {
+        await _handleGetFeedback(request);
       } else if (path.startsWith('/api/inbox/') && method == 'GET') {
         await _handleGetInboxItem(request);
       } else if (path.endsWith('/approve') && method == 'POST') {
@@ -76,6 +82,12 @@ class AgentApiService {
         await _handleReject(request);
       } else if (path.endsWith('/defer') && method == 'POST') {
         await _handleDefer(request);
+      } else if (path.endsWith('/save-for-later') && method == 'POST') {
+        await _handleSaveForLater(request);
+      } else if (path.endsWith('/append-section') && method == 'POST') {
+        await _handleAppendSection(request);
+      } else if (path == '/api/config/feedback-chips' && method == 'GET') {
+        await _handleGetFeedbackChips(request);
       } else if (path == '/api/deployments' && method == 'GET') {
         await _handleListDeployments(request);
       } else if (path == '/api/teams' && method == 'GET') {
@@ -155,7 +167,11 @@ class AgentApiService {
     });
   }
 
-  /// POST /api/inbox/:filename/approve — Move file to approved/.
+  /// POST /api/inbox/:filename/approve — Write optional feedback annotation and
+  /// move file to approved/.
+  ///
+  /// Body (optional JSON): `{"note": "...", "chips": ["..."]}`
+  /// If no note and no chips, the file moves with no annotation (fast-path).
   Future<void> _handleApprove(HttpRequest request) async {
     final filename =
         _extractActionFilename(request.uri.path, '/api/inbox/', '/approve');
@@ -170,6 +186,31 @@ class AgentApiService {
       return;
     }
 
+    // Parse optional feedback body
+    String? note;
+    List<String> chips = const [];
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      if (body.isNotEmpty) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        note = json['note'] as String?;
+        final chipsRaw = json['chips'];
+        if (chipsRaw is List) {
+          chips = chipsRaw.whereType<String>().toList();
+        }
+      }
+    } catch (_) {
+      // Use no feedback if body parsing fails
+    }
+
+    // Write annotation only if note or chips provided (fast-path: no annotation)
+    final content = source.readAsStringSync();
+    final updated = writeFeedbackAnnotation(
+        content, ApproveFeedbackAnnotation(note: note, chips: chips));
+    if (updated != content) {
+      source.writeAsStringSync(updated);
+    }
+
     _ensureDir(_approvedPath);
     final dest = File(p.join(_approvedPath, filename));
     source.renameSync(dest.path);
@@ -178,7 +219,12 @@ class AgentApiService {
         request, HttpStatus.ok, {'status': 'approved', 'file': filename});
   }
 
-  /// POST /api/inbox/:filename/reject — Append reason and move to rejected/.
+  /// POST /api/inbox/:filename/reject — Write structured feedback annotation and
+  /// move to rejected/, or mark as pending-reject-feedback (file stays in inbox).
+  ///
+  /// Body (JSON):
+  /// - Full reject: `{"what_is_wrong": "...", "what_to_fix": "...", "priority": "high|medium|low", "chips": [...]}`
+  /// - Pending reject: `{"pending": true}` — file stays in inbox with pending annotation
   Future<void> _handleReject(HttpRequest request) async {
     final filename =
         _extractActionFilename(request.uri.path, '/api/inbox/', '/reject');
@@ -193,35 +239,67 @@ class AgentApiService {
       return;
     }
 
-    // Parse reason from request body
-    String reason = 'No reason provided';
+    // Parse feedback body
+    bool pending = false;
+    String? whatIsWrong;
+    String? whatToFix;
+    String priority = 'medium';
+    List<String> chips = const [];
     try {
       final body = await utf8.decoder.bind(request).join();
       if (body.isNotEmpty) {
         final json = jsonDecode(body) as Map<String, dynamic>;
-        reason = json['reason'] as String? ?? reason;
+        pending = json['pending'] == true;
+        whatIsWrong = json['what_is_wrong'] as String?;
+        whatToFix = json['what_to_fix'] as String?;
+        priority = json['priority'] as String? ?? 'medium';
+        final chipsRaw = json['chips'];
+        if (chipsRaw is List) {
+          chips = chipsRaw.whereType<String>().toList();
+        }
       }
     } catch (_) {
-      // Use default reason if body parsing fails
+      // Use defaults if body parsing fails
     }
 
-    // Append rejection block
     final content = source.readAsStringSync();
-    final timestamp = DateTime.now().toIso8601String();
-    final updated =
-        '$content\n\n> **Rejected:** $reason\n> **Rejected at:** $timestamp\n';
+
+    if (pending) {
+      // Pending-reject: write annotation only, file stays in inbox
+      final updated =
+          writeFeedbackAnnotation(content, const PendingRejectAnnotation());
+      source.writeAsStringSync(updated);
+      _jsonResponse(request, HttpStatus.ok, {
+        'status': 'pending-reject-feedback',
+        'file': filename,
+      });
+      return;
+    }
+
+    // Full reject: write structured annotation and move to rejected/
+    final updated = writeFeedbackAnnotation(
+        content,
+        RejectFeedbackAnnotation(
+          whatIsWrong: whatIsWrong ?? 'No reason provided',
+          whatToFix: whatToFix ?? '',
+          priority: priority,
+          chips: chips,
+        ));
     source.writeAsStringSync(updated);
 
-    // Move to rejected/
     _ensureDir(_rejectedPath);
     final dest = File(p.join(_rejectedPath, filename));
     source.renameSync(dest.path);
 
-    _jsonResponse(request, HttpStatus.ok,
-        {'status': 'rejected', 'file': filename, 'reason': reason});
+    _jsonResponse(
+        request, HttpStatus.ok, {'status': 'rejected', 'file': filename});
   }
 
-  /// POST /api/inbox/:filename/defer — Move file to deferred/.
+  /// POST /api/inbox/:filename/defer — Write optional feedback annotation and
+  /// move file to deferred/.
+  ///
+  /// Body (optional JSON): `{"reason": "...", "requeue_after": "YYYY-MM-DD", "chips": [...]}`
+  /// If no fields provided, file moves with no annotation (fast-path).
   Future<void> _handleDefer(HttpRequest request) async {
     final filename =
         _extractActionFilename(request.uri.path, '/api/inbox/', '/defer');
@@ -236,12 +314,197 @@ class AgentApiService {
       return;
     }
 
+    // Parse optional feedback body
+    String? reason;
+    String? requeueAfter;
+    List<String> chips = const [];
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      if (body.isNotEmpty) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        reason = json['reason'] as String?;
+        requeueAfter = json['requeue_after'] as String?;
+        final chipsRaw = json['chips'];
+        if (chipsRaw is List) {
+          chips = chipsRaw.whereType<String>().toList();
+        }
+      }
+    } catch (_) {
+      // Use no feedback if body parsing fails
+    }
+
+    // Write annotation only if reason, date, or chips provided
+    final content = source.readAsStringSync();
+    final updated = writeFeedbackAnnotation(
+        content,
+        DeferFeedbackAnnotation(
+          reason: reason,
+          requeueAfter: requeueAfter,
+          chips: chips,
+        ));
+    if (updated != content) {
+      source.writeAsStringSync(updated);
+    }
+
     _ensureDir(_deferredPath);
     final dest = File(p.join(_deferredPath, filename));
     source.renameSync(dest.path);
 
     _jsonResponse(
         request, HttpStatus.ok, {'status': 'deferred', 'file': filename});
+  }
+
+  /// POST /api/inbox/:filename/save-for-later — Write minimal YAML frontmatter
+  /// and move file to for-later/.
+  ///
+  /// No body required. Always writes `human_feedback.action: saved-for-later`.
+  Future<void> _handleSaveForLater(HttpRequest request) async {
+    final filename = _extractActionFilename(
+        request.uri.path, '/api/inbox/', '/save-for-later');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Always write minimal YAML frontmatter (no ## Human Review section)
+    final content = source.readAsStringSync();
+    final updated =
+        writeFeedbackAnnotation(content, const SaveForLaterAnnotation());
+    source.writeAsStringSync(updated);
+
+    _ensureDir(_forLaterPath);
+    final dest = File(p.join(_forLaterPath, filename));
+    source.renameSync(dest.path);
+
+    _jsonResponse(request, HttpStatus.ok,
+        {'status': 'saved-for-later', 'file': filename});
+  }
+
+  /// POST /api/inbox/:filename/append-section — Append a named section to file.
+  ///
+  /// Body (JSON): `{"title": "Section Title", "content": "Section content..."}`
+  /// File stays in inbox; no action taken.
+  Future<void> _handleAppendSection(HttpRequest request) async {
+    final filename = _extractActionFilename(
+        request.uri.path, '/api/inbox/', '/append-section');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final source = File(p.join(_inboxPath, filename));
+    if (!source.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    // Parse body: {title, content}
+    String? title;
+    String? sectionContent;
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      if (body.isNotEmpty) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        title = json['title'] as String?;
+        sectionContent = json['content'] as String?;
+      }
+    } catch (_) {
+      // Fall through to validation below
+    }
+
+    if (title == null || title.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'title is required'});
+      return;
+    }
+
+    // Append ### Section to file
+    var result = source.readAsStringSync();
+    if (!result.endsWith('\n')) result = '$result\n';
+    if (!result.endsWith('\n\n')) result = '$result\n';
+    result = '$result### $title\n\n${sectionContent ?? ''}\n';
+    source.writeAsStringSync(result);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'status': 'section-appended',
+      'file': filename,
+      'title': title,
+    });
+  }
+
+  /// GET /api/config/feedback-chips — Return chip labels from feedback-chips.yaml.
+  ///
+  /// Creates the config file with defaults if missing.
+  /// Returns empty list (not crash) if file is malformed.
+  Future<void> _handleGetFeedbackChips(HttpRequest request) async {
+    final configFile = File(_chipConfigPath);
+
+    final defaultChips = [
+      'Needs more detail',
+      'Good, follow up on X',
+      'Revisit next sprint',
+      'Looks good, minor tweaks',
+      'Needs full rework',
+      'Blocked by dependency',
+      'Secretary: create follow-up task',
+    ];
+
+    List<String> chips;
+    if (!configFile.existsSync()) {
+      // Create default config file
+      final buf = StringBuffer('chips:\n');
+      for (final chip in defaultChips) {
+        final escaped = chip.replaceAll('"', '\\"');
+        buf.writeln('  - "$escaped"');
+      }
+      try {
+        configFile.writeAsStringSync(buf.toString());
+      } catch (e) {
+        stderr.writeln('Warning: could not write default chips config: $e');
+      }
+      chips = defaultChips;
+    } else {
+      try {
+        chips = _parseChipsYaml(configFile.readAsStringSync());
+      } catch (e) {
+        stderr.writeln('Warning: malformed chips config, using defaults: $e');
+        chips = defaultChips;
+      }
+    }
+
+    _jsonResponse(request, HttpStatus.ok, {'chips': chips});
+  }
+
+  /// GET /api/inbox/:filename/feedback — Return existing human_feedback block.
+  ///
+  /// Used to pre-fill the pending-reject-feedback dialog.
+  Future<void> _handleGetFeedback(HttpRequest request) async {
+    final filename = _extractActionFilename(
+        request.uri.path, '/api/inbox/', '/feedback');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final file = File(p.join(_inboxPath, filename));
+    if (!file.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    final content = file.readAsStringSync();
+    final metadata = parseMarkdownMetadata(content, filename: filename);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'id': filename,
+      'human_feedback': metadata.humanFeedback?.toJson(),
+    });
   }
 
   /// GET /api/deployments — List deployments from registry.jsonl.
@@ -376,6 +639,41 @@ class AgentApiService {
   }
 
   // --- Helpers ---
+
+  /// Parse a `chips:` YAML list from a config file.
+  ///
+  /// Handles simple YAML list syntax: `  - "value"` or `  - value`.
+  List<String> _parseChipsYaml(String yaml) {
+    final chips = <String>[];
+    bool inChips = false;
+    for (final rawLine in yaml.split('\n')) {
+      final line = rawLine.trimRight();
+      if (line.trim() == 'chips:') {
+        inChips = true;
+        continue;
+      }
+      if (inChips) {
+        if (line.isEmpty) continue;
+        // Stop at non-indented non-empty line
+        if (!line.startsWith(' ') && !line.startsWith('\t')) {
+          inChips = false;
+          continue;
+        }
+        final trimmed = line.trim();
+        if (trimmed.startsWith('- ')) {
+          var value = trimmed.substring(2).trim();
+          // Unquote quoted values
+          if (value.length >= 2 &&
+              ((value.startsWith('"') && value.endsWith('"')) ||
+                  (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length - 1);
+          }
+          if (value.isNotEmpty) chips.add(value);
+        }
+      }
+    }
+    return chips;
+  }
 
   /// Send a JSON response.
   void _jsonResponse(
