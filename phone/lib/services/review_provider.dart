@@ -13,6 +13,7 @@ class ReviewProvider extends ChangeNotifier {
   final AgentApiClient _client;
 
   List<ReviewItem> _items = [];
+  List<ReviewItem> _forLaterItems = [];
   bool _loading = false;
   String? _error;
   Timer? _refreshTimer;
@@ -20,6 +21,7 @@ class ReviewProvider extends ChangeNotifier {
   ReviewProvider(this._client);
 
   List<ReviewItem> get items => _items;
+  List<ReviewItem> get forLaterItems => _forLaterItems;
   bool get loading => _loading;
   String? get error => _error;
   int get pendingCount => _items.length;
@@ -103,6 +105,21 @@ class ReviewProvider extends ChangeNotifier {
   Future<void> appendSection(
       String filename, String title, String content) async {
     await _client.appendSection(filename, title, content);
+  }
+
+  /// Fetch for-later items from the API.
+  Future<void> fetchForLater() async {
+    try {
+      _forLaterItems = await _client.listForLater();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('ReviewProvider fetchForLater error: $e');
+    }
+  }
+
+  /// Get full content for a for-later item.
+  Future<ReviewItem> getForLaterDetail(String filename) async {
+    return _client.getForLaterItem(filename);
   }
 
   /// Fetch feedback chip labels from server config.

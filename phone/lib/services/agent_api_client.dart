@@ -104,6 +104,24 @@ class AgentApiClient {
     return _get('/api/inbox/$encoded/feedback');
   }
 
+  // --- For Later ---
+
+  /// List all for-later items with parsed metadata.
+  Future<List<ReviewItem>> listForLater() async {
+    final response = await _get('/api/for-later');
+    final items = response['items'] as List;
+    return items
+        .map((e) => ReviewItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get a single for-later item with full markdown content.
+  Future<ReviewItem> getForLaterItem(String filename) async {
+    final encoded = Uri.encodeComponent(filename);
+    final response = await _get('/api/for-later/$encoded');
+    return ReviewItem.fromJson(response);
+  }
+
   // --- Deployments ---
 
   /// List all deployments with computed status.

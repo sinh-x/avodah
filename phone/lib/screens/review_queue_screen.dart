@@ -7,7 +7,7 @@ import 'item_detail_screen.dart';
 /// Lists inbox items for agent workflow review.
 ///
 /// Supports pull-to-refresh, auto-refresh (via [ReviewProvider]),
-/// and shows error/empty states.
+/// filter between inbox and for-later views, and shows error/empty states.
 class ReviewQueueScreen extends StatefulWidget {
   final ReviewProvider reviewProvider;
 
@@ -18,6 +18,9 @@ class ReviewQueueScreen extends StatefulWidget {
 }
 
 class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
+  bool _showForLater = false;
+  bool _forLaterLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,11 +37,62 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _switchToForLater() async {
+    setState(() {
+      _showForLater = true;
+      _forLaterLoading = true;
+    });
+    await widget.reviewProvider.fetchForLater();
+    if (mounted) setState(() => _forLaterLoading = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = widget.reviewProvider;
     final theme = Theme.of(context);
 
+    return Column(
+      children: [
+        _buildFilterBar(theme),
+        Expanded(child: _buildBody(theme, provider)),
+      ],
+    );
+  }
+
+  Widget _buildFilterBar(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          FilterChip(
+            label: const Text('Inbox'),
+            selected: !_showForLater,
+            onSelected: (_) {
+              if (_showForLater) setState(() => _showForLater = false);
+            },
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('For Later'),
+            avatar: const Icon(Icons.bookmark_outline, size: 16),
+            selected: _showForLater,
+            onSelected: (_) {
+              if (!_showForLater) _switchToForLater();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(ThemeData theme, ReviewProvider provider) {
+    if (_showForLater) {
+      return _buildForLaterView(theme, provider);
+    }
+    return _buildInboxView(theme, provider);
+  }
+
+  Widget _buildInboxView(ThemeData theme, ReviewProvider provider) {
     if (provider.error != null && provider.items.isEmpty) {
       return _buildError(theme, provider);
     }
@@ -51,9 +105,13 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
       return _buildEmpty(theme, provider);
     }
 
-    // Sort by date descending (newest first)
+    // Sort: pending-reject-feedback items first, then by date descending
     final sorted = List<ReviewItem>.from(provider.items)
       ..sort((a, b) {
+        final aPending = a.status == 'pending-reject-feedback';
+        final bPending = b.status == 'pending-reject-feedback';
+        if (aPending && !bPending) return -1;
+        if (!aPending && bPending) return 1;
         final aDate = a.modified ?? DateTime(2000);
         final bDate = b.modified ?? DateTime(2000);
         return bDate.compareTo(aDate);
@@ -78,6 +136,60 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildForLaterView(ThemeData theme, ReviewProvider provider) {
+    if (_forLaterLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final items = provider.forLaterItems;
+
+    if (items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () => provider.fetchForLater(),
+        child: ListView(
+          children: [
+            const SizedBox(height: 120),
+            Icon(Icons.bookmark_outline,
+                size: 64, color: theme.colorScheme.outline),
+            const SizedBox(height: 16),
+            Center(
+              child: Text('No saved items',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(color: theme.colorScheme.outline)),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text('Pull to refresh',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.outline)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final sorted = List<ReviewItem>.from(items)
+      ..sort((a, b) {
+        final aDate = a.modified ?? DateTime(2000);
+        final bDate = b.modified ?? DateTime(2000);
+        return bDate.compareTo(aDate);
+      });
+
+    return RefreshIndicator(
+      onRefresh: () => provider.fetchForLater(),
+      child: ListView.builder(
+        itemCount: sorted.length,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemBuilder: (context, index) {
+          return _ReviewItemTile(
+            item: sorted[index],
+            onTap: () => _openDetail(sorted[index]),
+          );
+        },
       ),
     );
   }
@@ -180,6 +292,8 @@ class _ReviewItemTile extends StatelessWidget {
 
   const _ReviewItemTile({required this.item, required this.onTap});
 
+  bool get _isPendingFeedback => item.status == 'pending-reject-feedback';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -201,6 +315,14 @@ class _ReviewItemTile extends StatelessWidget {
   }
 
   Widget _buildLeadingIcon(ThemeData theme) {
+    if (_isPendingFeedback) {
+      return CircleAvatar(
+        backgroundColor: theme.colorScheme.errorContainer,
+        child: Icon(Icons.warning_amber,
+            color: theme.colorScheme.error, size: 20),
+      );
+    }
+
     final IconData icon;
     final Color color;
 
@@ -224,6 +346,18 @@ class _ReviewItemTile extends StatelessWidget {
   }
 
   Widget _buildSubtitle(ThemeData theme) {
+    if (_isPendingFeedback) {
+      return Text(
+        'Rejected \u2014 feedback pending',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+
     final parts = <String>[];
     if (item.from != null) parts.add(item.from!);
     if (item.date != null) parts.add(item.date!);

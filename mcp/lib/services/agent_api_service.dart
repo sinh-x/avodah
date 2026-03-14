@@ -86,6 +86,10 @@ class AgentApiService {
         await _handleSaveForLater(request);
       } else if (path.endsWith('/append-section') && method == 'POST') {
         await _handleAppendSection(request);
+      } else if (path == '/api/for-later' && method == 'GET') {
+        await _handleListForLater(request);
+      } else if (path.startsWith('/api/for-later/') && method == 'GET') {
+        await _handleGetForLaterItem(request);
       } else if (path == '/api/config/feedback-chips' && method == 'GET') {
         await _handleGetFeedbackChips(request);
       } else if (path == '/api/deployments' && method == 'GET') {
@@ -152,6 +156,66 @@ class AgentApiService {
     }
 
     final file = File(p.join(_inboxPath, filename));
+    if (!file.existsSync()) {
+      _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
+      return;
+    }
+
+    final content = file.readAsStringSync();
+    final metadata = parseMarkdownMetadata(content, filename: filename);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'id': filename,
+      ...metadata.toJson(),
+      'content': content,
+    });
+  }
+
+  /// GET /api/for-later — List for-later items with parsed metadata.
+  Future<void> _handleListForLater(HttpRequest request) async {
+    final dir = Directory(_forLaterPath);
+    if (!dir.existsSync()) {
+      _jsonResponse(request, HttpStatus.ok, {'items': []});
+      return;
+    }
+
+    final items = <Map<String, dynamic>>[];
+    for (final entity in dir.listSync()) {
+      if (entity is! File || !entity.path.endsWith('.md')) continue;
+      try {
+        final filename = p.basename(entity.path);
+        final content = entity.readAsStringSync();
+        final metadata = parseMarkdownMetadata(content, filename: filename);
+        final stat = entity.statSync();
+        items.add({
+          'id': filename,
+          ...metadata.toJson(),
+          'size': stat.size,
+          'modified': stat.modified.toIso8601String(),
+        });
+      } catch (e) {
+        stderr.writeln('Skipping malformed for-later file ${entity.path}: $e');
+      }
+    }
+
+    items.sort((a, b) {
+      final aDate = a['date'] as String? ?? '';
+      final bDate = b['date'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    _jsonResponse(request, HttpStatus.ok, {'items': items});
+  }
+
+  /// GET /api/for-later/:filename — Read single for-later item content.
+  Future<void> _handleGetForLaterItem(HttpRequest request) async {
+    final filename = _extractFilename(request.uri.path, '/api/for-later/');
+    if (filename == null || !_isSafeFilename(filename)) {
+      _jsonResponse(request, HttpStatus.forbidden, {'error': 'Invalid path'});
+      return;
+    }
+
+    final file = File(p.join(_forLaterPath, filename));
     if (!file.existsSync()) {
       _jsonResponse(request, HttpStatus.notFound, {'error': 'File not found'});
       return;
