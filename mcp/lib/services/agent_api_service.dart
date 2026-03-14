@@ -285,8 +285,9 @@ class AgentApiService {
           chips = chipsRaw.whereType<String>().toList();
         }
       }
-    } catch (_) {
-      // Use no feedback if body parsing fails
+    } catch (e) {
+      stderr.writeln('_handleApprove: body parse error: $e');
+      // proceed with defaults — optional body fields
     }
 
     // Write annotation only if note or chips provided (fast-path: no annotation)
@@ -325,27 +326,54 @@ class AgentApiService {
       return;
     }
 
-    // Parse feedback body
+    // 1. Read body (stream errors → 500)
+    String body;
+    try {
+      body = await utf8.decoder.bind(request).join();
+    } catch (e, stack) {
+      stderr.writeln('_handleReject: stream read error: $e\n$stack');
+      _jsonResponse(request, HttpStatus.internalServerError,
+          {'error': 'Failed to read request body'});
+      return;
+    }
+
+    // 2. Parse body (bad JSON → 400)
     bool pending = false;
     String? whatIsWrong;
     String? whatToFix;
     String priority = 'medium';
     List<String> chips = const [];
-    try {
-      final body = await utf8.decoder.bind(request).join();
-      if (body.isNotEmpty) {
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        pending = json['pending'] == true;
-        whatIsWrong = json['what_is_wrong'] as String?;
-        whatToFix = json['what_to_fix'] as String?;
-        priority = json['priority'] as String? ?? 'medium';
-        final chipsRaw = json['chips'];
-        if (chipsRaw is List) {
-          chips = chipsRaw.whereType<String>().toList();
-        }
+    if (body.isNotEmpty) {
+      Map<String, dynamic> json;
+      try {
+        json = jsonDecode(body) as Map<String, dynamic>;
+      } catch (e) {
+        _jsonResponse(
+            request, HttpStatus.badRequest, {'error': 'Invalid JSON body'});
+        return;
       }
-    } catch (_) {
-      // Use defaults if body parsing fails
+      pending = json['pending'] == true;
+      whatIsWrong = json['what_is_wrong'] as String?;
+      whatToFix = json['what_to_fix'] as String?;
+      priority = json['priority'] as String? ?? 'medium';
+      final chipsRaw = json['chips'];
+      if (chipsRaw is List) {
+        chips = chipsRaw.whereType<String>().toList();
+      }
+    }
+
+    // 3. Validate required fields (full reject only — pending skips this)
+    if (!pending) {
+      if (whatIsWrong == null || whatIsWrong.isEmpty) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'what_is_wrong is required'});
+        return;
+      }
+      if (whatToFix == null || whatToFix.isEmpty) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'what_to_fix is required'});
+        return;
+      }
     }
 
     final content = source.readAsStringSync();
@@ -366,8 +394,8 @@ class AgentApiService {
     final updated = writeFeedbackAnnotation(
         content,
         RejectFeedbackAnnotation(
-          whatIsWrong: whatIsWrong ?? 'No reason provided',
-          whatToFix: whatToFix ?? '',
+          whatIsWrong: whatIsWrong!,
+          whatToFix: whatToFix!,
           priority: priority,
           chips: chips,
         ));
@@ -415,8 +443,9 @@ class AgentApiService {
           chips = chipsRaw.whereType<String>().toList();
         }
       }
-    } catch (_) {
-      // Use no feedback if body parsing fails
+    } catch (e) {
+      stderr.writeln('_handleDefer: body parse error: $e');
+      // proceed with defaults — optional body fields
     }
 
     // Write annotation only if reason, date, or chips provided
@@ -501,8 +530,9 @@ class AgentApiService {
         final json = jsonDecode(body) as Map<String, dynamic>;
         note = json['note'] as String?;
       }
-    } catch (_) {
-      // Use no note if body parsing fails
+    } catch (e) {
+      stderr.writeln('_handleAcknowledge: body parse error: $e');
+      // proceed with defaults — optional body fields
     }
 
     // Write annotation only if note provided (fast-path: clean move)
