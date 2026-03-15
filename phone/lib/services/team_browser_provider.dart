@@ -1,15 +1,18 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/deploy_result.dart';
+import '../models/pa_team.dart';
 import '../models/review_item.dart';
 import '../models/team_folder.dart';
 import 'agent_api_client.dart';
 
-/// Provides agent team browsing — teams, folders, files.
+/// Provides agent team browsing — teams, folders, files, and PA deploy.
 class TeamBrowserProvider extends ChangeNotifier {
   final AgentApiClient _client;
 
   List<TeamFolder> _teams = [];
   List<TeamFile> _files = [];
+  List<PaTeam> _paTeams = [];
   bool _loading = false;
   String? _error;
 
@@ -17,8 +20,33 @@ class TeamBrowserProvider extends ChangeNotifier {
 
   List<TeamFolder> get teams => _teams;
   List<TeamFile> get files => _files;
+  List<PaTeam> get paTeams => _paTeams;
   bool get loading => _loading;
   String? get error => _error;
+
+  /// Return the PA team config for [teamName], or null if not deployable.
+  PaTeam? paTeamFor(String teamName) {
+    try {
+      return _paTeams.firstWhere((t) => t.name == teamName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetch PA teams with deploy modes.
+  Future<void> loadPaTeams() async {
+    try {
+      _paTeams = await _client.listPaTeams();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('TeamBrowserProvider loadPaTeams error: $e');
+    }
+  }
+
+  /// Trigger a PA team deployment.
+  Future<DeployResult> deploy(String team, String mode) {
+    return _client.triggerDeployment(team, mode);
+  }
 
   /// Fetch team list.
   Future<void> refreshTeams() async {
