@@ -287,9 +287,16 @@ class AgentApiClient {
   ///
   /// Validates team + mode on the server before executing.
   /// Returns immediately after the subprocess is started.
-  Future<DeployResult> triggerDeployment(String team, String mode) async {
-    final response =
-        await _post('/api/deploy', body: {'team': team, 'mode': mode});
+  Future<DeployResult> triggerDeployment(
+    String team,
+    String mode, {
+    String? objective,
+  }) async {
+    final body = <String, dynamic>{'team': team, 'mode': mode};
+    if (objective != null && objective.isNotEmpty) {
+      body['objective'] = objective;
+    }
+    final response = await _post('/api/deploy', body: body);
     return DeployResult.fromJson(response);
   }
 
