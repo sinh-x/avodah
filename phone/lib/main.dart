@@ -4,6 +4,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
+import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
 import 'services/deployment_provider.dart';
 import 'services/review_provider.dart';
@@ -90,6 +91,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
             )
           : _HomeShell(
               syncClient: _syncClient!,
+              apiClient: _apiClient!,
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
               teamBrowserProvider: _teamBrowserProvider!,
@@ -101,12 +103,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
 /// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
 class _HomeShell extends StatefulWidget {
   final SyncClient syncClient;
+  final AgentApiClient apiClient;
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
 
   const _HomeShell({
     required this.syncClient,
+    required this.apiClient,
     required this.reviewProvider,
     required this.deploymentProvider,
     required this.teamBrowserProvider,
@@ -178,6 +182,17 @@ class _HomeShellState extends State<_HomeShell> {
             appBar: AppBar(
               title: const Text('Teams'),
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.timer_outlined),
+                  tooltip: 'PA Timers',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          TimersScreen(apiClient: widget.apiClient),
+                    ),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () => widget.teamBrowserProvider.refreshTeams(),

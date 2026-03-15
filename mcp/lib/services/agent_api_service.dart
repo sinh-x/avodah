@@ -5,6 +5,7 @@
 /// `~/Documents/ai-usage/`.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,9 +22,21 @@ class AgentApiService {
   /// Path to the registry JSONL file.
   final String registryPath;
 
+  /// PA home directory (PA_HOME env var) — contains teams/, skills/, etc.
+  final String paHome;
+
+  /// PA config override directory (PA_CONFIG env var) — user-overridden teams.
+  final String? paConfigDir;
+
+  /// Path to the `pa` binary.
+  final String paBinPath;
+
   AgentApiService({
     String? aiUsagePath,
     String? registryPath,
+    String? paHome,
+    String? paConfigDir,
+    String? paBinPath,
   })  : aiUsagePath = aiUsagePath ??
             p.join(Platform.environment['HOME'] ?? '/home', 'Documents',
                 'ai-usage'),
@@ -33,7 +46,13 @@ class AgentApiService {
                 'Documents',
                 'ai-usage',
                 'deployments',
-                'registry.jsonl');
+                'registry.jsonl'),
+        paHome = paHome ??
+            Platform.environment['PA_HOME'] ??
+            p.join(Platform.environment['HOME'] ?? '/home', 'git-repos',
+                'sinh-x', 'tools', 'personal-assistant'),
+        paConfigDir = paConfigDir ?? Platform.environment['PA_CONFIG'],
+        paBinPath = paBinPath ?? Platform.environment['PA_BIN'] ?? 'pa';
 
   String get _inboxPath => p.join(aiUsagePath, 'sinh-inputs', 'inbox');
   String get _approvedPath => p.join(aiUsagePath, 'sinh-inputs', 'approved');
@@ -103,6 +122,12 @@ class AgentApiService {
         await _handleListTeams(request);
       } else if (path.startsWith('/api/teams/') && method == 'GET') {
         await _handleTeamBrowse(request);
+      } else if (path == '/api/pa-teams' && method == 'GET') {
+        await _handleListPaTeams(request);
+      } else if (path == '/api/deploy' && method == 'POST') {
+        await _handleDeploy(request);
+      } else if (path == '/api/timers' && method == 'GET') {
+        await _handleListTimers(request);
       } else {
         _jsonResponse(request, HttpStatus.notFound, {'error': 'Not found'});
       }
@@ -1285,6 +1310,354 @@ class AgentApiService {
     await _doAppendSection(request, source, filename);
   }
 
+  // --- PA deploy endpoints ---
+
+  /// GET /api/pa-teams — List available PA teams with their deploy modes.
+  ///
+  /// Reads YAML files from PA_CONFIG/teams (if set) then PA_HOME/teams.
+  /// Config-dir teams shadow home-dir teams of the same name.
+  /// Excludes `example` team and modes with `phone_visible: false`.
+  Future<void> _handleListPaTeams(HttpRequest request) async {
+    final teams = await _loadPaTeams();
+    _jsonResponse(request, HttpStatus.ok,
+        {'teams': teams.map((t) => t.toJson()).toList()});
+  }
+
+  /// POST /api/deploy — Trigger a PA team deployment.
+  ///
+  /// Body (JSON): `{"team": "builder", "mode": "background"}`
+  /// Validates team + mode against the YAML whitelist before executing.
+  /// Runs the `pa` command as a detached subprocess and returns immediately
+  /// with the deployment ID parsed from the primer path in pa's output.
+  ///
+  /// Returns: `{"deployment_id": "d-abc123", "started": true, "team": ..., "mode": ...}`
+  Future<void> _handleDeploy(HttpRequest request) async {
+    String body;
+    try {
+      body = await utf8.decoder.bind(request).join();
+    } catch (e) {
+      _jsonResponse(request, HttpStatus.internalServerError,
+          {'error': 'Failed to read request body'});
+      return;
+    }
+
+    if (body.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Body required'});
+      return;
+    }
+
+    Map<String, dynamic> json;
+    try {
+      json = jsonDecode(body) as Map<String, dynamic>;
+    } catch (e) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Invalid JSON body'});
+      return;
+    }
+
+    final team = json['team'] as String?;
+    final mode = json['mode'] as String?;
+
+    if (team == null || team.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'team is required'});
+      return;
+    }
+    if (mode == null || mode.isEmpty) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'mode is required'});
+      return;
+    }
+
+    // Validate team name (alphanumeric + hyphens only — no shell injection)
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(team)) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Invalid team name'});
+      return;
+    }
+
+    // Validate team + mode against YAML whitelist
+    final teams = await _loadPaTeams();
+    final paTeam = teams.where((t) => t.name == team).firstOrNull;
+    if (paTeam == null) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Unknown team: $team'});
+      return;
+    }
+
+    // Check mode exists in team (any mode, including phone_visible: false)
+    // Load full team (unfiltered) to validate the mode
+    final fullTeams = await _loadPaTeams(filterPhoneVisible: false);
+    final fullTeam = fullTeams.where((t) => t.name == team).firstOrNull;
+    final deployMode =
+        fullTeam?.deployModes.where((m) => m.id == mode).firstOrNull;
+    if (deployMode == null) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Unknown mode: $mode for team: $team'});
+      return;
+    }
+
+    // Build pa command
+    // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> [--flag]`
+    final List<String> args;
+    if (team == 'daily') {
+      args = ['daily', mode];
+    } else {
+      args = ['deploy', team];
+      if (mode == 'background') args.add('--background');
+      if (mode == 'interactive') args.add('--interactive');
+      // foreground: no extra flag
+    }
+
+    // Start subprocess and read first line for deployment ID
+    String deploymentId = '';
+    try {
+      final process =
+          await Process.start(paBinPath, args, runInShell: false);
+
+      // Drain stderr to prevent back-pressure
+      process.stderr.listen((_) {});
+
+      // Read stdout until first newline, with 5s timeout
+      final completer = Completer<String>();
+      String partial = '';
+      final sub = process.stdout.transform(utf8.decoder).listen(
+        (chunk) {
+          if (completer.isCompleted) return;
+          final nl = chunk.indexOf('\n');
+          if (nl >= 0) {
+            completer.complete(partial + chunk.substring(0, nl));
+          } else {
+            partial += chunk;
+          }
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(partial);
+        },
+        onError: (Object e) {
+          if (!completer.isCompleted) completer.complete('');
+        },
+        cancelOnError: true,
+      );
+
+      final String firstLine;
+      try {
+        firstLine = await completer.future
+            .timeout(const Duration(seconds: 5), onTimeout: () => '');
+      } finally {
+        await sub.cancel();
+      }
+
+      // Extract deployment ID: "Primer generated: .../d-abc123-primer.md"
+      final match = RegExp(r'\b(d-[a-f0-9]{6})\b').firstMatch(firstLine);
+      if (match != null) deploymentId = match.group(1)!;
+    } catch (e) {
+      _jsonResponse(request, HttpStatus.internalServerError,
+          {'error': 'Failed to start deployment: $e'});
+      return;
+    }
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'deployment_id': deploymentId,
+      'started': true,
+      'team': team,
+      'mode': mode,
+    });
+  }
+
+  /// GET /api/timers — List active PA systemd timers.
+  ///
+  /// Runs `pa timers` and parses the output into a structured list.
+  /// Also includes the raw output for debugging.
+  Future<void> _handleListTimers(HttpRequest request) async {
+    try {
+      final result =
+          await Process.run(paBinPath, ['timers'], runInShell: false);
+      final output = result.stdout as String;
+      final timers = _parseTimersOutput(output);
+      _jsonResponse(request, HttpStatus.ok, {
+        'timers': timers,
+        'raw': output.trim(),
+      });
+    } catch (e) {
+      _jsonResponse(request, HttpStatus.internalServerError,
+          {'error': 'Failed to list timers: $e'});
+    }
+  }
+
+  // --- PA team YAML parsing ---
+
+  /// Load PA teams from disk (PA_CONFIG/teams overrides PA_HOME/teams).
+  ///
+  /// [filterPhoneVisible] — when true (default), only include modes where
+  /// `phone_visible: true`. Pass false to load all modes (for validation).
+  Future<List<_PaTeam>> _loadPaTeams(
+      {bool filterPhoneVisible = true}) async {
+    final teamsDirs = <String>[];
+    if (paConfigDir != null) {
+      teamsDirs.add(p.join(paConfigDir!, 'teams'));
+    }
+    teamsDirs.add(p.join(paHome, 'teams'));
+
+    final seenNames = <String>{};
+    final teams = <_PaTeam>[];
+
+    for (final dir in teamsDirs) {
+      final d = Directory(dir);
+      if (!d.existsSync()) continue;
+      for (final entity in d.listSync()) {
+        if (entity is! File || !entity.path.endsWith('.yaml')) continue;
+        final filename = p.basename(entity.path);
+        if (filename == 'example.yaml') continue;
+        try {
+          final content = entity.readAsStringSync();
+          final team = _parseTeamYaml(content,
+              filterPhoneVisible: filterPhoneVisible);
+          if (team != null && !seenNames.contains(team.name)) {
+            seenNames.add(team.name);
+            teams.add(team);
+          }
+        } catch (e) {
+          stderr.writeln('Error parsing team YAML $filename: $e');
+        }
+      }
+    }
+
+    teams.sort((a, b) => a.name.compareTo(b.name));
+    return teams;
+  }
+
+  /// Parse a PA team YAML file into a [_PaTeam].
+  ///
+  /// Only handles the specific fields needed for deploy support:
+  /// `name`, `description`, and `deploy_modes:` list.
+  /// Returns null if the file has no `name:` field.
+  _PaTeam? _parseTeamYaml(String content,
+      {bool filterPhoneVisible = true}) {
+    String? name;
+    String? description;
+    final modes = <_DeployMode>[];
+
+    bool inDeployModes = false;
+    Map<String, String>? currentMode;
+
+    for (final rawLine in content.split('\n')) {
+      final line = rawLine.trimRight();
+
+      if (line.isEmpty || line.startsWith('#')) continue;
+
+      // Top-level keys (no indentation)
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        // Flush pending mode
+        if (inDeployModes && currentMode != null) {
+          final m = _DeployMode.fromMap(currentMode);
+          if (m != null) modes.add(m);
+          currentMode = null;
+        }
+
+        if (line.startsWith('name:')) {
+          name = _yamlScalar(line, 'name');
+        } else if (line.startsWith('description:')) {
+          description = _yamlScalar(line, 'description');
+        }
+
+        inDeployModes = line.trim() == 'deploy_modes:';
+        continue;
+      }
+
+      // Indented content under deploy_modes:
+      if (!inDeployModes) continue;
+
+      final trimmed = line.trim();
+      if (trimmed.startsWith('- ')) {
+        // New list item — flush previous
+        if (currentMode != null) {
+          final m = _DeployMode.fromMap(currentMode);
+          if (m != null) modes.add(m);
+        }
+        currentMode = {};
+        final rest = trimmed.substring(2).trim();
+        _parseYamlKv(rest, currentMode);
+      } else if (currentMode != null && trimmed.isNotEmpty) {
+        _parseYamlKv(trimmed, currentMode);
+      }
+    }
+
+    // Flush last mode
+    if (inDeployModes && currentMode != null) {
+      final m = _DeployMode.fromMap(currentMode);
+      if (m != null) modes.add(m);
+    }
+
+    if (name == null) return null;
+
+    final filteredModes = filterPhoneVisible
+        ? modes.where((m) => m.phoneVisible).toList()
+        : modes;
+
+    return _PaTeam(
+      name: name,
+      description: description ?? '',
+      deployModes: filteredModes,
+    );
+  }
+
+  /// Extract a scalar value from a YAML line like `key: value` or `key: "value"`.
+  String? _yamlScalar(String line, String key) {
+    final colonIdx = line.indexOf(':');
+    if (colonIdx < 0) return null;
+    var value = line.substring(colonIdx + 1).trim();
+    // Strip surrounding quotes
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1);
+    }
+    return value.isEmpty ? null : value;
+  }
+
+  /// Parse `key: value` into a map entry (in-place).
+  void _parseYamlKv(String line, Map<String, String> target) {
+    final colonIdx = line.indexOf(':');
+    if (colonIdx < 0) return;
+    final key = line.substring(0, colonIdx).trim();
+    var value = line.substring(colonIdx + 1).trim();
+    // Strip quotes
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.substring(1, value.length - 1);
+    }
+    if (key.isNotEmpty) target[key] = value;
+  }
+
+  /// Parse `pa timers` output into a structured list.
+  ///
+  /// Output format (systemctl list-timers):
+  /// ```
+  /// NEXT                        LEFT LAST   PASSED UNIT               ACTIVATES
+  /// Mon 2026-03-16 05:00:00 +07   6h Sun … - pa-daily-plan.timer …
+  /// ```
+  List<Map<String, String>> _parseTimersOutput(String output) {
+    final timers = <Map<String, String>>[];
+    for (final line in output.split('\n').skip(1)) {
+      final parts = line.trim().split(RegExp(r'\s+'));
+      final timerIdx = parts.indexWhere((part) => part.endsWith('.timer'));
+      if (timerIdx < 0) continue;
+
+      final unit = parts[timerIdx];
+      // LEFT is the 5th token (index 4): after DAY DATE TIME ZONE
+      final left = parts.length > 4 ? parts[4] : '';
+      // Strip "pa-" prefix and ".timer" suffix for a readable team name
+      final team = unit
+          .replaceFirst(RegExp(r'^pa-'), '')
+          .replaceFirst('.timer', '');
+      timers.add({'unit': unit, 'team': team, 'next_in': left});
+    }
+    return timers;
+  }
+
   // --- Helpers ---
 
   /// Parse a `chips:` YAML list from a config file.
@@ -1456,4 +1829,47 @@ class AgentApiService {
     final sandbox = p.canonicalize(aiUsagePath);
     return resolved.startsWith(sandbox);
   }
+}
+
+// --- Private data classes for PA team support ---
+
+class _PaTeam {
+  final String name;
+  final String description;
+  final List<_DeployMode> deployModes;
+
+  const _PaTeam({
+    required this.name,
+    required this.description,
+    required this.deployModes,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'description': description,
+        'deploy_modes': deployModes.map((m) => m.toJson()).toList(),
+      };
+}
+
+class _DeployMode {
+  final String id;
+  final String label;
+  final bool phoneVisible;
+
+  const _DeployMode({
+    required this.id,
+    required this.label,
+    required this.phoneVisible,
+  });
+
+  /// Parse a deploy mode from a map of YAML key-value pairs.
+  static _DeployMode? fromMap(Map<String, String> map) {
+    final id = map['id'];
+    final label = map['label'];
+    if (id == null || id.isEmpty || label == null || label.isEmpty) return null;
+    final phoneVisible = map['phone_visible']?.toLowerCase() == 'true';
+    return _DeployMode(id: id, label: label, phoneVisible: phoneVisible);
+  }
+
+  Map<String, dynamic> toJson() => {'id': id, 'label': label};
 }

@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/create_idea_payload.dart';
+import '../models/deploy_result.dart';
 import '../models/deployment.dart';
 import '../models/feedback_payload.dart';
+import '../models/pa_team.dart';
 import '../models/review_item.dart';
 import '../models/team_folder.dart';
+import '../models/timer_info.dart';
 
 /// HTTP client for the agent workflow API endpoints.
 ///
@@ -267,6 +270,36 @@ class AgentApiClient {
       total: response['total'] as int? ?? items.length,
       hasMore: response['hasMore'] as bool? ?? false,
     );
+  }
+
+  // --- PA Deploy ---
+
+  /// List available PA teams with their deploy modes (phone-visible only).
+  Future<List<PaTeam>> listPaTeams() async {
+    final response = await _get('/api/pa-teams');
+    final teams = response['teams'] as List;
+    return teams
+        .map((e) => PaTeam.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Trigger a PA team deployment.
+  ///
+  /// Validates team + mode on the server before executing.
+  /// Returns immediately after the subprocess is started.
+  Future<DeployResult> triggerDeployment(String team, String mode) async {
+    final response =
+        await _post('/api/deploy', body: {'team': team, 'mode': mode});
+    return DeployResult.fromJson(response);
+  }
+
+  /// List active PA systemd timers.
+  Future<List<TimerInfo>> listTimers() async {
+    final response = await _get('/api/timers');
+    final timers = response['timers'] as List;
+    return timers
+        .map((e) => TimerInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   // --- HTTP helpers ---

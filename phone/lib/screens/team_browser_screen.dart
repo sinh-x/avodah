@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../models/pa_team.dart';
 import '../models/team_folder.dart';
 import '../services/team_browser_provider.dart';
 
@@ -23,6 +24,9 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
     widget.teamProvider.addListener(_onUpdate);
     if (widget.teamProvider.teams.isEmpty) {
       widget.teamProvider.refreshTeams();
+    }
+    if (widget.teamProvider.paTeams.isEmpty) {
+      widget.teamProvider.loadPaTeams();
     }
   }
 
@@ -61,7 +65,7 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
           final team = provider.teams[index];
           return _TeamTile(
             team: team,
-            onTap: () => _openTeam(context, team),
+            onTap: () => _openTeamSheet(context, team),
           );
         },
       ),
@@ -76,6 +80,51 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
           team: team,
           teamProvider: widget.teamProvider,
         ),
+      ),
+    );
+  }
+
+  void _openTeamSheet(BuildContext context, TeamFolder team) {
+    final paTeam = widget.teamProvider.paTeamFor(team.name);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _DeployBottomSheet(
+        team: team,
+        paTeam: paTeam,
+        onBrowse: () {
+          Navigator.pop(context);
+          _openTeam(context, team);
+        },
+        onDeploy: (mode) async {
+          Navigator.pop(context);
+          final messenger = ScaffoldMessenger.of(context);
+          final errorColor = Theme.of(context).colorScheme.error;
+          try {
+            final result = await widget.teamProvider.deploy(team.name, mode);
+            if (mounted) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    result.deploymentId.isNotEmpty
+                        ? '${result.deploymentId} started'
+                        : 'Deployment started',
+                  ),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('Deploy failed: $e'),
+                  backgroundColor: errorColor,
+                ),
+              );
+            }
+          }
+        },
       ),
     );
   }
@@ -174,6 +223,133 @@ class _TeamTile extends StatelessWidget {
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
+    );
+  }
+}
+
+// --- Deploy Bottom Sheet ---
+
+class _DeployBottomSheet extends StatefulWidget {
+  final TeamFolder team;
+  final PaTeam? paTeam;
+  final VoidCallback onBrowse;
+  final void Function(String mode) onDeploy;
+
+  const _DeployBottomSheet({
+    required this.team,
+    required this.paTeam,
+    required this.onBrowse,
+    required this.onDeploy,
+  });
+
+  @override
+  State<_DeployBottomSheet> createState() => _DeployBottomSheetState();
+}
+
+class _DeployBottomSheetState extends State<_DeployBottomSheet> {
+  String? _selectedMode;
+  bool _deploying = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final paTeam = widget.paTeam;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(widget.team.name, style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.team.inboxCount} inbox · '
+              '${widget.team.ongoingCount} ongoing · '
+              '${widget.team.wfrCount} waiting',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+            const SizedBox(height: 20),
+            if (paTeam != null && paTeam.deployModes.isNotEmpty) ...[
+              Text('Deploy mode', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: paTeam.deployModes.map((mode) {
+                  final selected = _selectedMode == mode.id;
+                  return FilterChip(
+                    label: Text(mode.label),
+                    selected: selected,
+                    onSelected: _deploying
+                        ? null
+                        : (_) => setState(() {
+                              _selectedMode = selected ? null : mode.id;
+                            }),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: (_selectedMode != null && !_deploying)
+                          ? () {
+                              setState(() => _deploying = true);
+                              widget.onDeploy(_selectedMode!);
+                            }
+                          : null,
+                      icon: _deploying
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.rocket_launch_outlined),
+                      label: const Text('Deploy'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: widget.onBrowse,
+                    icon: const Icon(Icons.folder_open_outlined),
+                    label: const Text('Browse'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Text(
+                paTeam == null
+                    ? 'No deploy configuration for this team'
+                    : 'No deploy modes configured',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: widget.onBrowse,
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('Browse Folders'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
