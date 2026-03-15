@@ -7,6 +7,7 @@ import '../models/review_item.dart';
 import '../services/agent_api_client.dart';
 import '../services/review_provider.dart';
 import '../widgets/document_type_badge.dart';
+import 'create_idea_screen.dart';
 import 'folder_list_view.dart';
 import 'item_detail_screen.dart';
 
@@ -49,8 +50,7 @@ class ReviewQueueScreen extends StatelessWidget {
                 FolderListView(
                     folder: 'deferred', client: reviewProvider.client),
                 _DoneTabView(client: reviewProvider.client),
-                const _PlaceholderTabView(
-                    label: 'Ideas', icon: Icons.lightbulb_outline),
+                _IdeasTabView(client: reviewProvider.client),
               ],
             ),
           ),
@@ -60,32 +60,200 @@ class ReviewQueueScreen extends StatelessWidget {
   }
 }
 
-/// Temporary placeholder for tabs not yet implemented (phases 4–6).
-class _PlaceholderTabView extends StatelessWidget {
-  final String label;
-  final IconData icon;
+/// Ideas tab — browsable list of `ideas/` items with FAB to create new ideas (F16–F23).
+///
+/// Shows title (from `# Idea: <title>` header) and date, newest-first.
+/// No Status badge (Q2 resolved: ideas are short-lived drafts).
+/// FAB opens [CreateIdeaScreen]; tapping an item opens detail with
+/// Append Section and Archive actions.
+class _IdeasTabView extends StatefulWidget {
+  final AgentApiClient client;
 
-  const _PlaceholderTabView({required this.label, required this.icon});
+  const _IdeasTabView({required this.client});
+
+  @override
+  State<_IdeasTabView> createState() => _IdeasTabViewState();
+}
+
+class _IdeasTabViewState extends State<_IdeasTabView> {
+  List<ReviewItem> _items = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final items = await widget.client.listFolder('ideas');
+      items.sort((a, b) {
+        final aDate = a.modified ?? DateTime(2000);
+        final bDate = b.modified ?? DateTime(2000);
+        return bDate.compareTo(aDate);
+      });
+      if (mounted) setState(() => _items = items);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _openDetail(ReviewItem item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderItemDetailScreen(
+          folder: 'ideas',
+          item: item,
+          client: widget.client,
+          onActionDone: _load,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCreateIdea() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateIdeaScreen(client: widget.client),
+      ),
+    );
+    if (created == true) _load();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+
+    Widget body;
+    if (_loading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_error != null) {
+      body = _buildError(theme);
+    } else if (_items.isEmpty) {
+      body = _buildEmpty(theme);
+    } else {
+      body = _buildList(theme);
+    }
+
+    return Scaffold(
+      body: body,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCreateIdea,
+        tooltip: 'New Idea',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildList(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        itemCount: _items.length,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemBuilder: (context, index) {
+          final item = _items[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: ListTile(
+              onTap: () => _openDetail(item),
+              leading: CircleAvatar(
+                backgroundColor:
+                    theme.colorScheme.secondaryContainer,
+                child: Icon(Icons.lightbulb_outline,
+                    color: theme.colorScheme.onSecondaryContainer, size: 20),
+              ),
+              title: Text(
+                item.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: item.date != null
+                  ? Text(
+                      item.date!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.outline),
+                    )
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
         children: [
-          Icon(icon, size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 120),
+          Icon(Icons.lightbulb_outline,
+              size: 64, color: theme.colorScheme.outline),
           const SizedBox(height: 16),
-          Text(
-            label,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(color: theme.colorScheme.outline),
+          Center(
+            child: Text(
+              'No ideas yet',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Coming soon',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
+          Center(
+            child: Text(
+              'Tap + to capture a new idea',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          const SizedBox(height: 120),
+          Icon(Icons.cloud_off, size: 64, color: theme.colorScheme.error),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Unable to load',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              _error!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
           ),
         ],
       ),

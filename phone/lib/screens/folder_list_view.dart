@@ -22,6 +22,8 @@ List<_FolderAction> _actionsForFolder(String folder) {
       return [_FolderAction.requeue, _FolderAction.saveForLater, _FolderAction.archive];
     case 'done':
       return [_FolderAction.requeue];
+    case 'ideas':
+      return [_FolderAction.archive];
     default:
       return [_FolderAction.requeue, _FolderAction.archive];
   }
@@ -408,6 +410,49 @@ class _FolderItemDetailScreenState extends State<FolderItemDetailScreen> {
     }
   }
 
+  Future<void> _doAppendSection() async {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => _AppendSectionDialog(
+        titleController: titleController,
+        contentController: contentController,
+      ),
+    );
+
+    titleController.dispose();
+    contentController.dispose();
+
+    if (result == null || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      await widget.client.appendToIdea(
+        widget.item.id,
+        result['title']!,
+        result['content']!,
+      );
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Section added')));
+        // Reload detail to show new section
+        setState(() {
+          _loading = true;
+          _detail = null;
+        });
+        _loadDetail();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _acting = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to add section: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -417,6 +462,14 @@ class _FolderItemDetailScreenState extends State<FolderItemDetailScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          if (widget.folder == 'ideas' && !_loading && _error == null)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: 'Append Section',
+              onPressed: _acting ? null : _doAppendSection,
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -533,6 +586,79 @@ class _FolderItemDetailScreenState extends State<FolderItemDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Dialog for appending a named section to an idea file (F21, F22).
+class _AppendSectionDialog extends StatefulWidget {
+  final TextEditingController titleController;
+  final TextEditingController contentController;
+
+  const _AppendSectionDialog({
+    required this.titleController,
+    required this.contentController,
+  });
+
+  @override
+  State<_AppendSectionDialog> createState() => _AppendSectionDialogState();
+}
+
+class _AppendSectionDialogState extends State<_AppendSectionDialog> {
+  bool get _canAdd =>
+      widget.titleController.text.trim().isNotEmpty &&
+      widget.contentController.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Append Section'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Section title'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: widget.titleController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. "Follow-up Notes"',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            const Text('Content'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: widget.contentController,
+              decoration: const InputDecoration(
+                hintText: 'Section content...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _canAdd
+              ? () => Navigator.pop(context, {
+                    'title': widget.titleController.text.trim(),
+                    'content': widget.contentController.text.trim(),
+                  })
+              : null,
+          child: const Text('Append'),
+        ),
+      ],
     );
   }
 }
