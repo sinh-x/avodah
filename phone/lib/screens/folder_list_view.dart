@@ -20,6 +20,8 @@ List<_FolderAction> _actionsForFolder(String folder) {
       return [_FolderAction.requeue, _FolderAction.archive];
     case 'deferred':
       return [_FolderAction.requeue, _FolderAction.saveForLater, _FolderAction.archive];
+    case 'done':
+      return [_FolderAction.requeue];
     default:
       return [_FolderAction.requeue, _FolderAction.archive];
   }

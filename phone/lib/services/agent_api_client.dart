@@ -242,6 +242,33 @@ class AgentApiClient {
         body: {'title': title, 'content': content});
   }
 
+  /// List items in the done folder with search and pagination.
+  ///
+  /// Returns [PagedFolderResult] with items, total count, and hasMore flag.
+  /// Uses server-side keyword search (`?q=`) and pagination (`limit`/`offset`).
+  Future<PagedFolderResult> listFolderPaged(
+    String folder, {
+    String? q,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    if (q != null && q.isNotEmpty) params['q'] = q;
+    final query = '?${Uri(queryParameters: params).query}';
+    final response = await _get('/api/sinh-inputs/$folder$query');
+    final items = (response['items'] as List)
+        .map((e) => ReviewItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return PagedFolderResult(
+      items: items,
+      total: response['total'] as int? ?? items.length,
+      hasMore: response['hasMore'] as bool? ?? false,
+    );
+  }
+
   // --- HTTP helpers ---
 
   Future<Map<String, dynamic>> _get(String path) async {
@@ -278,4 +305,17 @@ class AgentApiException implements Exception {
 
   @override
   String toString() => 'AgentApiException($statusCode): $body';
+}
+
+/// Result type for paginated folder listing (done folder).
+class PagedFolderResult {
+  final List<ReviewItem> items;
+  final int total;
+  final bool hasMore;
+
+  const PagedFolderResult({
+    required this.items,
+    required this.total,
+    required this.hasMore,
+  });
 }
