@@ -155,7 +155,6 @@ class _TeamTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final folderCount = team.folders.length;
 
     return ListTile(
       leading: CircleAvatar(
@@ -169,7 +168,7 @@ class _TeamTile extends StatelessWidget {
       ),
       title: Text(team.name),
       subtitle: Text(
-        folderCount == 1 ? '1 folder' : '$folderCount folders',
+        '${team.inboxCount} / ${team.ongoingCount} / ${team.wfrCount}',
         style: theme.textTheme.bodySmall
             ?.copyWith(color: theme.colorScheme.outline),
       ),
@@ -251,6 +250,8 @@ class _FolderTile extends StatelessWidget {
     switch (folder.toLowerCase()) {
       case 'inbox':
         return Icons.inbox_outlined;
+      case 'ongoing':
+        return Icons.pending_actions_outlined;
       case 'done':
         return Icons.task_alt;
       case 'artifacts':

@@ -2,13 +2,25 @@
 class TeamFolder {
   final String name;
   final List<String> folders;
+  final int inboxCount;
+  final int ongoingCount;
+  final int wfrCount;
 
-  const TeamFolder({required this.name, required this.folders});
+  const TeamFolder({
+    required this.name,
+    required this.folders,
+    this.inboxCount = 0,
+    this.ongoingCount = 0,
+    this.wfrCount = 0,
+  });
 
   factory TeamFolder.fromJson(Map<String, dynamic> json) {
     return TeamFolder(
       name: json['name'] as String,
       folders: (json['folders'] as List).cast<String>(),
+      inboxCount: json['inbox_count'] as int? ?? 0,
+      ongoingCount: json['ongoing_count'] as int? ?? 0,
+      wfrCount: json['wfr_count'] as int? ?? 0,
     );
   }
 }
