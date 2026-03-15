@@ -701,6 +701,9 @@ class AgentApiService {
       return;
     }
 
+    int _countFiles(Directory d) =>
+        d.existsSync() ? d.listSync().whereType<File>().length : 0;
+
     final teams = <Map<String, dynamic>>[];
     for (final entity in dir.listSync()) {
       if (entity is! Directory) continue;
@@ -712,7 +715,19 @@ class AgentApiService {
           folders.add(p.basename(sub.path));
         }
       }
-      teams.add({'name': name, 'folders': folders});
+      final inboxCount =
+          _countFiles(Directory(p.join(entity.path, 'inbox')));
+      final ongoingCount =
+          _countFiles(Directory(p.join(entity.path, 'ongoing')));
+      final wfrCount = _countFiles(
+          Directory(p.join(entity.path, 'waiting-for-response')));
+      teams.add({
+        'name': name,
+        'folders': folders,
+        'inbox_count': inboxCount,
+        'ongoing_count': ongoingCount,
+        'wfr_count': wfrCount,
+      });
     }
 
     teams.sort((a, b) =>
