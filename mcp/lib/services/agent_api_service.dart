@@ -69,7 +69,9 @@ class AgentApiService {
 
     try {
       // Route matching
-      if (path == '/api/inbox' && method == 'GET') {
+      if (path.startsWith('/api/sinh-inputs')) {
+        await _handleSinhInputsRoute(request);
+      } else if (path == '/api/inbox' && method == 'GET') {
         await _handleListInbox(request);
       } else if (path.startsWith('/api/inbox/') &&
           path.endsWith('/feedback') &&
@@ -101,8 +103,6 @@ class AgentApiService {
         await _handleListTeams(request);
       } else if (path.startsWith('/api/teams/') && method == 'GET') {
         await _handleTeamBrowse(request);
-      } else if (path.startsWith('/api/sinh-inputs')) {
-        await _handleSinhInputsRoute(request);
       } else {
         _jsonResponse(request, HttpStatus.notFound, {'error': 'Not found'});
       }
