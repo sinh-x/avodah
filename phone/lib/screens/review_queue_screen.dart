@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../config/document_type_config.dart';
 import '../models/review_item.dart';
+import '../services/agent_api_client.dart';
 import '../services/review_provider.dart';
 import '../widgets/document_type_badge.dart';
+import 'create_idea_screen.dart';
 import 'folder_list_view.dart';
 import 'item_detail_screen.dart';
 
@@ -45,10 +49,8 @@ class ReviewQueueScreen extends StatelessWidget {
                     folder: 'rejected', client: reviewProvider.client),
                 FolderListView(
                     folder: 'deferred', client: reviewProvider.client),
-                const _PlaceholderTabView(
-                    label: 'Done', icon: Icons.archive_outlined),
-                const _PlaceholderTabView(
-                    label: 'Ideas', icon: Icons.lightbulb_outline),
+                _DoneTabView(client: reviewProvider.client),
+                _IdeasTabView(client: reviewProvider.client),
               ],
             ),
           ),
@@ -58,32 +60,200 @@ class ReviewQueueScreen extends StatelessWidget {
   }
 }
 
-/// Temporary placeholder for tabs not yet implemented (phases 4–6).
-class _PlaceholderTabView extends StatelessWidget {
-  final String label;
-  final IconData icon;
+/// Ideas tab — browsable list of `ideas/` items with FAB to create new ideas (F16–F23).
+///
+/// Shows title (from `# Idea: <title>` header) and date, newest-first.
+/// No Status badge (Q2 resolved: ideas are short-lived drafts).
+/// FAB opens [CreateIdeaScreen]; tapping an item opens detail with
+/// Append Section and Archive actions.
+class _IdeasTabView extends StatefulWidget {
+  final AgentApiClient client;
 
-  const _PlaceholderTabView({required this.label, required this.icon});
+  const _IdeasTabView({required this.client});
+
+  @override
+  State<_IdeasTabView> createState() => _IdeasTabViewState();
+}
+
+class _IdeasTabViewState extends State<_IdeasTabView> {
+  List<ReviewItem> _items = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final items = await widget.client.listFolder('ideas');
+      items.sort((a, b) {
+        final aDate = a.modified ?? DateTime(2000);
+        final bDate = b.modified ?? DateTime(2000);
+        return bDate.compareTo(aDate);
+      });
+      if (mounted) setState(() => _items = items);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _openDetail(ReviewItem item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderItemDetailScreen(
+          folder: 'ideas',
+          item: item,
+          client: widget.client,
+          onActionDone: _load,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCreateIdea() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateIdeaScreen(client: widget.client),
+      ),
+    );
+    if (created == true) _load();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+
+    Widget body;
+    if (_loading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_error != null) {
+      body = _buildError(theme);
+    } else if (_items.isEmpty) {
+      body = _buildEmpty(theme);
+    } else {
+      body = _buildList(theme);
+    }
+
+    return Scaffold(
+      body: body,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCreateIdea,
+        tooltip: 'New Idea',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildList(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        itemCount: _items.length,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemBuilder: (context, index) {
+          final item = _items[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: ListTile(
+              onTap: () => _openDetail(item),
+              leading: CircleAvatar(
+                backgroundColor:
+                    theme.colorScheme.secondaryContainer,
+                child: Icon(Icons.lightbulb_outline,
+                    color: theme.colorScheme.onSecondaryContainer, size: 20),
+              ),
+              title: Text(
+                item.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: item.date != null
+                  ? Text(
+                      item.date!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.outline),
+                    )
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
         children: [
-          Icon(icon, size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 120),
+          Icon(Icons.lightbulb_outline,
+              size: 64, color: theme.colorScheme.outline),
           const SizedBox(height: 16),
-          Text(
-            label,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(color: theme.colorScheme.outline),
+          Center(
+            child: Text(
+              'No ideas yet',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Coming soon',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
+          Center(
+            child: Text(
+              'Tap + to capture a new idea',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        children: [
+          const SizedBox(height: 120),
+          Icon(Icons.cloud_off, size: 64, color: theme.colorScheme.error),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Unable to load',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              _error!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
           ),
         ],
       ),
@@ -482,6 +652,343 @@ class _InboxTabViewState extends State<_InboxTabView> {
           item: item,
           reviewProvider: widget.reviewProvider,
         ),
+      ),
+    );
+  }
+}
+
+/// Done tab — paginated list with search bar and infinite scroll (F9, F10).
+///
+/// Fetches pages of 20 items from the done folder. Supports keyword search
+/// via `?q=` server-side filter. Auto-loads the next page as the user scrolls
+/// near the bottom, with a manual "Load More" fallback button.
+class _DoneTabView extends StatefulWidget {
+  final AgentApiClient client;
+
+  const _DoneTabView({required this.client});
+
+  @override
+  State<_DoneTabView> createState() => _DoneTabViewState();
+}
+
+class _DoneTabViewState extends State<_DoneTabView> {
+  static const _pageSize = 20;
+
+  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  Timer? _debounce;
+
+  List<ReviewItem> _items = [];
+  bool _hasMore = false;
+  int _offset = 0;
+  bool _loading = true;
+  bool _loadingMore = false;
+  String? _error;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _searchController.addListener(_onSearchChanged);
+    _load(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 300 && _hasMore && !_loadingMore) {
+      _loadMore();
+    }
+  }
+
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      final q = _searchController.text.trim();
+      if (q != _query) {
+        _query = q;
+        _load(reset: true);
+      }
+    });
+  }
+
+  Future<void> _load({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _items = [];
+        _offset = 0;
+        _hasMore = false;
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final result = await widget.client.listFolderPaged(
+        'done',
+        q: _query.isEmpty ? null : _query,
+        limit: _pageSize,
+        offset: 0,
+      );
+      if (mounted) {
+        setState(() {
+          _items = result.items;
+          _hasMore = result.hasMore;
+          _offset = result.items.length;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final result = await widget.client.listFolderPaged(
+        'done',
+        q: _query.isEmpty ? null : _query,
+        limit: _pageSize,
+        offset: _offset,
+      );
+      if (mounted) {
+        setState(() {
+          _items.addAll(result.items);
+          _hasMore = result.hasMore;
+          _offset += result.items.length;
+          _loadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _openDetail(ReviewItem item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FolderItemDetailScreen(
+          folder: 'done',
+          item: item,
+          client: widget.client,
+          onActionDone: () => _load(reset: true),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        _buildSearchBar(theme),
+        Expanded(child: _buildBody(theme)),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search done items…',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchController.clear();
+                    _query = '';
+                    _load(reset: true);
+                  },
+                )
+              : null,
+          isDense: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(ThemeData theme) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _items.isEmpty) {
+      return _buildError(theme);
+    }
+    if (_items.isEmpty) {
+      return _buildEmpty(theme);
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _load(reset: true),
+      child: ListView.builder(
+        controller: _scrollController,
+        itemCount: _items.length + (_hasMore ? 1 : 0),
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemBuilder: (context, index) {
+          if (index == _items.length) {
+            return _buildLoadMoreIndicator(theme);
+          }
+          return _FolderDoneItemTile(
+            item: _items[index],
+            onTap: () => _openDetail(_items[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreIndicator(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: _loadingMore
+            ? const CircularProgressIndicator()
+            : TextButton.icon(
+                onPressed: _loadMore,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('Load more'),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: () => _load(reset: true),
+      child: ListView(
+        children: [
+          const SizedBox(height: 120),
+          Icon(Icons.archive_outlined,
+              size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              _query.isNotEmpty ? 'No results for "$_query"' : 'Nothing here yet',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_query.isNotEmpty)
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  _searchController.clear();
+                  _query = '';
+                  _load(reset: true);
+                },
+                child: const Text('Clear search'),
+              ),
+            )
+          else
+            Center(
+              child: Text(
+                'Pull to refresh',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: () => _load(reset: true),
+      child: ListView(
+        children: [
+          const SizedBox(height: 120),
+          Icon(Icons.cloud_off, size: 64, color: theme.colorScheme.error),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Unable to load',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              _error!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => _load(reset: true),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// List tile for a done-folder item (type badge + date).
+class _FolderDoneItemTile extends StatelessWidget {
+  final ReviewItem item;
+  final VoidCallback onTap;
+
+  const _FolderDoneItemTile({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ListTile(
+        onTap: onTap,
+        title: Text(
+          item.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Row(
+          children: [
+            DocumentTypeBadge(type: item.documentType),
+            if (item.date != null) ...[
+              const SizedBox(width: 6),
+              Text(
+                item.date!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+            ],
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }
