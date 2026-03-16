@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-import '../models/pa_team.dart';
 import '../models/team_folder.dart';
 import '../services/team_browser_provider.dart';
+import '../widgets/deploy_sheet.dart';
 
 /// Entry point for the Team Browser — shows list of agent teams.
 ///
@@ -57,17 +57,24 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
       return _buildEmpty(theme, provider);
     }
 
-    return RefreshIndicator(
-      onRefresh: provider.refreshTeams,
-      child: ListView.builder(
-        itemCount: provider.teams.length,
-        itemBuilder: (context, index) {
-          final team = provider.teams[index];
-          return _TeamTile(
-            team: team,
-            onTap: () => _openTeamSheet(context, team),
-          );
-        },
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: provider.refreshTeams,
+        child: ListView.builder(
+          itemCount: provider.teams.length,
+          itemBuilder: (context, index) {
+            final team = provider.teams[index];
+            return _TeamTile(
+              team: team,
+              onTap: () => _openTeam(context, team),
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openFabSheet(context),
+        tooltip: 'Deploy',
+        child: const Icon(Icons.rocket_launch_outlined),
       ),
     );
   }
@@ -84,24 +91,22 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
     );
   }
 
-  void _openTeamSheet(BuildContext context, TeamFolder team) {
-    final paTeam = widget.teamProvider.paTeamFor(team.name);
+  void _openFabSheet(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _DeployBottomSheet(
-        team: team,
-        paTeam: paTeam,
-        onBrowse: () {
+      builder: (_) => DeploySheet(
+        paTeams: widget.teamProvider.paTeams,
+        onDeploy: (team, mode, objective) async {
           Navigator.pop(context);
-          _openTeam(context, team);
-        },
-        onDeploy: (mode) async {
-          Navigator.pop(context);
-          final messenger = ScaffoldMessenger.of(context);
-          final errorColor = Theme.of(context).colorScheme.error;
           try {
-            final result = await widget.teamProvider.deploy(team.name, mode);
+            final result = await widget.teamProvider.deploy(
+              team,
+              mode,
+              objective: objective.isNotEmpty ? objective : null,
+            );
             if (mounted) {
               messenger.showSnackBar(
                 SnackBar(
@@ -223,133 +228,6 @@ class _TeamTile extends StatelessWidget {
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
-    );
-  }
-}
-
-// --- Deploy Bottom Sheet ---
-
-class _DeployBottomSheet extends StatefulWidget {
-  final TeamFolder team;
-  final PaTeam? paTeam;
-  final VoidCallback onBrowse;
-  final void Function(String mode) onDeploy;
-
-  const _DeployBottomSheet({
-    required this.team,
-    required this.paTeam,
-    required this.onBrowse,
-    required this.onDeploy,
-  });
-
-  @override
-  State<_DeployBottomSheet> createState() => _DeployBottomSheetState();
-}
-
-class _DeployBottomSheetState extends State<_DeployBottomSheet> {
-  String? _selectedMode;
-  bool _deploying = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final paTeam = widget.paTeam;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(widget.team.name, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text(
-              '${widget.team.inboxCount} inbox · '
-              '${widget.team.ongoingCount} ongoing · '
-              '${widget.team.wfrCount} waiting',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
-            ),
-            const SizedBox(height: 20),
-            if (paTeam != null && paTeam.deployModes.isNotEmpty) ...[
-              Text('Deploy mode', style: theme.textTheme.labelMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: paTeam.deployModes.map((mode) {
-                  final selected = _selectedMode == mode.id;
-                  return FilterChip(
-                    label: Text(mode.label),
-                    selected: selected,
-                    onSelected: _deploying
-                        ? null
-                        : (_) => setState(() {
-                              _selectedMode = selected ? null : mode.id;
-                            }),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: (_selectedMode != null && !_deploying)
-                          ? () {
-                              setState(() => _deploying = true);
-                              widget.onDeploy(_selectedMode!);
-                            }
-                          : null,
-                      icon: _deploying
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.rocket_launch_outlined),
-                      label: const Text('Deploy'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: widget.onBrowse,
-                    icon: const Icon(Icons.folder_open_outlined),
-                    label: const Text('Browse'),
-                  ),
-                ],
-              ),
-            ] else ...[
-              Text(
-                paTeam == null
-                    ? 'No deploy configuration for this team'
-                    : 'No deploy modes configured',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.outline),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: widget.onBrowse,
-                icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('Browse Folders'),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }
