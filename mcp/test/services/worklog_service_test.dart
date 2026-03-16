@@ -60,20 +60,22 @@ void main() {
     });
 
     test('groups worklogs by taskId', () async {
-      final now = DateTime.now();
+      // Use fixed noon time to avoid day-boundary failures when test runs near midnight UTC
+      final today = DateTime.now();
+      final noon = DateTime(today.year, today.month, today.day, 12, 0, 0);
 
       // Two worklogs for same task
       final w1 = WorklogDocument.create(
         clock: clock,
         taskId: 'task-1',
-        start: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch,
-        end: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        start: noon.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: noon.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
       );
       final w2 = WorklogDocument.create(
         clock: clock,
         taskId: 'task-1',
-        start: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
-        end: now.millisecondsSinceEpoch,
+        start: noon.millisecondsSinceEpoch,
+        end: noon.add(const Duration(hours: 1)).millisecondsSinceEpoch,
       );
 
       await db
