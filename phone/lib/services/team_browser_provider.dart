@@ -44,8 +44,8 @@ class TeamBrowserProvider extends ChangeNotifier {
   }
 
   /// Trigger a PA team deployment.
-  Future<DeployResult> deploy(String team, String mode) {
-    return _client.triggerDeployment(team, mode);
+  Future<DeployResult> deploy(String team, String mode, {String? objective}) {
+    return _client.triggerDeployment(team, mode, objective: objective);
   }
 
   /// Fetch team list.

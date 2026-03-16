@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../config/document_type_config.dart';
+import '../models/pa_team.dart';
 import '../models/review_item.dart';
 import '../services/review_provider.dart';
+import '../widgets/deploy_sheet.dart';
 import '../widgets/document_type_badge.dart';
 import 'dialogs/acknowledge_dialog.dart';
 import 'dialogs/approve_dialog.dart';
@@ -21,10 +23,15 @@ class ItemDetailScreen extends StatefulWidget {
   final ReviewItem item;
   final ReviewProvider reviewProvider;
 
+  /// PA teams with deploy modes. When non-null and item has a `from` team,
+  /// a deploy icon button appears in the AppBar.
+  final List<PaTeam>? paTeams;
+
   const ItemDetailScreen({
     super.key,
     required this.item,
     required this.reviewProvider,
+    this.paTeams,
   });
 
   @override
@@ -76,6 +83,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   bool get _isPendingReject =>
       (widget.item.status ?? _detail?.status) == 'pending-reject-feedback';
 
+  /// True when the item came from an agent team inbox (has `from` field)
+  /// and [paTeams] was provided — enables the deploy action.
+  bool get _isTeamInboxItem =>
+      widget.item.from != null && widget.paTeams != null;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -86,6 +98,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (!_loading && _error == null && _isTeamInboxItem)
+            IconButton(
+              icon: const Icon(Icons.rocket_launch_outlined),
+              tooltip: 'Deploy',
+              onPressed: _acting ? null : _onDeploy,
+            ),
           if (!_loading && _error == null)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
@@ -626,6 +644,56 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         );
       }
     }
+  }
+
+  /// Extracts team name from `from` field (e.g. "requirements / team-manager" → "requirements").
+  String? _teamFromFrom(String from) {
+    final parts = from.split(' / ');
+    return parts.isNotEmpty ? parts.first.trim() : null;
+  }
+
+  /// Opens [DeploySheet] pre-filled with this item's team and filename as objective.
+  void _onDeploy() {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final team = _teamFromFrom(widget.item.from!);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DeploySheet(
+        paTeams: widget.paTeams!,
+        initialTeam: team,
+        initialObjective: widget.item.id,
+        onDeploy: (t, mode, objective) async {
+          Navigator.pop(context);
+          try {
+            final result = await widget.reviewProvider.client.triggerDeployment(
+              t,
+              mode,
+              objective: objective.isNotEmpty ? objective : null,
+            );
+            if (mounted) {
+              messenger.showSnackBar(SnackBar(
+                content: Text(
+                  result.deploymentId.isNotEmpty
+                      ? '${result.deploymentId} started'
+                      : 'Deployment started',
+                ),
+                duration: const Duration(seconds: 4),
+              ));
+            }
+          } catch (e) {
+            if (mounted) {
+              messenger.showSnackBar(SnackBar(
+                content: Text('Deploy failed: $e'),
+                backgroundColor: errorColor,
+              ));
+            }
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _onAddSection() async {

@@ -1325,10 +1325,12 @@ class AgentApiService {
 
   /// POST /api/deploy — Trigger a PA team deployment.
   ///
-  /// Body (JSON): `{"team": "builder", "mode": "background"}`
+  /// Body (JSON): `{"team": "builder", "mode": "background", "objective": "..."}`
   /// Validates team + mode against the YAML whitelist before executing.
   /// Runs the `pa` command as a detached subprocess and returns immediately
   /// with the deployment ID parsed from the primer path in pa's output.
+  /// Optional `objective` field: passed as `--objective <value>` to `pa`.
+  /// Validated: max 500 chars, safe ASCII characters only.
   ///
   /// Returns: `{"deployment_id": "d-abc123", "started": true, "team": ..., "mode": ...}`
   Future<void> _handleDeploy(HttpRequest request) async {
@@ -1358,6 +1360,7 @@ class AgentApiService {
 
     final team = json['team'] as String?;
     final mode = json['mode'] as String?;
+    final objective = json['objective'] as String?;
 
     if (team == null || team.isEmpty) {
       _jsonResponse(
@@ -1398,6 +1401,21 @@ class AgentApiService {
       return;
     }
 
+    // Validate objective (optional field)
+    if (objective != null && objective.isNotEmpty) {
+      if (objective.length > 500) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'objective exceeds max length of 500 characters'});
+        return;
+      }
+      // Safe chars: printable ASCII minus backtick, $, \, ;, &, |, >, <
+      if (!RegExp(r'^[^\x00-\x1f\x7f`$\\;&|><]+$').hasMatch(objective)) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'objective contains invalid characters'});
+        return;
+      }
+    }
+
     // Build pa command
     // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> [--flag]`
     final List<String> args;
@@ -1408,6 +1426,11 @@ class AgentApiService {
       if (mode == 'background') args.add('--background');
       if (mode == 'interactive') args.add('--interactive');
       // foreground: no extra flag
+    }
+
+    // Append --objective flag if provided
+    if (objective != null && objective.isNotEmpty) {
+      args.addAll(['--objective', objective]);
     }
 
     // Start subprocess and read first line for deployment ID
