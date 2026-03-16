@@ -572,6 +572,8 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final isInbox = widget.folder == 'inbox';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -579,6 +581,14 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          if (!_loading && _error == null && isInbox)
+            IconButton(
+              icon: const Icon(Icons.rocket_launch_outlined),
+              tooltip: 'Deploy',
+              onPressed: _onDeploy,
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -589,6 +599,48 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
                   selectable: true,
                   padding: const EdgeInsets.all(16),
                 ),
+    );
+  }
+
+  void _onDeploy() {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DeploySheet(
+        paTeams: widget.teamProvider.paTeams,
+        initialTeam: widget.team,
+        initialObjective: widget.file.name,
+        onDeploy: (team, mode, objective) async {
+          Navigator.pop(context);
+          try {
+            final result = await widget.teamProvider.deploy(
+              team,
+              mode,
+              objective: objective.isNotEmpty ? objective : null,
+            );
+            if (mounted) {
+              messenger.showSnackBar(SnackBar(
+                content: Text(
+                  result.deploymentId.isNotEmpty
+                      ? '${result.deploymentId} started'
+                      : 'Deployment started',
+                ),
+                duration: const Duration(seconds: 4),
+              ));
+            }
+          } catch (e) {
+            if (mounted) {
+              messenger.showSnackBar(SnackBar(
+                content: Text('Deploy failed: $e'),
+                backgroundColor: errorColor,
+              ));
+            }
+          }
+        },
+      ),
     );
   }
 
