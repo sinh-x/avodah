@@ -50,6 +50,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
 
     final teamBrowserProvider = TeamBrowserProvider(apiClient);
     teamBrowserProvider.refreshTeams();
+    teamBrowserProvider.loadPaTeams();
 
     setState(() {
       _syncClient = client;
@@ -163,7 +164,9 @@ class _HomeShellState extends State<_HomeShell> {
               ],
             ),
             body: ReviewQueueScreen(
-                reviewProvider: widget.reviewProvider),
+              reviewProvider: widget.reviewProvider,
+              teamBrowserProvider: widget.teamBrowserProvider,
+            ),
           ),
           Scaffold(
             appBar: AppBar(

@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../config/document_type_config.dart';
+import '../models/pa_team.dart';
 import '../models/review_item.dart';
 import '../services/agent_api_client.dart';
 import '../services/review_provider.dart';
+import '../services/team_browser_provider.dart';
 import '../widgets/document_type_badge.dart';
 import 'create_idea_screen.dart';
 import 'folder_list_view.dart';
@@ -19,7 +21,15 @@ import 'item_detail_screen.dart';
 class ReviewQueueScreen extends StatelessWidget {
   final ReviewProvider reviewProvider;
 
-  const ReviewQueueScreen({super.key, required this.reviewProvider});
+  /// Optional — when provided, the deploy button appears in [ItemDetailScreen]
+  /// for items that came from an agent team inbox.
+  final TeamBrowserProvider? teamBrowserProvider;
+
+  const ReviewQueueScreen({
+    super.key,
+    required this.reviewProvider,
+    this.teamBrowserProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +52,10 @@ class ReviewQueueScreen extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                _InboxTabView(reviewProvider: reviewProvider),
+                _InboxTabView(
+                  reviewProvider: reviewProvider,
+                  paTeams: teamBrowserProvider?.paTeams,
+                ),
                 FolderListView(
                     folder: 'approved', client: reviewProvider.client),
                 FolderListView(
@@ -269,8 +282,9 @@ class _IdeasTabViewState extends State<_IdeasTabView> {
 /// and shows error/empty states.
 class _InboxTabView extends StatefulWidget {
   final ReviewProvider reviewProvider;
+  final List<PaTeam>? paTeams;
 
-  const _InboxTabView({required this.reviewProvider});
+  const _InboxTabView({required this.reviewProvider, this.paTeams});
 
   @override
   State<_InboxTabView> createState() => _InboxTabViewState();
@@ -651,6 +665,7 @@ class _InboxTabViewState extends State<_InboxTabView> {
         builder: (_) => ItemDetailScreen(
           item: item,
           reviewProvider: widget.reviewProvider,
+          paTeams: widget.paTeams,
         ),
       ),
     );
