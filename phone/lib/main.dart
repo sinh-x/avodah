@@ -117,6 +117,15 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     await dashboard.refresh();
   }
 
+  /// Push CRDT deltas from phone to desktop (non-fatal on failure).
+  Future<void> _pushDeltas(List<Map<String, dynamic>> deltas) async {
+    try {
+      await _crdtSyncService?.pushToDesktop(deltas);
+    } catch (e) {
+      debugPrint('[Sync] Push failed (non-fatal): $e');
+    }
+  }
+
   @override
   void dispose() {
     _syncTimer?.cancel();
@@ -156,6 +165,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
               teamBrowserProvider: _teamBrowserProvider!,
+              onPushDeltas: _pushDeltas,
             ),
     );
   }
@@ -178,6 +188,7 @@ class _HomeShell extends StatefulWidget {
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
+  final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -186,6 +197,7 @@ class _HomeShell extends StatefulWidget {
     required this.reviewProvider,
     required this.deploymentProvider,
     required this.teamBrowserProvider,
+    this.onPushDeltas,
   });
 
   @override
@@ -222,6 +234,7 @@ class _HomeShellState extends State<_HomeShell> {
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
+            onPushDeltas: widget.onPushDeltas,
           ),
           Scaffold(
             appBar: AppBar(
