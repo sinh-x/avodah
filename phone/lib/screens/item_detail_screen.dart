@@ -697,19 +697,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _onAddSection() async {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => _AddSectionDialog(
-        titleController: titleController,
-        contentController: contentController,
-      ),
+      builder: (ctx) => const _AddSectionDialog(),
     );
-
-    titleController.dispose();
-    contentController.dispose();
 
     if (result == null || !mounted) return;
 
@@ -741,22 +732,26 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
 /// Inline dialog for appending a named section to a document.
 class _AddSectionDialog extends StatefulWidget {
-  final TextEditingController titleController;
-  final TextEditingController contentController;
-
-  const _AddSectionDialog({
-    required this.titleController,
-    required this.contentController,
-  });
+  const _AddSectionDialog();
 
   @override
   State<_AddSectionDialog> createState() => _AddSectionDialogState();
 }
 
 class _AddSectionDialogState extends State<_AddSectionDialog> {
+  final _titleController = TextEditingController();
+  final _contentController = TextEditingController();
+
   bool get _canAdd =>
-      widget.titleController.text.trim().isNotEmpty &&
-      widget.contentController.text.trim().isNotEmpty;
+      _titleController.text.trim().isNotEmpty &&
+      _contentController.text.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -770,7 +765,7 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
             const Text('Section title'),
             const SizedBox(height: 8),
             TextField(
-              controller: widget.titleController,
+              controller: _titleController,
               decoration: const InputDecoration(
                 hintText: 'e.g. "Follow-up Notes"',
                 border: OutlineInputBorder(),
@@ -782,7 +777,7 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
             const Text('Content'),
             const SizedBox(height: 8),
             TextField(
-              controller: widget.contentController,
+              controller: _contentController,
               decoration: const InputDecoration(
                 hintText: 'Section content...',
                 border: OutlineInputBorder(),
@@ -801,8 +796,8 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
         FilledButton(
           onPressed: _canAdd
               ? () => Navigator.pop(context, {
-                    'title': widget.titleController.text.trim(),
-                    'content': widget.contentController.text.trim(),
+                    'title': _titleController.text.trim(),
+                    'content': _contentController.text.trim(),
                   })
               : null,
           child: const Text('Add'),
