@@ -12,6 +12,7 @@ import 'services/agent_api_client.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/deployment_provider.dart';
 import 'services/local_dashboard_provider.dart';
+import 'services/local_write_service.dart';
 import 'services/review_provider.dart';
 import 'services/team_browser_provider.dart';
 import 'settings/settings_screen.dart';
@@ -31,6 +32,7 @@ class AvodahViewerApp extends StatefulWidget {
 class _AvodahViewerAppState extends State<AvodahViewerApp> {
   AppDatabase? _db;
   LocalDashboardProvider? _dashboardProvider;
+  LocalWriteService? _writeService;
   CrdtSyncService? _crdtSyncService;
   AgentApiClient? _apiClient;
   ReviewProvider? _reviewProvider;
@@ -54,6 +56,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
 
     // Dashboard reads from local DB
     final dashboardProvider = LocalDashboardProvider(db: db, clock: clock);
+
+    // Write service for local CRDT mutations (timer, task, worklog)
+    final writeService = LocalWriteService(db: db, clock: clock);
 
     // Load stored server URL and build HTTP base URL
     final wsUrl = await SettingsScreen.loadServerUrl();
@@ -81,6 +86,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     setState(() {
       _db = db;
       _dashboardProvider = dashboardProvider;
+      _writeService = writeService;
       _crdtSyncService = crdtSyncService;
       _apiClient = apiClient;
       _reviewProvider = reviewProvider;
@@ -145,6 +151,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
             )
           : _HomeShell(
               dashboardProvider: _dashboardProvider!,
+              writeService: _writeService!,
               apiClient: _apiClient!,
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
@@ -166,6 +173,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
 /// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
 class _HomeShell extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
+  final LocalWriteService writeService;
   final AgentApiClient apiClient;
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
@@ -173,6 +181,7 @@ class _HomeShell extends StatefulWidget {
 
   const _HomeShell({
     required this.dashboardProvider,
+    required this.writeService,
     required this.apiClient,
     required this.reviewProvider,
     required this.deploymentProvider,
@@ -210,7 +219,10 @@ class _HomeShellState extends State<_HomeShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          DashboardScreen(dashboardProvider: widget.dashboardProvider),
+          DashboardScreen(
+            dashboardProvider: widget.dashboardProvider,
+            writeService: widget.writeService,
+          ),
           Scaffold(
             appBar: AppBar(
               title: const Text('Agent Review'),
