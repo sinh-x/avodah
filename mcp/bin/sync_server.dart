@@ -65,14 +65,39 @@ Future<void> main(List<String> args) async {
     planService: planService,
   );
 
+  // Track connected clients and last snapshot (declared early for broadcast closure).
+  final clients = <WebSocket>[];
+  String? lastSnapshot;
+
+  // Broadcast the latest snapshot to all connected WS clients.
+  //
+  // Used both by the periodic timer and as the onDeltasMerged propagation
+  // hook so phone writes appear on WS viewers without waiting for the next
+  // periodic tick.
+  Future<void> broadcastNow() async {
+    if (clients.isEmpty) return;
+    try {
+      final snapshot = await snapshotService.buildSnapshot();
+      final json = jsonEncode(snapshot);
+      lastSnapshot = json;
+      _broadcast(clients, json);
+    } catch (e) {
+      stderr.writeln('Error broadcasting on phone push: $e');
+    }
+  }
+
   // CRDT delta sync API service
-  final syncApi = SyncApiService(db: db, clock: clock);
+  final syncApi = SyncApiService(
+    db: db,
+    clock: clock,
+    onDeltasMerged: (count) {
+      stderr.writeln('Phone push: $count delta(s) merged — propagating to WS clients');
+      broadcastNow(); // fire-and-forget: don't block the HTTP response
+    },
+  );
 
   // Agent workflow API service
   final agentApi = AgentApiService();
-
-  // Track connected clients
-  final clients = <WebSocket>[];
 
   // Start HTTP server with WebSocket upgrade
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
@@ -81,7 +106,6 @@ Future<void> main(List<String> args) async {
   stderr.writeln('Agent API: http://0.0.0.0:$port/api/');
 
   // Periodic snapshot push
-  String? lastSnapshot;
   final timer = Timer.periodic(Duration(seconds: interval), (_) async {
     if (clients.isEmpty) return;
     try {

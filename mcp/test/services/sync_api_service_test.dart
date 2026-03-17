@@ -295,6 +295,143 @@ void main() {
     });
   });
 
+  group('mergePushBatch + onDeltasMerged propagation', () {
+    test('callback is invoked with merged count', () async {
+      var callbackCount = 0;
+      var callbackArg = 0;
+      final svcWithCb = SyncApiService(
+        db: db,
+        clock: clock,
+        onDeltasMerged: (count) {
+          callbackCount++;
+          callbackArg = count;
+        },
+      );
+
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final result = await svcWithCb.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          {
+            'type': SyncDocType.task,
+            'id': 'phone-task-1',
+            'fields': {
+              'title': {'v': 'Phone task', 't': remoteTs.pack()},
+              'isDone': {'v': false, 't': remoteTs.pack()},
+              'created': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'timeSpent': {'v': 0, 't': remoteTs.pack()},
+              'timeEstimate': {'v': 0, 't': remoteTs.pack()},
+            },
+          },
+        ],
+      );
+
+      expect(result.merged, equals(1));
+      expect(result.errors, isEmpty);
+      expect(result.watermark, isNotEmpty);
+      expect(callbackCount, equals(1));
+      expect(callbackArg, equals(1));
+    });
+
+    test('callback not invoked when no deltas merge successfully', () async {
+      var callbackCount = 0;
+      final svcWithCb = SyncApiService(
+        db: db,
+        clock: clock,
+        onDeltasMerged: (_) => callbackCount++,
+      );
+
+      // Send a delta with an unknown type — should fail and not trigger callback
+      final result = await svcWithCb.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          {'type': 'unknownType', 'id': 'x', 'fields': {}},
+        ],
+      );
+
+      expect(result.merged, equals(0));
+      expect(result.errors, hasLength(1));
+      expect(callbackCount, equals(0));
+    });
+
+    test('records received watermark for remote node', () async {
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      await syncApi.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          {
+            'type': SyncDocType.timer,
+            'id': activeTimerId,
+            'fields': {
+              'taskTitle': {'v': 'Phone timer', 't': remoteTs.pack()},
+              'isRunning': {'v': true, 't': remoteTs.pack()},
+              'startedAt': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'accumulatedMs': {'v': 0, 't': remoteTs.pack()},
+            },
+          },
+        ],
+      );
+
+      // Watermark should now be stored for phone-1
+      final wm = await syncApi.getWatermark('phone-1', direction: 'received');
+      expect(wm, isNot(equals('0')));
+    });
+
+    test('merges multiple delta types in one batch', () async {
+      final task = await taskService.add(title: 'Existing task');
+
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch + 1000,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final result = await syncApi.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          // Task update (toggle done)
+          {
+            'type': SyncDocType.task,
+            'id': task.id,
+            'fields': {
+              'isDone': {'v': true, 't': remoteTs.pack()},
+            },
+          },
+          // New timer
+          {
+            'type': SyncDocType.timer,
+            'id': activeTimerId,
+            'fields': {
+              'taskTitle': {'v': 'Phone work', 't': remoteTs.pack()},
+              'isRunning': {'v': true, 't': remoteTs.pack()},
+              'startedAt': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'accumulatedMs': {'v': 0, 't': remoteTs.pack()},
+            },
+          },
+        ],
+      );
+
+      expect(result.merged, equals(2));
+      expect(result.errors, isEmpty);
+
+      final tasks = await db.select(db.tasks).get();
+      expect(tasks.first.isDone, isTrue);
+
+      final timers = await db.select(db.timerEntries).get();
+      expect(timers.first.taskTitle, equals('Phone work'));
+    });
+  });
+
   group('round-trip sync', () {
     test('extract → merge recreates documents on remote', () async {
       // Create data on "desktop" — timer start also creates a task
