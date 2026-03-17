@@ -19,8 +19,12 @@ class SettingsScreen extends StatefulWidget {
     var url = prefs.getString(kServerUrlKey) ?? kDefaultServerUrl;
     if (url.startsWith('ws://') || url.startsWith('wss://')) {
       url = url.replaceFirst(RegExp(r'^wss?://'), 'http://');
-      await prefs.setString(kServerUrlKey, url);
     }
+    // Strip trailing slashes to avoid double-slash in API paths
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
+    await prefs.setString(kServerUrlKey, url);
     return url;
   }
 }
