@@ -5,7 +5,10 @@ import '../models/snapshot.dart';
 class PlannedTaskList extends StatelessWidget {
   final List<PlannedTaskSnapshot> tasks;
 
-  const PlannedTaskList({super.key, required this.tasks});
+  /// Called when user taps a task to toggle its done state.
+  final Future<void> Function(String taskId)? onToggleDone;
+
+  const PlannedTaskList({super.key, required this.tasks, this.onToggleDone});
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +38,7 @@ class PlannedTaskList extends StatelessWidget {
               ],
             ),
             const Divider(),
-            ...tasks.map((t) => _TaskRow(task: t)),
+            ...tasks.map((t) => _TaskRow(task: t, onToggleDone: onToggleDone)),
           ],
         ),
       ),
@@ -46,7 +49,10 @@ class PlannedTaskList extends StatelessWidget {
 class _TaskRow extends StatelessWidget {
   final PlannedTaskSnapshot task;
 
-  const _TaskRow({required this.task});
+  /// Called when user taps to toggle done state.
+  final Future<void> Function(String taskId)? onToggleDone;
+
+  const _TaskRow({required this.task, this.onToggleDone});
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +80,12 @@ class _TaskRow extends StatelessWidget {
           : null,
     );
 
-    return Padding(
+    return InkWell(
+      onTap: (onToggleDone != null && !task.isCancelled)
+          ? () => onToggleDone!(task.taskId)
+          : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,6 +166,7 @@ class _TaskRow extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }

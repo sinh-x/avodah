@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/snapshot.dart';
 import '../services/local_dashboard_provider.dart';
+import '../services/local_write_service.dart';
 import '../services/sync_client.dart' show SyncConnectionState;
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
@@ -12,8 +13,13 @@ import '../widgets/worklog_summary.dart';
 
 class DashboardScreen extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
+  final LocalWriteService writeService;
 
-  const DashboardScreen({super.key, required this.dashboardProvider});
+  const DashboardScreen({
+    super.key,
+    required this.dashboardProvider,
+    required this.writeService,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -34,6 +40,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onUpdate() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _stopTimer() async {
+    final result = await widget.writeService.stopTimerAndLog();
+    await widget.dashboardProvider.refresh();
+    if (!mounted) return;
+    final msg = result.worklogId != null
+        ? 'Timer stopped. Worklog created.'
+        : 'Timer stopped.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> _toggleTaskDone(String taskId) async {
+    final newDone = await widget.writeService.toggleTaskDone(taskId);
+    await widget.dashboardProvider.refresh();
+    if (!mounted || newDone == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(newDone ? 'Task marked done.' : 'Task marked undone.'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -127,7 +157,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           // Timer
-          TimerStatusBar(timer: s.timer),
+          TimerStatusBar(
+            timer: s.timer,
+            onStop: s.timer != null ? _stopTimer : null,
+          ),
           const SizedBox(height: 8),
 
           // Plan vs Actual
@@ -135,7 +168,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 8),
 
           // Planned tasks
-          PlannedTaskList(tasks: s.plannedTasks),
+          PlannedTaskList(
+            tasks: s.plannedTasks,
+            onToggleDone: _toggleTaskDone,
+          ),
           if (s.plannedTasks.isNotEmpty) const SizedBox(height: 8),
 
           // Worklog summary

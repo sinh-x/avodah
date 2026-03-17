@@ -7,7 +7,10 @@ import '../models/snapshot.dart';
 class TimerStatusBar extends StatefulWidget {
   final TimerSnapshot? timer;
 
-  const TimerStatusBar({super.key, required this.timer});
+  /// Called when user taps stop on a running timer.
+  final Future<void> Function()? onStop;
+
+  const TimerStatusBar({super.key, required this.timer, this.onStop});
 
   @override
   State<TimerStatusBar> createState() => _TimerStatusBarState();
@@ -116,6 +119,14 @@ class _TimerStatusBarState extends State<TimerStatusBar> {
                   fontWeight: FontWeight.bold,
                   fontFeatures: [const FontFeature.tabularFigures()]),
             ),
+            if (widget.onStop != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(Icons.stop_circle, color: textColor, size: 28),
+                tooltip: 'Stop timer',
+                onPressed: widget.onStop,
+              ),
+            ],
           ],
         ),
       ),
