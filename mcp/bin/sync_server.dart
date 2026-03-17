@@ -65,10 +65,20 @@ Future<void> main(List<String> args) async {
     exit(0);
   });
 
-  // Accept connections — try Sync API, Agent API, fall back to health check
+  // Accept connections — handle each request concurrently
   await for (final request in server) {
+    unawaited(_handleRequest(request, syncApi, agentApi));
+  }
+}
+
+Future<void> _handleRequest(
+  HttpRequest request,
+  SyncApiService syncApi,
+  AgentApiService agentApi,
+) async {
+  try {
     final syncHandled = await syncApi.handleRequest(request);
-    if (syncHandled) continue;
+    if (syncHandled) return;
     final handled = await agentApi.handleRequest(request);
     if (!handled) {
       request.response
@@ -77,5 +87,7 @@ Future<void> main(List<String> args) async {
         ..write('{"status":"ok","service":"avodah-sync"}')
         ..close();
     }
+  } catch (e, stack) {
+    stderr.writeln('Unhandled request error: $e\n$stack');
   }
 }
