@@ -108,12 +108,18 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
     if (sync == null || dashboard == null) return;
+    var syncOk = false;
     try {
       await sync.pullFromDesktop();
+      syncOk = true;
     } catch (e) {
-      // Sync failure is non-fatal — dashboard still shows local data
+      debugPrint('[Sync] Pull failed: $e');
     }
     await dashboard.refresh();
+    // Override the indicator to reflect actual sync status, not just local DB read
+    if (!syncOk) {
+      dashboard.connectionState.value = SyncConnectionState.disconnected;
+    }
   }
 
   /// Push CRDT deltas from phone to desktop (non-fatal on failure).

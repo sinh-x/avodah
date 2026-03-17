@@ -76,7 +76,7 @@ class CrdtSyncService {
 
     debugPrint('[CrdtSync] Pulling deltas since $watermark from $uri');
 
-    final response = await _client.get(uri);
+    final response = await _client.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Sync pull failed: HTTP ${response.statusCode}');
     }
@@ -247,11 +247,13 @@ class CrdtSyncService {
 
     debugPrint('[CrdtSync] Pushing ${deltas.length} delta(s) to $uri');
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'node': nodeId, 'deltas': deltas}),
-    );
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'node': nodeId, 'deltas': deltas}),
+        )
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
       throw Exception('Sync push failed: HTTP ${response.statusCode}');

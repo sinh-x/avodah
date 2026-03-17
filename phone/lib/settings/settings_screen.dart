@@ -12,9 +12,16 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 
   /// Loads the saved server URL, or returns the default.
+  ///
+  /// Auto-migrates legacy `ws://` URLs to `http://` (Phase 9 removed WebSocket).
   static Future<String> loadServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(kServerUrlKey) ?? kDefaultServerUrl;
+    var url = prefs.getString(kServerUrlKey) ?? kDefaultServerUrl;
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+      url = url.replaceFirst(RegExp(r'^wss?://'), 'http://');
+      await prefs.setString(kServerUrlKey, url);
+    }
+    return url;
   }
 }
 
