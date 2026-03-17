@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/snapshot.dart';
 import '../services/local_dashboard_provider.dart';
 import '../services/local_write_service.dart';
-import '../services/sync_client.dart' show SyncConnectionState;
+import '../services/crdt_sync_service.dart' show SyncConnectionState;
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';
@@ -15,10 +15,15 @@ class DashboardScreen extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
   final LocalWriteService writeService;
 
+  /// Called after a local write with the CRDT deltas to push to the desktop.
+  /// Fire-and-forget — errors are handled by the caller.
+  final Future<void> Function(List<Map<String, dynamic>> deltas)? onPushDeltas;
+
   const DashboardScreen({
     super.key,
     required this.dashboardProvider,
     required this.writeService,
+    this.onPushDeltas,
   });
 
   @override
@@ -44,6 +49,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _stopTimer() async {
     final result = await widget.writeService.stopTimerAndLog();
+
+    // Push deltas to desktop (fire-and-forget)
+    final timerDelta = await widget.writeService.getTimerDelta();
+    final worklogDelta = result.worklogId != null
+        ? await widget.writeService.getWorklogDelta(result.worklogId!)
+        : null;
+    final deltas = [?timerDelta, ?worklogDelta];
+    if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
+
     await widget.dashboardProvider.refresh();
     if (!mounted) return;
     final msg = result.worklogId != null
@@ -56,6 +70,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _toggleTaskDone(String taskId) async {
     final newDone = await widget.writeService.toggleTaskDone(taskId);
+
+    // Push delta to desktop (fire-and-forget)
+    final taskDelta = await widget.writeService.getTaskDelta(taskId);
+    if (taskDelta != null) widget.onPushDeltas?.call([taskDelta]);
+
     await widget.dashboardProvider.refresh();
     if (!mounted || newDone == null) return;
     ScaffoldMessenger.of(context).showSnackBar(

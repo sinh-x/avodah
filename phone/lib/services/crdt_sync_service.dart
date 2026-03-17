@@ -22,6 +22,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _kDesktopNodeId = 'desktop';
 const _kPhoneNodeIdKey = 'crdt_node_id';
 
+/// Connection state for the sync indicator.
+enum SyncConnectionState { disconnected, connecting, connected }
+
 /// Document type identifiers matching the desktop SyncApiService.
 class _SyncDocType {
   _SyncDocType._();
@@ -73,7 +76,7 @@ class CrdtSyncService {
 
     debugPrint('[CrdtSync] Pulling deltas since $watermark from $uri');
 
-    final response = await _client.get(uri);
+    final response = await _client.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw Exception('Sync pull failed: HTTP ${response.statusCode}');
     }
@@ -229,6 +232,46 @@ class CrdtSyncService {
         timestamp: entry.value.timestamp,
       );
     }
+  }
+
+  /// Push CRDT deltas from phone to desktop.
+  ///
+  /// Protocol: POST /api/sync/deltas
+  /// Body: `{"node": "<node-id>", "deltas": [...]}`
+  /// Returns the number of deltas merged by the desktop, or throws on HTTP error.
+  Future<int> pushToDesktop(List<Map<String, dynamic>> deltas) async {
+    if (deltas.isEmpty) return 0;
+
+    final nodeId = await getOrCreateNodeId();
+    final uri = Uri.parse('$baseUrl/api/sync/deltas');
+
+    debugPrint('[CrdtSync] Pushing ${deltas.length} delta(s) to $uri');
+
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'node': nodeId, 'deltas': deltas}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      throw Exception('Sync push failed: HTTP ${response.statusCode}');
+    }
+
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final merged = (json['merged'] as num?)?.toInt() ?? 0;
+    final watermark = json['watermark'] as String?;
+
+    // Advance our clock to the desktop's post-merge watermark
+    if (watermark != null && watermark != '0') {
+      try {
+        clock.receive(HybridTimestamp.parse(watermark));
+      } catch (_) {}
+    }
+
+    debugPrint('[CrdtSync] Push response: merged=$merged, watermark=$watermark');
+    return merged;
   }
 
   // ============================================================

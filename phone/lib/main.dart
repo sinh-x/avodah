@@ -60,9 +60,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     // Write service for local CRDT mutations (timer, task, worklog)
     final writeService = LocalWriteService(db: db, clock: clock);
 
-    // Load stored server URL and build HTTP base URL
-    final wsUrl = await SettingsScreen.loadServerUrl();
-    final httpBaseUrl = _wsToHttp(wsUrl);
+    // Load stored server URL (already HTTP format)
+    final httpBaseUrl = await SettingsScreen.loadServerUrl();
 
     // CRDT sync service pulls deltas from desktop via HTTP
     final crdtSyncService = CrdtSyncService(
@@ -109,12 +108,27 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
     if (sync == null || dashboard == null) return;
+    var syncOk = false;
     try {
       await sync.pullFromDesktop();
+      syncOk = true;
     } catch (e) {
-      // Sync failure is non-fatal — dashboard still shows local data
+      debugPrint('[Sync] Pull failed: $e');
     }
     await dashboard.refresh();
+    // Override the indicator to reflect actual sync status, not just local DB read
+    if (!syncOk) {
+      dashboard.connectionState.value = SyncConnectionState.disconnected;
+    }
+  }
+
+  /// Push CRDT deltas from phone to desktop (non-fatal on failure).
+  Future<void> _pushDeltas(List<Map<String, dynamic>> deltas) async {
+    try {
+      await _crdtSyncService?.pushToDesktop(deltas);
+    } catch (e) {
+      debugPrint('[Sync] Push failed (non-fatal): $e');
+    }
   }
 
   @override
@@ -156,18 +170,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
               teamBrowserProvider: _teamBrowserProvider!,
+              onPushDeltas: _pushDeltas,
             ),
     );
   }
 
-  /// Converts a WebSocket URL (ws://) to HTTP (http://).
-  static String _wsToHttp(String wsUrl) {
-    final uri = Uri.parse(wsUrl);
-    final httpUrl = uri.replace(scheme: 'http').toString();
-    return httpUrl.endsWith('/')
-        ? httpUrl.substring(0, httpUrl.length - 1)
-        : httpUrl;
-  }
 }
 
 /// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
@@ -178,6 +185,7 @@ class _HomeShell extends StatefulWidget {
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
+  final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -186,6 +194,7 @@ class _HomeShell extends StatefulWidget {
     required this.reviewProvider,
     required this.deploymentProvider,
     required this.teamBrowserProvider,
+    this.onPushDeltas,
   });
 
   @override
@@ -222,6 +231,7 @@ class _HomeShellState extends State<_HomeShell> {
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
+            onPushDeltas: widget.onPushDeltas,
           ),
           Scaffold(
             appBar: AppBar(

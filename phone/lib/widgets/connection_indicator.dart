@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../services/sync_client.dart';
+import '../services/crdt_sync_service.dart' show SyncConnectionState;
 
 class ConnectionIndicator extends StatelessWidget {
   final SyncConnectionState state;

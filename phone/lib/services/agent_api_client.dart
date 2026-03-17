@@ -312,7 +312,9 @@ class AgentApiClient {
   // --- HTTP helpers ---
 
   Future<Map<String, dynamic>> _get(String path) async {
-    final response = await _client.get(Uri.parse('$baseUrl$path'));
+    final response = await _client
+        .get(Uri.parse('$baseUrl$path'))
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw AgentApiException(response.statusCode, response.body);
     }
@@ -321,11 +323,13 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _post(String path,
       {Map<String, dynamic>? body}) async {
-    final response = await _client.post(
-      Uri.parse('$baseUrl$path'),
-      headers: body != null ? {'Content-Type': 'application/json'} : null,
-      body: body != null ? jsonEncode(body) : null,
-    );
+    final response = await _client
+        .post(
+          Uri.parse('$baseUrl$path'),
+          headers: body != null ? {'Content-Type': 'application/json'} : null,
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw AgentApiException(response.statusCode, response.body);
     }

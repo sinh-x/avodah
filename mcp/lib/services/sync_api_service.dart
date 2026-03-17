@@ -32,7 +32,18 @@ class SyncApiService {
   final AppDatabase db;
   final HybridLogicalClock clock;
 
-  SyncApiService({required this.db, required this.clock});
+  /// Called after phone deltas are successfully merged into the local DB.
+  ///
+  /// The integer argument is the number of deltas merged. The server wires
+  /// this to an immediate WS snapshot broadcast so connected clients see
+  /// phone changes without waiting for the next periodic tick.
+  final void Function(int count)? onDeltasMerged;
+
+  SyncApiService({
+    required this.db,
+    required this.clock,
+    this.onDeltasMerged,
+  });
 
   /// Routes a sync API request. Returns true if handled.
   Future<bool> handleRequest(HttpRequest request) async {
@@ -103,7 +114,8 @@ class SyncApiService {
     final json = jsonDecode(body) as Map<String, dynamic>;
 
     final remoteNode = json['node'] as String?;
-    final deltasJson = json['deltas'] as List<dynamic>? ?? [];
+    final deltasJson =
+        (json['deltas'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 
     if (remoteNode == null || remoteNode.isEmpty) {
       _jsonResponse(
@@ -111,11 +123,28 @@ class SyncApiService {
       return;
     }
 
+    final result = await mergePushBatch(remoteNode: remoteNode, deltas: deltasJson);
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'merged': result.merged,
+      'errors': result.errors,
+      'watermark': result.watermark,
+      'nodeId': clock.nodeId,
+    });
+  }
+
+  /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.
+  ///
+  /// Records the received watermark and fires [onDeltasMerged] when at least
+  /// one delta was applied. Exposed for direct testing without an HTTP layer.
+  Future<({int merged, List<String> errors, String watermark})> mergePushBatch({
+    required String remoteNode,
+    required List<Map<String, dynamic>> deltas,
+  }) async {
     var merged = 0;
     final errors = <String>[];
 
-    for (final deltaJson in deltasJson) {
-      final delta = deltaJson as Map<String, dynamic>;
+    for (final delta in deltas) {
       try {
         await mergeDelta(delta);
         merged++;
@@ -127,16 +156,13 @@ class SyncApiService {
     final watermark = clock.now().pack();
 
     // Record the watermark of what we received from the remote node
+    // and propagate merged deltas to connected clients immediately.
     if (merged > 0) {
       await setWatermark(remoteNode, watermark, direction: 'received');
+      onDeltasMerged?.call(merged);
     }
 
-    _jsonResponse(request, HttpStatus.ok, {
-      'merged': merged,
-      'errors': errors,
-      'watermark': watermark,
-      'nodeId': clock.nodeId,
-    });
+    return (merged: merged, errors: errors, watermark: watermark);
   }
 
   /// Extracts all CRDT deltas modified after [since].
