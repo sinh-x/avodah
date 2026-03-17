@@ -18,6 +18,7 @@ import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/agent_api_service.dart';
 import 'package:avodah_mcp/services/plan_service.dart';
+import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/services/sync_snapshot_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
@@ -63,6 +64,9 @@ Future<void> main(List<String> args) async {
     worklogService: worklogService,
     planService: planService,
   );
+
+  // CRDT delta sync API service
+  final syncApi = SyncApiService(db: db, clock: clock);
 
   // Agent workflow API service
   final agentApi = AgentApiService();
@@ -137,7 +141,9 @@ Future<void> main(List<String> args) async {
         },
       );
     } else {
-      // Non-WebSocket request — try Agent API, fall back to health check
+      // Non-WebSocket request — try Sync API, Agent API, fall back to health check
+      final syncHandled = await syncApi.handleRequest(request);
+      if (syncHandled) continue;
       final handled = await agentApi.handleRequest(request);
       if (!handled) {
         request.response

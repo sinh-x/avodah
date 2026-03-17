@@ -9,6 +9,7 @@ import 'tables/jira_integrations.dart';
 import 'tables/timer.dart';
 import 'tables/daily_plans.dart';
 import 'tables/day_plan_tasks.dart';
+import 'tables/sync_watermarks.dart';
 
 part 'database.g.dart';
 
@@ -28,6 +29,7 @@ part 'database.g.dart';
   TimerEntries,
   DailyPlanEntries,
   DayPlanTasks,
+  SyncWatermarks,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -40,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -98,6 +100,10 @@ class AppDatabase extends _$AppDatabase {
           } on Exception catch (_) {
             // Column already exists
           }
+        }
+        if (from < 11) {
+          // Add sync watermarks table for per-node HLC delta sync tracking
+          await m.createTable(syncWatermarks);
         }
       },
     );
