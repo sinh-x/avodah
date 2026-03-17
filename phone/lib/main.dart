@@ -60,9 +60,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     // Write service for local CRDT mutations (timer, task, worklog)
     final writeService = LocalWriteService(db: db, clock: clock);
 
-    // Load stored server URL and build HTTP base URL
-    final wsUrl = await SettingsScreen.loadServerUrl();
-    final httpBaseUrl = _wsToHttp(wsUrl);
+    // Load stored server URL (already HTTP format)
+    final httpBaseUrl = await SettingsScreen.loadServerUrl();
 
     // CRDT sync service pulls deltas from desktop via HTTP
     final crdtSyncService = CrdtSyncService(
@@ -170,14 +169,6 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     );
   }
 
-  /// Converts a WebSocket URL (ws://) to HTTP (http://).
-  static String _wsToHttp(String wsUrl) {
-    final uri = Uri.parse(wsUrl);
-    final httpUrl = uri.replace(scheme: 'http').toString();
-    return httpUrl.endsWith('/')
-        ? httpUrl.substring(0, httpUrl.length - 1)
-        : httpUrl;
-  }
 }
 
 /// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.

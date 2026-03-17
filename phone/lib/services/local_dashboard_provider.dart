@@ -15,7 +15,7 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/snapshot.dart';
-import 'sync_client.dart' show SyncConnectionState;
+import 'crdt_sync_service.dart' show SyncConnectionState;
 
 /// Builds [DaySnapshot] from the local Drift database.
 class LocalDashboardProvider extends ChangeNotifier {

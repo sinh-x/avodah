@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/snapshot.dart';
 import '../services/local_dashboard_provider.dart';
 import '../services/local_write_service.dart';
-import '../services/sync_client.dart' show SyncConnectionState;
+import '../services/crdt_sync_service.dart' show SyncConnectionState;
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';

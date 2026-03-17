@@ -22,6 +22,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _kDesktopNodeId = 'desktop';
 const _kPhoneNodeIdKey = 'crdt_node_id';
 
+/// Connection state for the sync indicator.
+enum SyncConnectionState { disconnected, connecting, connected }
+
 /// Document type identifiers matching the desktop SyncApiService.
 class _SyncDocType {
   _SyncDocType._();

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 const kServerUrlKey = 'sync_server_url';
-const kDefaultServerUrl = 'ws://100.64.0.1:9847';
+const kDefaultServerUrl = 'http://100.64.0.1:9847';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -53,13 +53,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final url = _controller.text.trim();
-      // Try a quick WebSocket connection to verify reachability
-      final uri = Uri.parse(url);
-      final channel = WebSocketChannel.connect(uri);
-      await channel.ready.timeout(const Duration(seconds: 5));
-      // If we get here, connection succeeded
-      await channel.sink.close();
-      setState(() => _testResult = 'Connected successfully!');
+      final uri = Uri.parse('$url/api/sync/deltas?since=0');
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        setState(() => _testResult = 'Connected successfully!');
+      } else {
+        setState(
+            () => _testResult = 'Connection failed: HTTP ${response.statusCode}');
+      }
     } catch (e) {
       setState(() => _testResult = 'Connection failed: $e');
     } finally {
@@ -90,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: const InputDecoration(
                 hintText: kDefaultServerUrl,
                 border: OutlineInputBorder(),
-                helperText: 'Use your Tailscale IP, e.g. ws://100.x.y.z:9847',
+                helperText: 'Use your Tailscale IP, e.g. http://100.x.y.z:9847',
               ),
               keyboardType: TextInputType.url,
               autocorrect: false,
