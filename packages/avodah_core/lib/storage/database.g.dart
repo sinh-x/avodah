@@ -7117,6 +7117,322 @@ class DayPlanTasksCompanion extends UpdateCompanion<DayPlanTask> {
   }
 }
 
+class $SyncWatermarksTable extends SyncWatermarks
+    with TableInfo<$SyncWatermarksTable, SyncWatermark> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncWatermarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _nodeIdMeta = const VerificationMeta('nodeId');
+  @override
+  late final GeneratedColumn<String> nodeId = GeneratedColumn<String>(
+    'node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastHlcMeta = const VerificationMeta(
+    'lastHlc',
+  );
+  @override
+  late final GeneratedColumn<String> lastHlc = GeneratedColumn<String>(
+    'last_hlc',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<String> direction = GeneratedColumn<String>(
+    'direction',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('received'),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [nodeId, lastHlc, direction, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_watermarks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncWatermark> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('node_id')) {
+      context.handle(
+        _nodeIdMeta,
+        nodeId.isAcceptableOrUnknown(data['node_id']!, _nodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nodeIdMeta);
+    }
+    if (data.containsKey('last_hlc')) {
+      context.handle(
+        _lastHlcMeta,
+        lastHlc.isAcceptableOrUnknown(data['last_hlc']!, _lastHlcMeta),
+      );
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {nodeId, direction};
+  @override
+  SyncWatermark map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncWatermark(
+      nodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}node_id'],
+      )!,
+      lastHlc: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_hlc'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}direction'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncWatermarksTable createAlias(String alias) {
+    return $SyncWatermarksTable(attachedDatabase, alias);
+  }
+}
+
+class SyncWatermark extends DataClass implements Insertable<SyncWatermark> {
+  /// Remote node ID (e.g. "phone-1", "desktop-1").
+  final String nodeId;
+
+  /// Packed HLC watermark string (e.g. "1741234567890-0-phone-1").
+  /// Represents the last HLC timestamp exchanged with this node.
+  final String lastHlc;
+
+  /// Whether this watermark is for data received FROM the node ("received")
+  /// or data sent TO the node ("sent").
+  final String direction;
+
+  /// When this watermark was last updated (Unix ms).
+  final int updatedAt;
+  const SyncWatermark({
+    required this.nodeId,
+    required this.lastHlc,
+    required this.direction,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['node_id'] = Variable<String>(nodeId);
+    map['last_hlc'] = Variable<String>(lastHlc);
+    map['direction'] = Variable<String>(direction);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  SyncWatermarksCompanion toCompanion(bool nullToAbsent) {
+    return SyncWatermarksCompanion(
+      nodeId: Value(nodeId),
+      lastHlc: Value(lastHlc),
+      direction: Value(direction),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SyncWatermark.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncWatermark(
+      nodeId: serializer.fromJson<String>(json['nodeId']),
+      lastHlc: serializer.fromJson<String>(json['lastHlc']),
+      direction: serializer.fromJson<String>(json['direction']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'nodeId': serializer.toJson<String>(nodeId),
+      'lastHlc': serializer.toJson<String>(lastHlc),
+      'direction': serializer.toJson<String>(direction),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  SyncWatermark copyWith({
+    String? nodeId,
+    String? lastHlc,
+    String? direction,
+    int? updatedAt,
+  }) => SyncWatermark(
+    nodeId: nodeId ?? this.nodeId,
+    lastHlc: lastHlc ?? this.lastHlc,
+    direction: direction ?? this.direction,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  SyncWatermark copyWithCompanion(SyncWatermarksCompanion data) {
+    return SyncWatermark(
+      nodeId: data.nodeId.present ? data.nodeId.value : this.nodeId,
+      lastHlc: data.lastHlc.present ? data.lastHlc.value : this.lastHlc,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncWatermark(')
+          ..write('nodeId: $nodeId, ')
+          ..write('lastHlc: $lastHlc, ')
+          ..write('direction: $direction, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(nodeId, lastHlc, direction, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncWatermark &&
+          other.nodeId == this.nodeId &&
+          other.lastHlc == this.lastHlc &&
+          other.direction == this.direction &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SyncWatermarksCompanion extends UpdateCompanion<SyncWatermark> {
+  final Value<String> nodeId;
+  final Value<String> lastHlc;
+  final Value<String> direction;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const SyncWatermarksCompanion({
+    this.nodeId = const Value.absent(),
+    this.lastHlc = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncWatermarksCompanion.insert({
+    required String nodeId,
+    this.lastHlc = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : nodeId = Value(nodeId);
+  static Insertable<SyncWatermark> custom({
+    Expression<String>? nodeId,
+    Expression<String>? lastHlc,
+    Expression<String>? direction,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (nodeId != null) 'node_id': nodeId,
+      if (lastHlc != null) 'last_hlc': lastHlc,
+      if (direction != null) 'direction': direction,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncWatermarksCompanion copyWith({
+    Value<String>? nodeId,
+    Value<String>? lastHlc,
+    Value<String>? direction,
+    Value<int>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return SyncWatermarksCompanion(
+      nodeId: nodeId ?? this.nodeId,
+      lastHlc: lastHlc ?? this.lastHlc,
+      direction: direction ?? this.direction,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (nodeId.present) {
+      map['node_id'] = Variable<String>(nodeId.value);
+    }
+    if (lastHlc.present) {
+      map['last_hlc'] = Variable<String>(lastHlc.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(direction.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncWatermarksCompanion(')
+          ..write('nodeId: $nodeId, ')
+          ..write('lastHlc: $lastHlc, ')
+          ..write('direction: $direction, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7133,6 +7449,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $DayPlanTasksTable dayPlanTasks = $DayPlanTasksTable(this);
+  late final $SyncWatermarksTable syncWatermarks = $SyncWatermarksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7147,6 +7464,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     timerEntries,
     dailyPlanEntries,
     dayPlanTasks,
+    syncWatermarks,
   ];
 }
 
@@ -10468,6 +10786,189 @@ typedef $$DayPlanTasksTableProcessedTableManager =
       DayPlanTask,
       PrefetchHooks Function()
     >;
+typedef $$SyncWatermarksTableCreateCompanionBuilder =
+    SyncWatermarksCompanion Function({
+      required String nodeId,
+      Value<String> lastHlc,
+      Value<String> direction,
+      Value<int> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncWatermarksTableUpdateCompanionBuilder =
+    SyncWatermarksCompanion Function({
+      Value<String> nodeId,
+      Value<String> lastHlc,
+      Value<String> direction,
+      Value<int> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$SyncWatermarksTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTable> {
+  $$SyncWatermarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastHlc => $composableBuilder(
+    column: $table.lastHlc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncWatermarksTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTable> {
+  $$SyncWatermarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastHlc => $composableBuilder(
+    column: $table.lastHlc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncWatermarksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTable> {
+  $$SyncWatermarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get nodeId =>
+      $composableBuilder(column: $table.nodeId, builder: (column) => column);
+
+  GeneratedColumn<String> get lastHlc =>
+      $composableBuilder(column: $table.lastHlc, builder: (column) => column);
+
+  GeneratedColumn<String> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SyncWatermarksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncWatermarksTable,
+          SyncWatermark,
+          $$SyncWatermarksTableFilterComposer,
+          $$SyncWatermarksTableOrderingComposer,
+          $$SyncWatermarksTableAnnotationComposer,
+          $$SyncWatermarksTableCreateCompanionBuilder,
+          $$SyncWatermarksTableUpdateCompanionBuilder,
+          (
+            SyncWatermark,
+            BaseReferences<_$AppDatabase, $SyncWatermarksTable, SyncWatermark>,
+          ),
+          SyncWatermark,
+          PrefetchHooks Function()
+        > {
+  $$SyncWatermarksTableTableManager(
+    _$AppDatabase db,
+    $SyncWatermarksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncWatermarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncWatermarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncWatermarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> nodeId = const Value.absent(),
+                Value<String> lastHlc = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncWatermarksCompanion(
+                nodeId: nodeId,
+                lastHlc: lastHlc,
+                direction: direction,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String nodeId,
+                Value<String> lastHlc = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncWatermarksCompanion.insert(
+                nodeId: nodeId,
+                lastHlc: lastHlc,
+                direction: direction,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncWatermarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncWatermarksTable,
+      SyncWatermark,
+      $$SyncWatermarksTableFilterComposer,
+      $$SyncWatermarksTableOrderingComposer,
+      $$SyncWatermarksTableAnnotationComposer,
+      $$SyncWatermarksTableCreateCompanionBuilder,
+      $$SyncWatermarksTableUpdateCompanionBuilder,
+      (
+        SyncWatermark,
+        BaseReferences<_$AppDatabase, $SyncWatermarksTable, SyncWatermark>,
+      ),
+      SyncWatermark,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10489,4 +10990,6 @@ class $AppDatabaseManager {
       $$DailyPlanEntriesTableTableManager(_db, _db.dailyPlanEntries);
   $$DayPlanTasksTableTableManager get dayPlanTasks =>
       $$DayPlanTasksTableTableManager(_db, _db.dayPlanTasks);
+  $$SyncWatermarksTableTableManager get syncWatermarks =>
+      $$SyncWatermarksTableTableManager(_db, _db.syncWatermarks);
 }

@@ -236,6 +236,65 @@ void main() {
     });
   });
 
+  group('watermark tracking', () {
+    test('getWatermark returns "0" when no watermark stored', () async {
+      final wm = await syncApi.getWatermark('phone-1');
+      expect(wm, equals('0'));
+    });
+
+    test('setWatermark stores and getWatermark retrieves it', () async {
+      const nodeId = 'phone-1';
+      const hlc = '1741234567890-0-phone-1';
+
+      await syncApi.setWatermark(nodeId, hlc, direction: 'received');
+
+      final wm = await syncApi.getWatermark(nodeId, direction: 'received');
+      expect(wm, equals(hlc));
+    });
+
+    test('setWatermark upserts — updating existing watermark', () async {
+      const nodeId = 'phone-1';
+      const hlc1 = '1741234567890-0-phone-1';
+      const hlc2 = '1741234567999-1-phone-1';
+
+      await syncApi.setWatermark(nodeId, hlc1);
+      await syncApi.setWatermark(nodeId, hlc2);
+
+      final wm = await syncApi.getWatermark(nodeId);
+      expect(wm, equals(hlc2));
+    });
+
+    test('received and sent directions are tracked independently', () async {
+      const nodeId = 'phone-1';
+      const receivedHlc = '1741234567890-0-phone-1';
+      const sentHlc = '1741234568000-0-desktop-1';
+
+      await syncApi.setWatermark(nodeId, receivedHlc, direction: 'received');
+      await syncApi.setWatermark(nodeId, sentHlc, direction: 'sent');
+
+      expect(
+          await syncApi.getWatermark(nodeId, direction: 'received'),
+          equals(receivedHlc));
+      expect(
+          await syncApi.getWatermark(nodeId, direction: 'sent'),
+          equals(sentHlc));
+    });
+
+    test('getAllWatermarks returns all stored entries', () async {
+      await syncApi.setWatermark('phone-1', '1000-0-phone-1',
+          direction: 'received');
+      await syncApi.setWatermark('phone-1', '2000-0-desktop-1',
+          direction: 'sent');
+      await syncApi.setWatermark('phone-2', '1500-0-phone-2',
+          direction: 'received');
+
+      final all = await syncApi.getAllWatermarks();
+      expect(all, hasLength(3));
+      final nodeIds = all.map((e) => e['nodeId']).toSet();
+      expect(nodeIds, containsAll(['phone-1', 'phone-2']));
+    });
+  });
+
   group('round-trip sync', () {
     test('extract → merge recreates documents on remote', () async {
       // Create data on "desktop" — timer start also creates a task

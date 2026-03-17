@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:drift/drift.dart' show Value;
 
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
@@ -124,6 +125,11 @@ class SyncApiService {
     }
 
     final watermark = clock.now().pack();
+
+    // Record the watermark of what we received from the remote node
+    if (merged > 0) {
+      await setWatermark(remoteNode, watermark, direction: 'received');
+    }
 
     _jsonResponse(request, HttpStatus.ok, {
       'merged': merged,
@@ -384,6 +390,51 @@ class SyncApiService {
     } catch (_) {
       return true; // Include docs with unparseable clock
     }
+  }
+
+  // ============================================================
+  // Watermark management
+  // ============================================================
+
+  /// Returns the stored HLC watermark for [nodeId] in the given [direction].
+  ///
+  /// [direction] is either 'received' (data from node) or 'sent' (data to node).
+  /// Returns "0" if no watermark has been recorded yet.
+  Future<String> getWatermark(String nodeId,
+      {String direction = 'received'}) async {
+    final rows = await (db.select(db.syncWatermarks)
+          ..where((w) => w.nodeId.equals(nodeId)))
+        .get();
+    final match = rows.where((r) => r.direction == direction);
+    if (match.isEmpty) return '0';
+    final hlc = match.first.lastHlc;
+    return hlc.isEmpty ? '0' : hlc;
+  }
+
+  /// Stores or updates the HLC watermark for [nodeId] in the given [direction].
+  Future<void> setWatermark(String nodeId, String hlcPacked,
+      {String direction = 'received'}) async {
+    await db.into(db.syncWatermarks).insertOnConflictUpdate(
+          SyncWatermarksCompanion.insert(
+            nodeId: nodeId,
+            lastHlc: Value(hlcPacked),
+            direction: Value(direction),
+            updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+          ),
+        );
+  }
+
+  /// Returns all stored watermarks (for diagnostics / status endpoint).
+  Future<List<Map<String, dynamic>>> getAllWatermarks() async {
+    final rows = await db.select(db.syncWatermarks).get();
+    return rows
+        .map((r) => {
+              'nodeId': r.nodeId,
+              'direction': r.direction,
+              'lastHlc': r.lastHlc,
+              'updatedAt': r.updatedAt,
+            })
+        .toList();
   }
 
   /// Sends a JSON response.
