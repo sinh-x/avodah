@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -6,11 +9,13 @@ import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
+import 'services/crdt_sync_service.dart';
 import 'services/deployment_provider.dart';
+import 'services/local_dashboard_provider.dart';
 import 'services/review_provider.dart';
 import 'services/team_browser_provider.dart';
-import 'services/sync_client.dart';
 import 'settings/settings_screen.dart';
+import 'storage/database.dart';
 
 void main() {
   runApp(const AvodahViewerApp());
@@ -24,24 +29,45 @@ class AvodahViewerApp extends StatefulWidget {
 }
 
 class _AvodahViewerAppState extends State<AvodahViewerApp> {
-  SyncClient? _syncClient;
+  AppDatabase? _db;
+  LocalDashboardProvider? _dashboardProvider;
+  CrdtSyncService? _crdtSyncService;
   AgentApiClient? _apiClient;
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
   TeamBrowserProvider? _teamBrowserProvider;
+  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
-    _initClient();
+    _initApp();
   }
 
-  Future<void> _initClient() async {
-    final url = await SettingsScreen.loadServerUrl();
-    final client = SyncClient(serverUrl: url);
-    client.connect();
+  Future<void> _initApp() async {
+    // Open local database
+    final db = await openPhoneDatabase();
 
-    final apiClient = AgentApiClient.fromWsUrl(url);
+    // Node ID + HLC clock
+    final nodeId = await CrdtSyncService.getOrCreateNodeId();
+    final clock = HybridLogicalClock(nodeId: nodeId);
+
+    // Dashboard reads from local DB
+    final dashboardProvider = LocalDashboardProvider(db: db, clock: clock);
+
+    // Load stored server URL and build HTTP base URL
+    final wsUrl = await SettingsScreen.loadServerUrl();
+    final httpBaseUrl = _wsToHttp(wsUrl);
+
+    // CRDT sync service pulls deltas from desktop via HTTP
+    final crdtSyncService = CrdtSyncService(
+      baseUrl: httpBaseUrl,
+      db: db,
+      clock: clock,
+    );
+
+    // Agent workflow API
+    final apiClient = AgentApiClient(baseUrl: httpBaseUrl);
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -53,21 +79,48 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     teamBrowserProvider.loadPaTeams();
 
     setState(() {
-      _syncClient = client;
+      _db = db;
+      _dashboardProvider = dashboardProvider;
+      _crdtSyncService = crdtSyncService;
       _apiClient = apiClient;
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
       _teamBrowserProvider = teamBrowserProvider;
     });
+
+    // Initial pull + dashboard render
+    await _syncAndRefresh();
+
+    // Periodic sync + refresh every 5 seconds while app is running
+    _syncTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _syncAndRefresh(),
+    );
+  }
+
+  /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
+  Future<void> _syncAndRefresh() async {
+    final sync = _crdtSyncService;
+    final dashboard = _dashboardProvider;
+    if (sync == null || dashboard == null) return;
+    try {
+      await sync.pullFromDesktop();
+    } catch (e) {
+      // Sync failure is non-fatal — dashboard still shows local data
+    }
+    await dashboard.refresh();
   }
 
   @override
   void dispose() {
+    _syncTimer?.cancel();
     _teamBrowserProvider?.dispose();
     _deploymentProvider?.dispose();
     _reviewProvider?.dispose();
     _apiClient?.dispose();
-    _syncClient?.dispose();
+    _crdtSyncService?.dispose();
+    _dashboardProvider?.dispose();
+    _db?.close();
     super.dispose();
   }
 
@@ -86,12 +139,12 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      home: _syncClient == null
+      home: _dashboardProvider == null
           ? const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             )
           : _HomeShell(
-              syncClient: _syncClient!,
+              dashboardProvider: _dashboardProvider!,
               apiClient: _apiClient!,
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
@@ -99,18 +152,27 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
             ),
     );
   }
+
+  /// Converts a WebSocket URL (ws://) to HTTP (http://).
+  static String _wsToHttp(String wsUrl) {
+    final uri = Uri.parse(wsUrl);
+    final httpUrl = uri.replace(scheme: 'http').toString();
+    return httpUrl.endsWith('/')
+        ? httpUrl.substring(0, httpUrl.length - 1)
+        : httpUrl;
+  }
 }
 
 /// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
 class _HomeShell extends StatefulWidget {
-  final SyncClient syncClient;
+  final LocalDashboardProvider dashboardProvider;
   final AgentApiClient apiClient;
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
 
   const _HomeShell({
-    required this.syncClient,
+    required this.dashboardProvider,
     required this.apiClient,
     required this.reviewProvider,
     required this.deploymentProvider,
@@ -148,7 +210,7 @@ class _HomeShellState extends State<_HomeShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          DashboardScreen(syncClient: widget.syncClient),
+          DashboardScreen(dashboardProvider: widget.dashboardProvider),
           Scaffold(
             appBar: AppBar(
               title: const Text('Agent Review'),
