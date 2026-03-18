@@ -124,6 +124,8 @@ class AgentApiService {
         await _handleTeamBrowse(request);
       } else if (path == '/api/pa-teams' && method == 'GET') {
         await _handleListPaTeams(request);
+      } else if (path == '/api/agent-teams' && method == 'GET') {
+        await _handleListAgentTeams(request);
       } else if (path == '/api/deploy' && method == 'POST') {
         await _handleDeploy(request);
       } else if (path == '/api/timers' && method == 'GET') {
@@ -281,10 +283,12 @@ class AgentApiService {
   }
 
   /// POST /api/inbox/:filename/approve — Write optional feedback annotation and
-  /// move file to approved/.
+  /// move file to approved/. Optionally routes the document to a destination
+  /// team inbox and sends a decision notification to the From team.
   ///
-  /// Body (optional JSON): `{"note": "...", "chips": ["..."]}`
+  /// Body (optional JSON): `{"note": "...", "chips": ["..."], "destination_team": "builder"}`
   /// If no note and no chips, the file moves with no annotation (fast-path).
+  /// If destination_team is omitted, falls back to parsing `To:` from frontmatter.
   Future<void> _handleApprove(HttpRequest request) async {
     final filename =
         _extractActionFilename(request.uri.path, '/api/inbox/', '/approve');
@@ -301,12 +305,14 @@ class AgentApiService {
 
     // Parse optional feedback body
     String? note;
+    String? destinationTeam;
     List<String> chips = const [];
     try {
       final body = await utf8.decoder.bind(request).join();
       if (body.isNotEmpty) {
         final json = jsonDecode(body) as Map<String, dynamic>;
         note = json['note'] as String?;
+        destinationTeam = json['destination_team'] as String?;
         final chipsRaw = json['chips'];
         if (chipsRaw is List) {
           chips = chipsRaw.whereType<String>().toList();
@@ -317,28 +323,53 @@ class AgentApiService {
       // proceed with defaults — optional body fields
     }
 
-    // Write annotation only if note or chips provided (fast-path: no annotation)
+    // Read content before moving
     final content = source.readAsStringSync();
-    final updated = writeFeedbackAnnotation(
+
+    // Write annotation only if note or chips provided (fast-path: no annotation)
+    final annotated = writeFeedbackAnnotation(
         content, ApproveFeedbackAnnotation(note: note, chips: chips));
-    if (updated != content) {
-      source.writeAsStringSync(updated);
+
+    // Perform routing (best-effort — approve still succeeds even if routing fails)
+    final routingResult = await _performRouting(
+      filename: filename,
+      content: annotated,
+      isApprove: true,
+      destinationTeamOverride: destinationTeam,
+    );
+
+    // Add routed_by / routed_at markers if routing was attempted
+    final now = DateTime.now().toIso8601String();
+    String withMarkers = annotated;
+    if (routingResult != null) {
+      withMarkers = _insertFrontmatterKey(withMarkers, 'routed_by', 'avodah');
+      withMarkers = _insertFrontmatterKey(withMarkers, 'routed_at', now);
+    }
+
+    if (withMarkers != content) {
+      source.writeAsStringSync(withMarkers);
     }
 
     _ensureDir(_approvedPath);
     final dest = File(p.join(_approvedPath, filename));
     source.renameSync(dest.path);
 
-    _jsonResponse(
-        request, HttpStatus.ok, {'status': 'approved', 'file': filename});
+    final response = <String, dynamic>{
+      'status': 'approved',
+      'file': filename,
+      if (routingResult != null) ...routingResult,
+    };
+    _jsonResponse(request, HttpStatus.ok, response);
   }
 
   /// POST /api/inbox/:filename/reject — Write structured feedback annotation and
   /// move to rejected/, or mark as pending-reject-feedback (file stays in inbox).
+  /// Optionally routes a rejection notification to the From team.
   ///
   /// Body (JSON):
-  /// - Full reject: `{"what_is_wrong": "...", "what_to_fix": "...", "priority": "high|medium|low", "chips": [...]}`
+  /// - Full reject: `{"what_is_wrong": "...", "what_to_fix": "...", "priority": "high|medium|low", "chips": [...], "destination_team": "requirements"}`
   /// - Pending reject: `{"pending": true}` — file stays in inbox with pending annotation
+  /// destination_team defaults to parsing `From:` from frontmatter if omitted.
   Future<void> _handleReject(HttpRequest request) async {
     final filename =
         _extractActionFilename(request.uri.path, '/api/inbox/', '/reject');
@@ -369,6 +400,7 @@ class AgentApiService {
     String? whatIsWrong;
     String? whatToFix;
     String priority = 'medium';
+    String? destinationTeam;
     List<String> chips = const [];
     if (body.isNotEmpty) {
       Map<String, dynamic> json;
@@ -383,6 +415,7 @@ class AgentApiService {
       whatIsWrong = json['what_is_wrong'] as String?;
       whatToFix = json['what_to_fix'] as String?;
       priority = json['priority'] as String? ?? 'medium';
+      destinationTeam = json['destination_team'] as String?;
       final chipsRaw = json['chips'];
       if (chipsRaw is List) {
         chips = chipsRaw.whereType<String>().toList();
@@ -417,8 +450,8 @@ class AgentApiService {
       return;
     }
 
-    // Full reject: write structured annotation and move to rejected/
-    final updated = writeFeedbackAnnotation(
+    // Full reject: write structured annotation
+    final annotated = writeFeedbackAnnotation(
         content,
         RejectFeedbackAnnotation(
           whatIsWrong: whatIsWrong!,
@@ -426,14 +459,39 @@ class AgentApiService {
           priority: priority,
           chips: chips,
         ));
-    source.writeAsStringSync(updated);
+
+    // Perform routing (best-effort — reject still succeeds even if routing fails)
+    // For reject: destination_team is the From team (sender gets the notification)
+    final routingResult = await _performRouting(
+      filename: filename,
+      content: annotated,
+      isApprove: false,
+      destinationTeamOverride: destinationTeam,
+      whatIsWrong: whatIsWrong,
+      whatToFix: whatToFix,
+      priority: priority,
+    );
+
+    // Add routed_by / routed_at markers if routing was attempted
+    final now = DateTime.now().toIso8601String();
+    String withMarkers = annotated;
+    if (routingResult != null) {
+      withMarkers = _insertFrontmatterKey(withMarkers, 'routed_by', 'avodah');
+      withMarkers = _insertFrontmatterKey(withMarkers, 'routed_at', now);
+    }
+
+    source.writeAsStringSync(withMarkers);
 
     _ensureDir(_rejectedPath);
     final dest = File(p.join(_rejectedPath, filename));
     source.renameSync(dest.path);
 
-    _jsonResponse(
-        request, HttpStatus.ok, {'status': 'rejected', 'file': filename});
+    final response = <String, dynamic>{
+      'status': 'rejected',
+      'file': filename,
+      if (routingResult != null) ...routingResult,
+    };
+    _jsonResponse(request, HttpStatus.ok, response);
   }
 
   /// POST /api/inbox/:filename/defer — Write optional feedback annotation and
@@ -1308,6 +1366,292 @@ class AgentApiService {
     }
     final source = File(filePath);
     await _doAppendSection(request, source, filename);
+  }
+
+  // --- Routing helpers ---
+
+  /// Perform direct routing after an approve or reject action.
+  ///
+  /// For approve:
+  /// - Writes a decision notification to `agent-teams/<from-team>/inbox/`
+  /// - Forwards the full doc to `agent-teams/<destination-team>/inbox/`
+  ///   with "Approved — Ready for Implementation" header
+  ///
+  /// For reject:
+  /// - Writes a rejection notification (includes feedback) to
+  ///   `agent-teams/<destination-team>/inbox/` (defaults to From team)
+  ///
+  /// [destinationTeamOverride] takes precedence over frontmatter fields.
+  /// For approve, destination falls back to `To:` from frontmatter.
+  /// For reject, destination falls back to `From:` from frontmatter (team part only).
+  ///
+  /// Returns a map with `routed`, and optionally `routing_error`, suitable for
+  /// spreading into the API response. Returns null if routing was not attempted
+  /// (no destination resolved).
+  Future<Map<String, dynamic>?> _performRouting({
+    required String filename,
+    required String content,
+    required bool isApprove,
+    String? destinationTeamOverride,
+    String? whatIsWrong,
+    String? whatToFix,
+    String? priority,
+  }) async {
+    try {
+      // Parse metadata to extract From: and To: fields
+      final metadata = parseMarkdownMetadata(content, filename: filename);
+
+      // Resolve from-team (for notification recipient on approve,
+      // and primary destination on reject)
+      final rawFrom = metadata.from;
+      final fromTeam = rawFrom != null ? _extractTeamName(rawFrom) : null;
+
+      // Resolve destination team
+      String? destinationTeam = destinationTeamOverride;
+      if (destinationTeam == null || destinationTeam.isEmpty) {
+        if (isApprove) {
+          // For approve: destination is To: field
+          destinationTeam =
+              metadata.to != null ? _extractTeamName(metadata.to!) : null;
+        } else {
+          // For reject: destination is From: field (the sender gets the notification)
+          destinationTeam = fromTeam;
+        }
+      }
+
+      if (destinationTeam == null || destinationTeam.isEmpty) {
+        // No destination resolved — skip routing, return null (not an error)
+        return null;
+      }
+
+      // Sanitize team name: only alphanumeric + hyphens
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(destinationTeam)) {
+        return {'routed': false, 'routing_error': 'Invalid team name: $destinationTeam'};
+      }
+
+      final today = _formatDate(DateTime.now());
+
+      if (isApprove) {
+        // --- Approve routing ---
+        // 1. Validate destination team inbox exists
+        final destInboxPath =
+            p.join(_teamsPath, destinationTeam, 'inbox');
+        if (!Directory(destInboxPath).existsSync()) {
+          return {
+            'routed': false,
+            'routing_error': "Team '$destinationTeam' inbox not found",
+          };
+        }
+
+        // 2. Write decision notification to From team inbox
+        if (fromTeam != null &&
+            fromTeam.isNotEmpty &&
+            RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(fromTeam)) {
+          final fromInboxPath = p.join(_teamsPath, fromTeam, 'inbox');
+          if (Directory(fromInboxPath).existsSync()) {
+            final notifSlug =
+                _slugify('decision-${p.basenameWithoutExtension(filename)}');
+            final notifFilename = '$today-$notifSlug.md';
+            final notifPath = p.join(fromInboxPath, notifFilename);
+            // Idempotency: skip if file already exists
+            if (!File(notifPath).existsSync()) {
+              final notifContent = _buildDecisionNotification(
+                filename: filename,
+                metadata: metadata,
+                action: 'approved',
+                destinationTeam: destinationTeam,
+              );
+              File(notifPath).writeAsStringSync(notifContent);
+            }
+          }
+        }
+
+        // 3. Forward full doc to destination team inbox
+        final forwardSlug =
+            _slugify(p.basenameWithoutExtension(filename));
+        final forwardFilename = '$today-$forwardSlug.md';
+        final forwardPath = p.join(destInboxPath, forwardFilename);
+        // Idempotency: skip if file already exists (F13)
+        if (!File(forwardPath).existsSync()) {
+          final forwardContent = _buildForwardedDoc(
+            originalFilename: filename,
+            content: content,
+            metadata: metadata,
+          );
+          File(forwardPath).writeAsStringSync(forwardContent);
+        }
+
+        return {'routed': true, 'routed_to': destinationTeam};
+      } else {
+        // --- Reject routing ---
+        // destination is the From team (validated above)
+        if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(destinationTeam)) {
+          return {'routed': false, 'routing_error': 'Invalid team name: $destinationTeam'};
+        }
+
+        final destInboxPath = p.join(_teamsPath, destinationTeam, 'inbox');
+        if (!Directory(destInboxPath).existsSync()) {
+          return {
+            'routed': false,
+            'routing_error': "Team '$destinationTeam' inbox not found",
+          };
+        }
+
+        final notifSlug =
+            _slugify('rejection-${p.basenameWithoutExtension(filename)}');
+        final notifFilename = '$today-$notifSlug.md';
+        final notifPath = p.join(destInboxPath, notifFilename);
+        // Idempotency: skip if file already exists
+        if (!File(notifPath).existsSync()) {
+          final notifContent = _buildDecisionNotification(
+            filename: filename,
+            metadata: metadata,
+            action: 'rejected',
+            destinationTeam: destinationTeam,
+            whatIsWrong: whatIsWrong,
+            whatToFix: whatToFix,
+            priority: priority,
+          );
+          File(notifPath).writeAsStringSync(notifContent);
+        }
+
+        return {'routed': true, 'routed_to': destinationTeam};
+      }
+    } catch (e, stack) {
+      stderr.writeln('_performRouting error: $e\n$stack');
+      return {'routed': false, 'routing_error': e.toString()};
+    }
+  }
+
+  /// Extract the team name from a `From:` or `To:` field value.
+  ///
+  /// Handles formats like:
+  /// - `"builder"` → `"builder"`
+  /// - `"requirements / team-manager"` → `"requirements"`
+  /// - `"builder / architect"` → `"builder"`
+  String _extractTeamName(String value) {
+    final trimmed = value.trim();
+    // Split on ' / ' and take the first part
+    final parts = trimmed.split(RegExp(r'\s*/\s*'));
+    return parts.first.trim();
+  }
+
+  /// Build a decision notification markdown file content.
+  String _buildDecisionNotification({
+    required String filename,
+    required MarkdownMetadata metadata,
+    required String action,
+    required String destinationTeam,
+    String? whatIsWrong,
+    String? whatToFix,
+    String? priority,
+  }) {
+    final now = DateTime.now().toIso8601String();
+    final today = _formatDate(DateTime.now());
+    final displayAt = now.length > 16 ? now.substring(0, 16) : now;
+    final buf = StringBuffer();
+
+    final actionLabel =
+        action == 'approved' ? 'Approved' : 'Rejected';
+
+    buf.writeln('# Decision Notification: $actionLabel — ${metadata.title}');
+    buf.writeln();
+    buf.writeln('> **Date:** $today');
+    buf.writeln('> **From:** Sinh (via Avodah)');
+    buf.writeln('> **To:** ${metadata.from ?? destinationTeam}');
+    buf.writeln('> **Type:** decision-notification');
+    buf.writeln('> **Action:** $action');
+    buf.writeln('> **At:** $displayAt');
+    buf.writeln('> **Source:** $filename');
+    if (action == 'approved') {
+      buf.writeln('> **Routed to:** $destinationTeam');
+    }
+    buf.writeln();
+
+    if (action == 'approved') {
+      buf.writeln(
+          'Sinh approved this document. It has been forwarded to the `$destinationTeam` team inbox for action.');
+    } else {
+      buf.writeln(
+          'Sinh rejected this document. Please review the feedback and resubmit when ready.');
+      buf.writeln();
+      if (whatIsWrong != null && whatIsWrong.isNotEmpty) {
+        buf.writeln("## What's Wrong");
+        buf.writeln(whatIsWrong);
+        buf.writeln();
+      }
+      if (whatToFix != null && whatToFix.isNotEmpty) {
+        buf.writeln('## What to Fix');
+        buf.writeln(whatToFix);
+        buf.writeln();
+      }
+      if (priority != null && priority.isNotEmpty) {
+        buf.writeln('## Priority');
+        buf.writeln(priority);
+        buf.writeln();
+      }
+    }
+
+    return buf.toString();
+  }
+
+  /// Build the forwarded document content for an approved item.
+  ///
+  /// Prepends an "Approved — Ready for Implementation" header before the
+  /// original document content.
+  String _buildForwardedDoc({
+    required String originalFilename,
+    required String content,
+    required MarkdownMetadata metadata,
+  }) {
+    final today = _formatDate(DateTime.now());
+    final buf = StringBuffer();
+    buf.writeln('# Approved — Ready for Implementation');
+    buf.writeln();
+    buf.writeln('> **Date:** $today');
+    buf.writeln('> **From:** Sinh (via Avodah)');
+    buf.writeln('> **To:** ${metadata.to ?? ''}');
+    buf.writeln('> **Type:** implementation-request');
+    buf.writeln(
+        '> **Source:** ~/Documents/ai-usage/sinh-inputs/approved/$originalFilename');
+    buf.writeln();
+    buf.writeln(
+        'Sinh approved this requirements doc. Proceed with implementation per the plan below.');
+    buf.writeln();
+    buf.writeln('---');
+    buf.writeln();
+    buf.write(content);
+    return buf.toString();
+  }
+
+  // --- Agent teams endpoint ---
+
+  /// GET /api/agent-teams — List agent team directory names.
+  ///
+  /// Returns all subdirectory names under `~/Documents/ai-usage/agent-teams/`.
+  /// Each entry has a `name` field and an `inbox_exists` boolean.
+  Future<void> _handleListAgentTeams(HttpRequest request) async {
+    final teamsDir = Directory(_teamsPath);
+    if (!teamsDir.existsSync()) {
+      _jsonResponse(request, HttpStatus.ok, {'teams': []});
+      return;
+    }
+
+    final teams = <Map<String, dynamic>>[];
+    for (final entity in teamsDir.listSync()) {
+      if (entity is! Directory) continue;
+      final name = p.basename(entity.path);
+      // Skip hidden directories
+      if (name.startsWith('.')) continue;
+      final inboxExists =
+          Directory(p.join(entity.path, 'inbox')).existsSync();
+      teams.add({'name': name, 'inbox_exists': inboxExists});
+    }
+
+    teams.sort((a, b) =>
+        (a['name'] as String).compareTo(b['name'] as String));
+
+    _jsonResponse(request, HttpStatus.ok, {'teams': teams});
   }
 
   // --- PA deploy endpoints ---
