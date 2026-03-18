@@ -33,6 +33,7 @@ class ReviewItem {
   final String title;
   final String? date;
   final String? from;
+  final String? to;
   final String? deployment;
   final String? type;
   final String? status;
@@ -47,6 +48,7 @@ class ReviewItem {
     required this.title,
     this.date,
     this.from,
+    this.to,
     this.deployment,
     this.type,
     this.status,
@@ -66,6 +68,7 @@ class ReviewItem {
       title: json['title'] as String? ?? 'Untitled',
       date: json['date'] as String?,
       from: json['from'] as String?,
+      to: json['to'] as String?,
       deployment: json['deployment'] as String?,
       type: json['type'] as String?,
       status: json['status'] as String?,

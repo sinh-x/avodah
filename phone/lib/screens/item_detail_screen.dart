@@ -520,7 +520,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   // --- Existing d-40e61d handlers (unchanged) ---
 
   Future<void> _onApprove() async {
-    final feedback = await ApproveDialog.show(context, availableChips: _chips);
+    final item = _detail ?? widget.item;
+    final feedback = await ApproveDialog.show(
+      context,
+      availableChips: _chips,
+      client: widget.reviewProvider.client,
+      initialDestinationTeam: item.to,
+    );
     if (feedback == null || !mounted) return;
 
     setState(() => _acting = true);
@@ -572,7 +578,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _onReject() async {
-    final feedback = await RejectDialog.show(context, availableChips: _chips);
+    final item = _detail ?? widget.item;
+    final fromTeam =
+        item.from != null ? _teamFromFrom(item.from!) : null;
+    final feedback = await RejectDialog.show(
+      context,
+      availableChips: _chips,
+      client: widget.reviewProvider.client,
+      initialDestinationTeam: fromTeam,
+    );
     if (feedback == null || !mounted) return;
 
     setState(() => _acting = true);

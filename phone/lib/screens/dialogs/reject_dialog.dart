@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../models/feedback_payload.dart';
+import '../../services/agent_api_client.dart';
+import '../../widgets/destination_team_selector.dart';
 
-/// Dialog for rejecting an inbox item with structured feedback fields.
+/// Dialog for rejecting an inbox item with structured feedback fields
+/// and optional destination team routing.
 ///
 /// Returns [RejectFeedback] on full reject (both required fields filled).
 /// Returns [RejectFeedback.pendingOnly()] when user taps "Reject now, add later".
@@ -10,21 +13,43 @@ import '../../models/feedback_payload.dart';
 ///
 /// Usage:
 /// ```dart
-/// final feedback = await RejectDialog.show(context, availableChips: chips);
+/// final feedback = await RejectDialog.show(
+///   context,
+///   availableChips: chips,
+///   client: client,
+///   initialDestinationTeam: item.from — extract team part before ' / ',
+/// );
 /// if (feedback != null) { /* proceed */ }
 /// ```
 class RejectDialog extends StatefulWidget {
   final List<String> availableChips;
+  final AgentApiClient client;
 
-  const RejectDialog({super.key, required this.availableChips});
+  /// Pre-filled destination team, typically extracted from item's `From:` field.
+  /// The caller should strip the agent suffix (e.g. "requirements / team-manager"
+  /// → "requirements") before passing this value.
+  final String? initialDestinationTeam;
+
+  const RejectDialog({
+    super.key,
+    required this.availableChips,
+    required this.client,
+    this.initialDestinationTeam,
+  });
 
   static Future<RejectFeedback?> show(
     BuildContext context, {
     required List<String> availableChips,
+    required AgentApiClient client,
+    String? initialDestinationTeam,
   }) {
     return showDialog<RejectFeedback>(
       context: context,
-      builder: (ctx) => RejectDialog(availableChips: availableChips),
+      builder: (ctx) => RejectDialog(
+        availableChips: availableChips,
+        client: client,
+        initialDestinationTeam: initialDestinationTeam,
+      ),
     );
   }
 
@@ -37,6 +62,13 @@ class _RejectDialogState extends State<RejectDialog> {
   final _fixController = TextEditingController();
   FeedbackPriority _priority = FeedbackPriority.medium;
   final Set<String> _selectedChips = {};
+  String? _destinationTeam;
+
+  @override
+  void initState() {
+    super.initState();
+    _destinationTeam = widget.initialDestinationTeam;
+  }
 
   @override
   void dispose() {
@@ -67,6 +99,7 @@ class _RejectDialogState extends State<RejectDialog> {
         whatToFix: _fixController.text.trim(),
         priority: _priority,
         chips: _selectedChips.toList(),
+        destinationTeam: _destinationTeam,
       ),
     );
   }
@@ -86,6 +119,14 @@ class _RejectDialogState extends State<RejectDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text('Route to team (optional)'),
+            const SizedBox(height: 8),
+            DestinationTeamSelector(
+              client: widget.client,
+              initialTeam: widget.initialDestinationTeam,
+              onChanged: (team) => setState(() => _destinationTeam = team),
+            ),
+            const SizedBox(height: 16),
             const Text("What's wrong? *"),
             const SizedBox(height: 8),
             TextField(
