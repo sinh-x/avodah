@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/agent_team.dart';
 import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
 import '../models/deployment.dart';
@@ -270,6 +271,20 @@ class AgentApiClient {
       total: response['total'] as int? ?? items.length,
       hasMore: response['hasMore'] as bool? ?? false,
     );
+  }
+
+  // --- Routing ---
+
+  /// List agent team directories for the destination-team routing selector.
+  ///
+  /// Calls GET /api/agent-teams (added in Phase 1 routing work).
+  /// Returns teams sorted alphabetically; each entry carries [AgentTeam.inboxExists].
+  Future<List<AgentTeam>> listAgentTeams() async {
+    final response = await _get('/api/agent-teams');
+    final teams = response['teams'] as List;
+    return teams
+        .map((e) => AgentTeam.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   // --- PA Deploy ---

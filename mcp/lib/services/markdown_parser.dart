@@ -21,6 +21,7 @@ class MarkdownMetadata {
   final String title;
   final String? date;
   final String? from;
+  final String? to;
   final String? deployment;
   final String? type;
   final String? status;
@@ -33,6 +34,7 @@ class MarkdownMetadata {
     required this.title,
     this.date,
     this.from,
+    this.to,
     this.deployment,
     this.type,
     this.status,
@@ -44,6 +46,7 @@ class MarkdownMetadata {
         'title': title,
         if (date != null) 'date': date,
         if (from != null) 'from': from,
+        if (to != null) 'to': to,
         if (deployment != null) 'deployment': deployment,
         if (type != null) 'type': type,
         if (status != null) 'status': status,
@@ -174,6 +177,7 @@ MarkdownMetadata parseMarkdownMetadata(String content, {String? filename}) {
   String? title;
   String? date;
   String? from;
+  String? to;
   String? deployment;
   String? type;
   String? status;
@@ -208,6 +212,8 @@ MarkdownMetadata parseMarkdownMetadata(String content, {String? filename}) {
           date = value;
         case 'from':
           from = value;
+        case 'to':
+          to = value;
         case 'deployment':
           deployment = value;
         case 'type':
@@ -227,6 +233,7 @@ MarkdownMetadata parseMarkdownMetadata(String content, {String? filename}) {
     title: title,
     date: date,
     from: from,
+    to: to,
     deployment: deployment,
     type: type,
     status: status,

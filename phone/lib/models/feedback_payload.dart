@@ -53,13 +53,26 @@ class ApproveFeedback {
   final String? note;
   final List<String> chips;
 
-  const ApproveFeedback({this.note, this.chips = const []});
+  /// Optional destination team for routing (passed as `destination_team` in API).
+  /// When non-null, the server routes the approved doc to this team's inbox.
+  final String? destinationTeam;
 
-  bool get hasContent => (note?.isNotEmpty ?? false) || chips.isNotEmpty;
+  const ApproveFeedback({
+    this.note,
+    this.chips = const [],
+    this.destinationTeam,
+  });
+
+  bool get hasContent =>
+      (note?.isNotEmpty ?? false) ||
+      chips.isNotEmpty ||
+      (destinationTeam?.isNotEmpty ?? false);
 
   Map<String, dynamic> toJson() => {
         if (note != null && note!.isNotEmpty) 'note': note,
         if (chips.isNotEmpty) 'chips': chips,
+        if (destinationTeam != null && destinationTeam!.isNotEmpty)
+          'destination_team': destinationTeam,
       };
 }
 
@@ -74,12 +87,17 @@ class RejectFeedback {
   final List<String> chips;
   final bool pending;
 
+  /// Optional destination team for routing (passed as `destination_team` in API).
+  /// When non-null, the server routes the rejection notification to this team's inbox.
+  final String? destinationTeam;
+
   const RejectFeedback({
     required this.whatIsWrong,
     required this.whatToFix,
     this.priority = FeedbackPriority.medium,
     this.chips = const [],
     this.pending = false,
+    this.destinationTeam,
   });
 
   /// Creates a pending-only rejection (no detail required).
@@ -88,7 +106,8 @@ class RejectFeedback {
         whatToFix = '',
         priority = FeedbackPriority.medium,
         chips = const [],
-        pending = true;
+        pending = true,
+        destinationTeam = null;
 
   Map<String, dynamic> toJson() {
     if (pending) return {'pending': true};
@@ -97,6 +116,8 @@ class RejectFeedback {
       'what_to_fix': whatToFix,
       'priority': priority.apiValue,
       if (chips.isNotEmpty) 'chips': chips,
+      if (destinationTeam != null && destinationTeam!.isNotEmpty)
+        'destination_team': destinationTeam,
     };
   }
 }
