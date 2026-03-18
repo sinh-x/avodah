@@ -19,6 +19,7 @@ export 'storage/tables/jira_integrations.dart';
 export 'storage/tables/timer.dart';
 export 'storage/tables/daily_plans.dart';
 export 'storage/tables/day_plan_tasks.dart';
+export 'storage/tables/sync_watermarks.dart';
 
 // CRDT Document types
 export 'documents/daily_plan_document.dart';
