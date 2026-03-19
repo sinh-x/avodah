@@ -15,6 +15,7 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/agent_api_service.dart';
+import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -41,10 +42,15 @@ Future<void> main(List<String> args) async {
   final nodeId = paths.getNodeIdSync();
   final clock = HybridLogicalClock(nodeId: nodeId);
 
+  // Jira service — enables auto-push after phone syncs
+  final jiraService = JiraService(db: db, clock: clock, paths: paths);
+
   // CRDT delta sync API service
   final syncApi = SyncApiService(
     db: db,
     clock: clock,
+    jiraService: jiraService,
+    config: config,
   );
 
   // Agent workflow API service
