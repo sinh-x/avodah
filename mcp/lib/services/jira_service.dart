@@ -947,7 +947,10 @@ class JiraService {
           final localWl = localByJiraId[jiraId]!;
           final durationDiffers = localWl.durationMs ~/ 1000 != timeSpentSeconds;
           final commentDiffers = (localWl.comment ?? '') != (comment ?? '');
-          final startTimeDiffers = localWl.startMs != started.millisecondsSinceEpoch;
+          // Compare at second precision: _formatJiraDateTime strips ms (sends .000),
+          // so startMs and Jira's returned time can differ by up to 999ms spuriously.
+          final startTimeDiffers =
+              localWl.startMs ~/ 1000 != started.millisecondsSinceEpoch ~/ 1000;
           if (durationDiffers || commentDiffers || startTimeDiffers) {
             worklogMismatches.add(WorklogMismatch(
               local: localWl,

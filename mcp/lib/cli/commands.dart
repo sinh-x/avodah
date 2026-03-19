@@ -3160,7 +3160,7 @@ class JiraSyncCommand extends JiraSubcommand {
         final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
         final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
         final localStart = formatDateTime(m.local.startTime);
-        final remoteStart = formatDateTime(m.remote.started);
+        final remoteStart = formatDateTime(m.remote.started.toLocal());
         print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
         print('    Local:   $localStart  $localDur  "${m.local.comment ?? ''}"');
         print('    Remote:  $remoteStart  $remoteDur  "${m.remote.comment ?? ''}"');
@@ -3191,7 +3191,7 @@ class JiraSyncCommand extends JiraSubcommand {
         final localDur = formatDuration(Duration(milliseconds: m.local.durationMs));
         final remoteDur = formatDuration(Duration(milliseconds: m.remote.durationMs));
         final localStart = formatDateTime(m.local.startTime);
-        final remoteStart = formatDateTime(m.remote.started);
+        final remoteStart = formatDateTime(m.remote.started.toLocal());
         print('  [${m.remote.issueKey}] worklog #${m.remote.jiraWorklogId}');
         print('    Local:   $localStart  $localDur  "${m.local.comment ?? ''}"');
         print('    Remote:  $remoteStart  $remoteDur  "${m.remote.comment ?? ''}"');
