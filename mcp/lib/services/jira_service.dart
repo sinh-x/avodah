@@ -181,6 +181,23 @@ class SyncContext {
   });
 }
 
+/// Detail of a single failed sync operation.
+class SyncFailure {
+  final String issueKey;
+  final String? worklogId;
+  final String operationType;
+  final int? httpStatus;
+  final String errorMessage;
+
+  SyncFailure({
+    required this.issueKey,
+    this.worklogId,
+    required this.operationType,
+    this.httpStatus,
+    required this.errorMessage,
+  });
+}
+
 /// Result of executing a sync plan.
 class SyncExecutionResult {
   final int tasksCreated;
@@ -192,8 +209,9 @@ class SyncExecutionResult {
   final int titlesPushed;
   final int titlesPulled;
   final int failed;
+  final List<SyncFailure> failures;
 
-  const SyncExecutionResult({
+  SyncExecutionResult({
     this.tasksCreated = 0,
     this.tasksUpdated = 0,
     this.worklogsPushed = 0,
@@ -203,7 +221,8 @@ class SyncExecutionResult {
     this.titlesPushed = 0,
     this.titlesPulled = 0,
     this.failed = 0,
-  });
+    List<SyncFailure>? failures,
+  }) : failures = List.unmodifiable(failures ?? const []);
 }
 
 /// Wraps all Jira integration operations.
@@ -586,8 +605,8 @@ class JiraService {
           if (existingJiraIds.contains(jiraId)) continue;
 
           final timeSpentSeconds = wl['timeSpentSeconds'] as int;
-          final started = DateTime.parse(wl['started'] as String);
-          final jiraCreated = DateTime.parse(wl['created'] as String);
+          final started = _parseJiraDateTime(wl['started'] as String);
+          final jiraCreated = _parseJiraDateTime(wl['created'] as String);
           final durationMs = timeSpentSeconds * 1000;
           final comment = _extractPlainText(wl['comment']);
 
@@ -926,8 +945,8 @@ class JiraService {
         if (authorId != accountId) continue;
 
         final timeSpentSeconds = wl['timeSpentSeconds'] as int;
-        final started = DateTime.parse(wl['started'] as String);
-        final wlCreated = DateTime.parse(wl['created'] as String);
+        final started = _parseJiraDateTime(wl['started'] as String);
+        final wlCreated = _parseJiraDateTime(wl['created'] as String);
         final comment = _extractPlainText(wl['comment']);
 
         final info = JiraWorklogInfo(
@@ -1013,6 +1032,7 @@ class JiraService {
     var titlesPushed = 0;
     var titlesPulled = 0;
     var failed = 0;
+    final failures = <SyncFailure>[];
 
     // Compute total operations for progress tracking
     final preview = context.preview;
@@ -1065,9 +1085,22 @@ class JiraService {
           worklogsPushed++;
         } else {
           failed++;
+          failures.add(SyncFailure(
+            issueKey: issueKey,
+            worklogId: worklog.jiraWorklogId,
+            operationType: 'push-new',
+            httpStatus: response.statusCode,
+            errorMessage: response.body,
+          ));
         }
-      } catch (_) {
+      } catch (e) {
         failed++;
+        failures.add(SyncFailure(
+          issueKey: issueKey,
+          worklogId: worklog.jiraWorklogId,
+          operationType: 'push-new',
+          errorMessage: e.toString(),
+        ));
       }
       completedOps++;
       onProgress?.call('Applying changes', completedOps, totalOps);
@@ -1111,9 +1144,22 @@ class JiraService {
               mismatchesPushed++;
             } else {
               failed++;
+              failures.add(SyncFailure(
+                issueKey: issueKey,
+                worklogId: m.remote.jiraWorklogId,
+                operationType: 'push-mismatch',
+                httpStatus: response.statusCode,
+                errorMessage: response.body,
+              ));
             }
-          } catch (_) {
+          } catch (e) {
             failed++;
+            failures.add(SyncFailure(
+              issueKey: issueKey,
+              worklogId: m.remote.jiraWorklogId,
+              operationType: 'push-mismatch',
+              errorMessage: e.toString(),
+            ));
           }
         case SyncDirection.pull:
           m.local.startMs = m.remote.started.millisecondsSinceEpoch;
@@ -1145,9 +1191,20 @@ class JiraService {
               titlesPushed++;
             } else {
               failed++;
+              failures.add(SyncFailure(
+                issueKey: m.issueKey,
+                operationType: 'push-title',
+                httpStatus: response.statusCode,
+                errorMessage: response.body,
+              ));
             }
-          } catch (_) {
+          } catch (e) {
             failed++;
+            failures.add(SyncFailure(
+              issueKey: m.issueKey,
+              operationType: 'push-title',
+              errorMessage: e.toString(),
+            ));
           }
         case SyncDirection.pull:
           m.localTask.title = m.remoteTitle;
@@ -1174,6 +1231,7 @@ class JiraService {
       titlesPushed: titlesPushed,
       titlesPulled: titlesPulled,
       failed: failed,
+      failures: failures,
     );
   }
 
@@ -1346,6 +1404,21 @@ class JiraService {
   static String _formatJiraDateTime(DateTime dt) {
     final utc = dt.toUtc();
     return '${utc.toIso8601String().split('.').first}.000+0000';
+  }
+
+  /// Parses a Jira Cloud timestamp string to UTC DateTime.
+  ///
+  /// Jira Cloud returns timestamps in "+HHMM" format (no colon separator),
+  /// e.g. "2024-01-15T14:30:00.000+0700". Dart's [DateTime.parse] requires
+  /// "+HH:MM" with a colon. This helper normalizes both forms and always
+  /// returns a UTC [DateTime].
+  static DateTime _parseJiraDateTime(String s) {
+    // Normalize "+HHMM" or "-HHMM" trailing offset to "+HH:MM" / "-HH:MM".
+    final normalized = s.replaceAllMapped(
+      RegExp(r'([+-])(\d{2})(\d{2})$'),
+      (m) => '${m[1]}${m[2]}:${m[3]}',
+    );
+    return DateTime.parse(normalized).toUtc();
   }
 }
 

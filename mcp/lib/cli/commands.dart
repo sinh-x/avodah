@@ -3127,6 +3127,11 @@ class JiraSyncCommand extends JiraSubcommand {
       if (result.titlesPushed > 0) print(kvRow('Titles pushed:', '${result.titlesPushed}', labelWidth: 18));
       if (result.titlesPulled > 0) print(kvRow('Titles pulled:', '${result.titlesPulled}', labelWidth: 18));
       if (result.failed > 0) print(kvRow('Failed:', '${result.failed}', labelWidth: 18));
+      for (final f in result.failures) {
+        final worklogPart = f.worklogId != null ? ' worklog #${f.worklogId}' : '';
+        final statusPart = f.httpStatus != null ? ' HTTP ${f.httpStatus} -' : '';
+        print('  → [${f.issueKey}]$worklogPart FAILED:$statusPart ${f.errorMessage}');
+      }
       if (result.tasksCreated == 0 && result.worklogsPushed == 0 &&
           result.worklogsPulled == 0 && result.mismatchesPushed == 0 &&
           result.mismatchesPulled == 0 && result.titlesPushed == 0 &&
