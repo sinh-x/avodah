@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/activity_event.dart';
 import '../models/agent_team.dart';
 import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
@@ -147,6 +148,22 @@ class AgentApiClient {
     final deployments = response['deployments'] as List;
     return deployments
         .map((e) => Deployment.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Fetch activity events for a deployment.
+  ///
+  /// Pass [since] (ISO-8601 timestamp) to fetch only events after that time.
+  /// Returns events in chronological order.
+  Future<List<ActivityEvent>> getDeploymentActivity(
+    String id, {
+    String? since,
+  }) async {
+    final params = since != null ? '?since=${Uri.encodeComponent(since)}' : '';
+    final response = await _get('/api/deployments/$id/activity$params');
+    final events = response['events'] as List;
+    return events
+        .map((e) => ActivityEvent.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
