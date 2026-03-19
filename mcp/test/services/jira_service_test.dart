@@ -1562,6 +1562,134 @@ void main() {
       expect(capturedJql, contains("updated >= '-14d'"));
       expect(capturedJql, contains('project in (AG, ABDE)'));
     });
+
+    test('no false mismatch when Jira returns +HHMM timezone offset', () async {
+      // Regression: Jira Cloud returns "started" with "+0700" (no colon).
+      // DateTime.parse requires "+HH:MM". Without the fix, epoch is wrong → false mismatch.
+      await writeProfileConfig();
+
+      // Local worklog starts at 2026-02-10 09:00 UTC (epoch = X).
+      final startUtcMs = DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch;
+      final task = await taskService.add(title: 'Timezone task');
+      task.issueId = 'AG-1';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: startUtcMs,
+        end: startUtcMs + 3600000,
+      );
+      worklog.linkToJira('8001');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      // Jira returns same epoch as "2026-02-10T16:00:00.000+0700" (UTC+7 local = 09:00 UTC)
+      final client = buildPreviewClient(
+        issues: [
+          {'key': 'AG-1', 'fields': {'summary': 'Timezone task'}},
+        ],
+        worklogsByIssue: {
+          'AG-1': [
+            {
+              'id': '8001',
+              'author': {'accountId': 'user-123'},
+              'timeSpentSeconds': 3600,
+              'started': '2026-02-10T16:00:00.000+0700',  // same UTC epoch, +HHMM format
+              'created': '2026-02-10T16:00:00.000+0700',
+            },
+          ],
+        },
+      );
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      final ctx = await service.computeSyncPreview();
+      // Should be no mismatches — same epoch, just different timezone representation
+      expect(ctx.preview.worklogMismatches, isEmpty);
+    });
+
+    test('no false mismatch when Jira returns +HH:MM timezone offset', () async {
+      await writeProfileConfig();
+
+      final startUtcMs = DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch;
+      final task = await taskService.add(title: 'Colon tz task');
+      task.issueId = 'AG-2';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: startUtcMs,
+        end: startUtcMs + 3600000,
+      );
+      worklog.linkToJira('8002');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = buildPreviewClient(
+        issues: [
+          {'key': 'AG-2', 'fields': {'summary': 'Colon tz task'}},
+        ],
+        worklogsByIssue: {
+          'AG-2': [
+            {
+              'id': '8002',
+              'author': {'accountId': 'user-123'},
+              'timeSpentSeconds': 3600,
+              'started': '2026-02-10T16:00:00.000+07:00',  // same UTC epoch, +HH:MM format
+              'created': '2026-02-10T16:00:00.000+07:00',
+            },
+          ],
+        },
+      );
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, isEmpty);
+    });
+
+    test('no false mismatch when Jira returns Z timezone suffix', () async {
+      await writeProfileConfig();
+
+      final startUtcMs = DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch;
+      final task = await taskService.add(title: 'Z tz task');
+      task.issueId = 'AG-3';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: startUtcMs,
+        end: startUtcMs + 3600000,
+      );
+      worklog.linkToJira('8003');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = buildPreviewClient(
+        issues: [
+          {'key': 'AG-3', 'fields': {'summary': 'Z tz task'}},
+        ],
+        worklogsByIssue: {
+          'AG-3': [
+            {
+              'id': '8003',
+              'author': {'accountId': 'user-123'},
+              'timeSpentSeconds': 3600,
+              'started': '2026-02-10T09:00:00.000Z',  // UTC with Z suffix
+              'created': '2026-02-10T09:00:00.000Z',
+            },
+          ],
+        },
+      );
+      final service = createService(httpClient: client);
+      await service.setup(profileName: 'work');
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, isEmpty);
+    });
   });
 
   // ============================================================
@@ -2164,6 +2292,105 @@ void main() {
       final worklogs = await db.select(db.worklogEntries).get();
       final reconciled = worklogs.firstWhere((w) => w.jiraWorklogId == '14001');
       expect(reconciled.duration, equals(5432000)); // 5432 * 1000
+    });
+
+    test('captures failure detail when push-new returns non-201', () async {
+      final task = await taskService.add(title: 'Push fail task');
+      task.issueId = 'AG-99';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+      await worklogService.manualLog(taskId: task.id, durationMinutes: 30);
+
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/search/jql')) {
+          return http.Response(jsonEncode({
+            'issues': [{'key': 'AG-99', 'fields': {'summary': 'Push fail task'}}],
+          }), 200);
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          if (request.method == 'GET') {
+            return http.Response(jsonEncode({'worklogs': []}), 200);
+          }
+          if (request.method == 'POST') {
+            return http.Response('{"errorMessages":["Permission denied"]}', 403);
+          }
+        }
+        return http.Response('Not found', 404);
+      });
+      final service = await setupService(client);
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.newLocalWorklogs, hasLength(1));
+
+      final result = await service.executeSyncPlan(ctx);
+      expect(result.failed, equals(1));
+      expect(result.failures, hasLength(1));
+      expect(result.failures.first.issueKey, equals('AG-99'));
+      expect(result.failures.first.operationType, equals('push-new'));
+      expect(result.failures.first.httpStatus, equals(403));
+    });
+
+    test('captures failure detail when push-mismatch returns non-200', () async {
+      final task = await taskService.add(title: 'Mismatch fail task');
+      task.issueId = 'AG-98';
+      task.issueType = IssueType.jira;
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final startMs = DateTime.utc(2026, 2, 10, 9).millisecondsSinceEpoch;
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: task.id,
+        start: startMs,
+        end: startMs + 3600000,
+      );
+      worklog.linkToJira('9901');
+      await db.into(db.worklogEntries).insertOnConflictUpdate(worklog.toDriftCompanion());
+
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/search/jql')) {
+          return http.Response(jsonEncode({
+            'issues': [{'key': 'AG-98', 'fields': {'summary': 'Mismatch fail task'}}],
+          }), 200);
+        }
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        if (request.url.path.contains('/worklog')) {
+          if (request.method == 'GET') {
+            return http.Response(jsonEncode({
+              'worklogs': [
+                {
+                  'id': '9901',
+                  'author': {'accountId': 'user-123'},
+                  'timeSpentSeconds': 7200,  // different → mismatch
+                  'started': '2026-02-10T09:00:00.000+0000',
+                  'created': '2026-02-10T09:00:00.000+0000',
+                },
+              ],
+            }), 200);
+          }
+          if (request.method == 'PUT') {
+            return http.Response('{"errorMessages":["Not found"]}', 404);
+          }
+        }
+        return http.Response('Not found', 404);
+      });
+      final service = await setupService(client);
+
+      final ctx = await service.computeSyncPreview();
+      expect(ctx.preview.worklogMismatches, hasLength(1));
+      ctx.preview.worklogMismatches.first.resolution = SyncDirection.push;
+
+      final result = await service.executeSyncPlan(ctx);
+      expect(result.failed, equals(1));
+      expect(result.failures, hasLength(1));
+      expect(result.failures.first.issueKey, equals('AG-98'));
+      expect(result.failures.first.worklogId, equals('9901'));
+      expect(result.failures.first.operationType, equals('push-mismatch'));
+      expect(result.failures.first.httpStatus, equals(404));
     });
   });
 }
