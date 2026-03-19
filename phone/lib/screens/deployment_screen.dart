@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../models/deployment.dart';
+import '../services/agent_api_client.dart';
 import '../services/deployment_provider.dart';
+import 'activity_timeline_screen.dart';
 
 /// Shows deployment status with filtering by team and status.
 ///
-/// Supports pull-to-refresh, filter chips, and a detail bottom sheet.
+/// Supports pull-to-refresh, filter chips, and tap-to-navigate to the
+/// activity timeline for each deployment.
 class DeploymentScreen extends StatefulWidget {
   final DeploymentProvider deploymentProvider;
+  final AgentApiClient apiClient;
 
-  const DeploymentScreen({super.key, required this.deploymentProvider});
+  const DeploymentScreen({
+    super.key,
+    required this.deploymentProvider,
+    required this.apiClient,
+  });
 
   @override
   State<DeploymentScreen> createState() => _DeploymentScreenState();
@@ -64,13 +72,25 @@ class _DeploymentScreenState extends State<DeploymentScreen> {
                     itemBuilder: (context, index) {
                       return _DeploymentTile(
                         deployment: provider.deployments[index],
-                        onTap: () =>
-                            _showDetail(context, provider.deployments[index]),
+                        onTap: () => _navigateToTimeline(
+                            context, provider.deployments[index]),
                       );
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _navigateToTimeline(BuildContext context, Deployment deployment) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ActivityTimelineScreen(
+          deployment: deployment,
+          client: widget.apiClient,
+        ),
       ),
     );
   }
@@ -158,15 +178,6 @@ class _DeploymentScreenState extends State<DeploymentScreen> {
       ),
     );
   }
-
-  void _showDetail(BuildContext context, Deployment deployment) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _DeploymentDetail(deployment: deployment),
-    );
-  }
 }
 
 /// Filter chips row for team and status.
@@ -239,22 +250,64 @@ class _DeploymentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _statusColor(context, deployment.status);
+    final isCrashed = deployment.isFailed;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Icon(_statusIcon(deployment.status), color: color, size: 20),
-        ),
-        title: Text(
-          deployment.deploymentId,
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600),
-        ),
-        subtitle: _buildSubtitle(theme, color),
-        trailing: const Icon(Icons.chevron_right),
+      // Visual emphasis for failed/crashed: red border
+      shape: isCrashed
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                  color: theme.colorScheme.error.withValues(alpha: 0.5),
+                  width: 1.5),
+            )
+          : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            onTap: onTap,
+            leading: CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.15),
+              child:
+                  Icon(_statusIcon(deployment.status), color: color, size: 20),
+            ),
+            title: Text(
+              deployment.deploymentId,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace', fontWeight: FontWeight.w600),
+            ),
+            subtitle: _buildSubtitle(theme, color),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+          // Model badges if available
+          if (deployment.models.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 5,
+                  runSpacing: 4,
+                  children: deployment.models.entries
+                      .map((e) => _CompactModelBadge(
+                          agent: e.key, model: e.value, theme: theme))
+                      .toList(),
+                ),
+              ),
+            ),
+          // Running progress indicator
+          if (deployment.isRunning)
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(12)),
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                backgroundColor: theme.colorScheme.outlineVariant,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -275,7 +328,13 @@ class _DeploymentTile extends StatelessWidget {
       ),
     ];
 
-    if (deployment.startedAt.isNotEmpty) {
+    if (deployment.elapsedDuration.isNotEmpty) {
+      parts.add(TextSpan(
+        text: ' \u00b7 ${deployment.elapsedDuration}',
+        style:
+            theme.textTheme.bodySmall?.copyWith(color: deployment.isFailed ? statusColor : null),
+      ));
+    } else if (deployment.startedAt.isNotEmpty) {
       parts.add(TextSpan(
         text: ' \u00b7 ${_formatTimestamp(deployment.startedAt)}',
         style: theme.textTheme.bodySmall,
@@ -290,148 +349,28 @@ class _DeploymentTile extends StatelessWidget {
   }
 }
 
-/// Bottom sheet with full deployment details.
-class _DeploymentDetail extends StatelessWidget {
-  final Deployment deployment;
+class _CompactModelBadge extends StatelessWidget {
+  final String agent;
+  final String model;
+  final ThemeData theme;
 
-  const _DeploymentDetail({required this.deployment});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _statusColor(context, deployment.status);
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: color.withValues(alpha: 0.15),
-                        child: Icon(_statusIcon(deployment.status),
-                            color: color, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              deployment.deploymentId,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              deployment.status,
-                              style: theme.textTheme.bodySmall
-                                  ?.copyWith(color: color),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Info rows
-                  _InfoRow(label: 'Team', value: deployment.team),
-                  _InfoRow(
-                    label: 'Status',
-                    value: deployment.status,
-                    valueColor: color,
-                  ),
-                  if (deployment.startedAt.isNotEmpty)
-                    _InfoRow(label: 'Started', value: deployment.startedAt),
-                  if (deployment.completedAt != null)
-                    _InfoRow(
-                        label: 'Completed', value: deployment.completedAt!),
-                  if (deployment.agents.isNotEmpty)
-                    _InfoRow(
-                      label: 'Agents',
-                      value: deployment.agents.join(', '),
-                    ),
-                  if (deployment.summary != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Summary',
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(color: theme.colorScheme.outline),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        deployment.summary!,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _InfoRow({required this.label, required this.value, this.valueColor});
+  const _CompactModelBadge(
+      {required this.agent, required this.model, required this.theme});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodyMedium?.copyWith(color: valueColor),
-            ),
-          ),
-        ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        '$agent: $model',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSecondaryContainer,
+          fontSize: 10,
+        ),
       ),
     );
   }
@@ -478,8 +417,19 @@ String _formatTimestamp(String iso) {
   try {
     final dt = DateTime.parse(iso).toLocal();
     final months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
