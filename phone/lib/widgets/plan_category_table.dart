@@ -5,7 +5,10 @@ import '../models/snapshot.dart';
 class PlanCategoryTable extends StatelessWidget {
   final PlanSnapshot plan;
 
-  const PlanCategoryTable({super.key, required this.plan});
+  /// Called when the user taps the Edit button in the card header.
+  final VoidCallback? onEditPlan;
+
+  const PlanCategoryTable({super.key, required this.plan, this.onEditPlan});
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +45,17 @@ class PlanCategoryTable extends StatelessWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline),
                 ),
+                if (onEditPlan != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    iconSize: 18,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Edit plan',
+                    onPressed: onEditPlan,
+                  ),
+                ],
               ],
             ),
             const Divider(),

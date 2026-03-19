@@ -4,16 +4,21 @@ import '../models/snapshot.dart';
 import '../services/local_dashboard_provider.dart';
 import '../services/local_write_service.dart';
 import '../services/crdt_sync_service.dart' show SyncConnectionState;
+import '../services/agent_api_client.dart';
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';
 import '../widgets/planned_task_list.dart';
 import '../widgets/timer_status_bar.dart';
 import '../widgets/worklog_summary.dart';
+import 'edit_plan_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
   final LocalWriteService writeService;
+
+  /// Used for fetching categories when navigating to EditPlanScreen.
+  final AgentApiClient? apiClient;
 
   /// Called after a local write with the CRDT deltas to push to the desktop.
   /// Fire-and-forget — errors are handled by the caller.
@@ -23,6 +28,7 @@ class DashboardScreen extends StatefulWidget {
     super.key,
     required this.dashboardProvider,
     required this.writeService,
+    this.apiClient,
     this.onPushDeltas,
   });
 
@@ -108,6 +114,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final timerDelta = await widget.writeService.getTimerDelta();
     if (timerDelta != null) deltas.add(timerDelta);
 
+    // Check if task is in today's plan; if not, offer to add it
+    final isInPlan =
+        snapshot?.plannedTasks.any((t) => t.taskId == taskId) ?? false;
+    if (!isInPlan && mounted) {
+      bool addToPlan = true;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Task not in today\'s plan'),
+            content: CheckboxListTile(
+              title: const Text('Add to today\'s plan?'),
+              value: addToPlan,
+              onChanged: (v) =>
+                  setDialogState(() => addToPlan = v ?? true),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Skip'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (addToPlan) {
+        final planTaskId =
+            await widget.writeService.addTaskToPlan(taskId: taskId);
+        final planDelta =
+            await widget.writeService.getDayPlanTaskDelta(planTaskId);
+        if (planDelta != null) deltas.add(planDelta);
+      }
+    }
+
     // Push all deltas (fire-and-forget)
     if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
 
@@ -119,6 +165,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _onEditPlan() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditPlanScreen(
+          writeService: widget.writeService,
+          apiClient: widget.apiClient,
+          onPushDeltas: widget.onPushDeltas,
+        ),
+      ),
+    );
+    await widget.dashboardProvider.refresh();
   }
 
   @override
@@ -219,7 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 8),
 
           // Plan vs Actual
-          PlanCategoryTable(plan: s.plan),
+          PlanCategoryTable(plan: s.plan, onEditPlan: _onEditPlan),
           const SizedBox(height: 8),
 
           // Planned tasks
