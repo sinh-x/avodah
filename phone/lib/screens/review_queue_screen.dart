@@ -55,6 +55,7 @@ class ReviewQueueScreen extends StatelessWidget {
                 _InboxTabView(
                   reviewProvider: reviewProvider,
                   paTeams: teamBrowserProvider?.paTeams,
+                  paRepos: teamBrowserProvider?.paRepos ?? const [],
                 ),
                 FolderListView(
                     folder: 'approved', client: reviewProvider.client),
@@ -283,8 +284,12 @@ class _IdeasTabViewState extends State<_IdeasTabView> {
 class _InboxTabView extends StatefulWidget {
   final ReviewProvider reviewProvider;
   final List<PaTeam>? paTeams;
+  final List<PaRepo> paRepos;
 
-  const _InboxTabView({required this.reviewProvider, this.paTeams});
+  const _InboxTabView(
+      {required this.reviewProvider,
+      this.paTeams,
+      this.paRepos = const []});
 
   @override
   State<_InboxTabView> createState() => _InboxTabViewState();
@@ -666,6 +671,7 @@ class _InboxTabViewState extends State<_InboxTabView> {
           item: item,
           reviewProvider: widget.reviewProvider,
           paTeams: widget.paTeams,
+          paRepos: widget.paRepos,
         ),
       ),
     );

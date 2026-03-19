@@ -99,13 +99,15 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
       isScrollControlled: true,
       builder: (_) => DeploySheet(
         paTeams: widget.teamProvider.paTeams,
-        onDeploy: (team, mode, objective) async {
+        repos: widget.teamProvider.paRepos,
+        onDeploy: (team, mode, objective, repo) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
               team,
               mode,
               objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
             );
             if (mounted) {
               messenger.showSnackBar(
@@ -611,15 +613,17 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
       isScrollControlled: true,
       builder: (_) => DeploySheet(
         paTeams: widget.teamProvider.paTeams,
+        repos: widget.teamProvider.paRepos,
         initialTeam: widget.team,
         initialObjective: widget.file.name,
-        onDeploy: (team, mode, objective) async {
+        onDeploy: (team, mode, objective, repo) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
               team,
               mode,
               objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
             );
             if (mounted) {
               messenger.showSnackBar(SnackBar(

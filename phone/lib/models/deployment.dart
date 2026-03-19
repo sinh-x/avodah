@@ -11,6 +11,7 @@ class Deployment {
   final String? error;
   final int? exitCode;
   final String? logFile;
+  final String? cwd; // working directory the deployment was launched from
 
   const Deployment({
     required this.deploymentId,
@@ -24,6 +25,7 @@ class Deployment {
     this.error,
     this.exitCode,
     this.logFile,
+    this.cwd,
   });
 
   factory Deployment.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class Deployment {
       error: json['error'] as String?,
       exitCode: json['exit_code'] as int?,
       logFile: json['log_file'] as String?,
+      cwd: json['cwd'] as String?,
     );
   }
 

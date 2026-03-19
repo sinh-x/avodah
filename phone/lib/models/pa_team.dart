@@ -39,3 +39,26 @@ class DeployMode {
     );
   }
 }
+
+/// A repo entry from repos.yaml.
+///
+/// Deserialized from GET /api/repos response.
+class PaRepo {
+  final String name;
+  final String path;
+  final String description;
+
+  const PaRepo({
+    required this.name,
+    required this.path,
+    required this.description,
+  });
+
+  factory PaRepo.fromJson(Map<String, dynamic> json) {
+    return PaRepo(
+      name: json['name'] as String,
+      path: json['path'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+    );
+  }
+}

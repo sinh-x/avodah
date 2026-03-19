@@ -128,6 +128,8 @@ class AgentApiService {
         await _handleTeamBrowse(request);
       } else if (path == '/api/pa-teams' && method == 'GET') {
         await _handleListPaTeams(request);
+      } else if (path == '/api/repos' && method == 'GET') {
+        await _handleListRepos(request);
       } else if (path == '/api/agent-teams' && method == 'GET') {
         await _handleListAgentTeams(request);
       } else if (path == '/api/deploy' && method == 'POST') {
@@ -1732,16 +1734,28 @@ class AgentApiService {
         {'teams': teams.map((t) => t.toJson()).toList()});
   }
 
+  /// GET /api/repos — List available repos from repos.yaml.
+  ///
+  /// Reads repos.yaml from PA_CONFIG then PA_HOME.
+  /// Returns: `{"repos": [{"name": ..., "path": ..., "description": ...}]}`
+  Future<void> _handleListRepos(HttpRequest request) async {
+    final repos = await _loadRepos();
+    _jsonResponse(request, HttpStatus.ok,
+        {'repos': repos.map((r) => r.toJson()).toList()});
+  }
+
   /// POST /api/deploy — Trigger a PA team deployment.
   ///
-  /// Body (JSON): `{"team": "builder", "mode": "background", "objective": "..."}`
+  /// Body (JSON): `{"team": "builder", "mode": "background", "objective": "...", "repo": "avodah"}`
   /// Validates team + mode against the YAML whitelist before executing.
   /// Runs the `pa` command as a detached subprocess and returns immediately
   /// with the deployment ID parsed from the primer path in pa's output.
   /// Optional `objective` field: passed as `--objective <value>` to `pa`.
   /// Validated: max 500 chars, safe ASCII characters only.
+  /// Optional `repo` field: passed as `--repo <name>` to `pa deploy`.
+  /// Validated against repos.yaml whitelist.
   ///
-  /// Returns: `{"deployment_id": "d-abc123", "started": true, "team": ..., "mode": ...}`
+  /// Returns: `{"deployment_id": "d-abc123", "started": true, "team": ..., "mode": ..., "cwd": ...}`
   Future<void> _handleDeploy(HttpRequest request) async {
     String body;
     try {
@@ -1770,6 +1784,7 @@ class AgentApiService {
     final team = json['team'] as String?;
     final mode = json['mode'] as String?;
     final objective = json['objective'] as String?;
+    final repo = json['repo'] as String?;
 
     if (team == null || team.isEmpty) {
       _jsonResponse(
@@ -1787,6 +1802,24 @@ class AgentApiService {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Invalid team name'});
       return;
+    }
+
+    // Validate repo if provided (alphanumeric + hyphens only — no shell injection)
+    String? repoCwd;
+    if (repo != null && repo.isNotEmpty) {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(repo)) {
+        _jsonResponse(
+            request, HttpStatus.badRequest, {'error': 'Invalid repo name'});
+        return;
+      }
+      final repos = await _loadRepos();
+      final paRepo = repos.where((r) => r.name == repo).firstOrNull;
+      if (paRepo == null) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'Unknown repo: $repo'});
+        return;
+      }
+      repoCwd = paRepo.path;
     }
 
     // Validate team + mode against YAML whitelist
@@ -1832,9 +1865,20 @@ class AgentApiService {
       args = ['daily', mode];
     } else {
       args = ['deploy', team];
-      if (mode == 'background') args.add('--background');
-      if (mode == 'interactive') args.add('--interactive');
-      // foreground: no extra flag
+      if (mode == 'background') {
+        args.add('--background');
+      } else if (mode == 'interactive') {
+        args.add('--interactive');
+      } else if (mode != 'foreground') {
+        // Custom mode: pass --mode flag to load mode-specific objective
+        args.addAll(['--mode', mode]);
+      }
+      // foreground: no extra flag (default)
+    }
+
+    // Append --repo flag if provided
+    if (repo != null && repo.isNotEmpty) {
+      args.addAll(['--repo', repo]);
     }
 
     // Append --objective flag if provided
@@ -1895,6 +1939,7 @@ class AgentApiService {
       'started': true,
       'team': team,
       'mode': mode,
+      if (repoCwd != null) 'cwd': repoCwd,
     });
   }
 
@@ -2033,6 +2078,102 @@ class AgentApiService {
       description: description ?? '',
       deployModes: filteredModes,
     );
+  }
+
+  // --- Repos YAML parsing ---
+
+  /// Load repos from repos.yaml (PA_CONFIG then PA_HOME).
+  ///
+  /// Expands `~` in paths using the HOME environment variable.
+  Future<List<_PaRepo>> _loadRepos() async {
+    final home = Platform.environment['HOME'] ?? '';
+    final repoPaths = <String>[];
+    if (paConfigDir != null) {
+      repoPaths.add(p.join(paConfigDir!, 'repos.yaml'));
+    }
+    repoPaths.add(p.join(paHome, 'repos.yaml'));
+
+    for (final repoPath in repoPaths) {
+      final file = File(repoPath);
+      if (!file.existsSync()) continue;
+      final repos = _parseReposYaml(file.readAsStringSync(), home);
+      if (repos.isNotEmpty) return repos;
+    }
+    return [];
+  }
+
+  /// Parse repos.yaml content into a list of [_PaRepo].
+  ///
+  /// Expected format:
+  /// ```yaml
+  /// repos:
+  ///   pa:
+  ///     path: ~/git-repos/...
+  ///     description: PA CLI tool
+  /// ```
+  List<_PaRepo> _parseReposYaml(String content, String home) {
+    final repos = <_PaRepo>[];
+    String? currentName;
+    String? currentPath;
+    String? currentDescription;
+
+    for (final rawLine in content.split('\n')) {
+      final line = rawLine.trimRight();
+      if (line.isEmpty || line.startsWith('#')) continue;
+
+      // Top-level `repos:` key — skip
+      if (line == 'repos:') continue;
+
+      final indent = line.length - line.trimLeft().length;
+      final trimmed = line.trimLeft();
+
+      if (indent == 2) {
+        // Flush previous repo
+        if (currentName != null && currentPath != null) {
+          repos.add(_PaRepo(
+            name: currentName,
+            path: currentPath,
+            description: currentDescription ?? '',
+          ));
+        }
+        // New repo: `  <name>:` (indent=2, ends with colon)
+        if (trimmed.endsWith(':')) {
+          currentName = trimmed.substring(0, trimmed.length - 1).trim();
+          currentPath = null;
+          currentDescription = null;
+        } else {
+          currentName = null;
+        }
+      } else if (indent == 4 && currentName != null) {
+        // Repo property: `    key: value`
+        final colonIdx = trimmed.indexOf(':');
+        if (colonIdx > 0) {
+          final key = trimmed.substring(0, colonIdx).trim();
+          var value = trimmed.substring(colonIdx + 1).trim();
+          // Strip surrounding quotes
+          if (value.length >= 2 &&
+              ((value.startsWith('"') && value.endsWith('"')) ||
+                  (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length - 1);
+          }
+          // Expand ~ in path
+          if (value.startsWith('~/') || value == '~') {
+            value = home + value.substring(1);
+          }
+          if (key == 'path') currentPath = value;
+          if (key == 'description') currentDescription = value;
+        }
+      }
+    }
+    // Flush last repo
+    if (currentName != null && currentPath != null) {
+      repos.add(_PaRepo(
+        name: currentName,
+        path: currentPath,
+        description: currentDescription ?? '',
+      ));
+    }
+    return repos;
   }
 
   /// Extract a scalar value from a YAML line like `key: value` or `key: "value"`.
@@ -2264,6 +2405,24 @@ class AgentApiService {
 }
 
 // --- Private data classes for PA team support ---
+
+class _PaRepo {
+  final String name;
+  final String path;
+  final String description;
+
+  const _PaRepo({
+    required this.name,
+    required this.path,
+    required this.description,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'path': path,
+        'description': description,
+      };
+}
 
 class _PaTeam {
   final String name;

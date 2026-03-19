@@ -27,11 +27,15 @@ class ItemDetailScreen extends StatefulWidget {
   /// a deploy icon button appears in the AppBar.
   final List<PaTeam>? paTeams;
 
+  /// Available repos for the repo picker in DeploySheet.
+  final List<PaRepo> paRepos;
+
   const ItemDetailScreen({
     super.key,
     required this.item,
     required this.reviewProvider,
     this.paTeams,
+    this.paRepos = const [],
   });
 
   @override
@@ -677,15 +681,17 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       isScrollControlled: true,
       builder: (_) => DeploySheet(
         paTeams: widget.paTeams!,
+        repos: widget.paRepos,
         initialTeam: team,
         initialObjective: widget.item.id,
-        onDeploy: (t, mode, objective) async {
+        onDeploy: (t, mode, objective, repo) async {
           Navigator.pop(context);
           try {
             final result = await widget.reviewProvider.client.triggerDeployment(
               t,
               mode,
               objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
             );
             if (mounted) {
               messenger.showSnackBar(SnackBar(

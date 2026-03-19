@@ -21,6 +21,7 @@ class RegistryEvent {
   final Map<String, String>? models; // agent name → model id
   final String? error;
   final String? logFile;
+  final String? primer; // path to the primer file (from PA's started event)
 
   RegistryEvent({
     required this.deploymentId,
@@ -35,6 +36,7 @@ class RegistryEvent {
     this.models,
     this.error,
     this.logFile,
+    this.primer,
   });
 
   factory RegistryEvent.fromJson(Map<String, dynamic> json) {
@@ -56,6 +58,7 @@ class RegistryEvent {
       models: models,
       error: json['error'] as String?,
       logFile: json['log_file'] as String?,
+      primer: json['primer'] as String?,
     );
   }
 
@@ -72,6 +75,7 @@ class RegistryEvent {
         if (models != null) 'models': models,
         if (error != null) 'error': error,
         if (logFile != null) 'log_file': logFile,
+        if (primer != null) 'primer': primer,
       };
 }
 
@@ -88,6 +92,7 @@ class DeploymentStatus {
   final String? error;
   final int? exitCode;
   final String? logFile;
+  final String? cwd; // working directory the deployment was launched from
 
   DeploymentStatus({
     required this.deploymentId,
@@ -101,6 +106,7 @@ class DeploymentStatus {
     this.error,
     this.exitCode,
     this.logFile,
+    this.cwd,
   });
 
   Map<String, dynamic> toJson() => {
@@ -115,6 +121,7 @@ class DeploymentStatus {
         if (error != null) 'error': error,
         if (exitCode != null) 'exit_code': exitCode,
         if (logFile != null) 'log_file': logFile,
+        if (cwd != null) 'cwd': cwd,
       };
 }
 
@@ -183,6 +190,13 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
       status = 'running';
     }
 
+    // Extract cwd from primer file if available
+    String? cwd;
+    final primerPath = started?.primer;
+    if (primerPath != null) {
+      cwd = _extractCwdFromPrimer(primerPath);
+    }
+
     deployments.add(DeploymentStatus(
       deploymentId: entry.key,
       team: started?.team ?? deployEvents.first.team,
@@ -195,10 +209,30 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
       error: error,
       exitCode: exitCode,
       logFile: logFile,
+      cwd: cwd,
     ));
   }
 
   // Sort newest first
   deployments.sort((a, b) => b.startedAt.compareTo(a.startedAt));
   return deployments;
+}
+
+/// Extract the `cwd:` value from a deployment primer file.
+///
+/// Reads the deployment-context YAML block and returns the `cwd:` value.
+/// Returns null if the file does not exist or the field is not found.
+String? _extractCwdFromPrimer(String primerPath) {
+  try {
+    final file = File(primerPath);
+    if (!file.existsSync()) return null;
+    for (final line in file.readAsLinesSync()) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('cwd:')) {
+        final value = trimmed.substring(4).trim();
+        return value.isNotEmpty ? value : null;
+      }
+    }
+  } catch (_) {}
+  return null;
 }

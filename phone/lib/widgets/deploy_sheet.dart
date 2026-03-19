@@ -15,15 +15,19 @@ import '../models/pa_team.dart';
 ///   isScrollControlled: true,
 ///   builder: (_) => DeploySheet(
 ///     paTeams: paTeams,
-///     initialTeam: 'requirements',         // optional
+///     repos: repos,                          // optional
+///     initialTeam: 'requirements',           // optional
 ///     initialObjective: '2026-03-16-foo.md', // optional
-///     onDeploy: (team, mode, objective) async { ... },
+///     onDeploy: (team, mode, objective, repo) async { ... },
 ///   ),
 /// );
 /// ```
 class DeploySheet extends StatefulWidget {
   /// All PA teams with deploy modes.
   final List<PaTeam> paTeams;
+
+  /// Available repos (optional — hides repo picker if empty).
+  final List<PaRepo> repos;
 
   /// Pre-selected team name. If null, user must select from [paTeams].
   final String? initialTeam;
@@ -33,12 +37,14 @@ class DeploySheet extends StatefulWidget {
 
   /// Called when user taps Launch.
   /// [objective] may be empty string if user left the field blank.
-  final Future<void> Function(String team, String mode, String objective)
-      onDeploy;
+  /// [repo] is null if no repo was selected.
+  final Future<void> Function(
+      String team, String mode, String objective, String? repo) onDeploy;
 
   const DeploySheet({
     super.key,
     required this.paTeams,
+    this.repos = const [],
     this.initialTeam,
     this.initialObjective,
     required this.onDeploy,
@@ -51,6 +57,7 @@ class DeploySheet extends StatefulWidget {
 class _DeploySheetState extends State<DeploySheet> {
   String? _selectedTeam;
   String? _selectedMode;
+  String? _selectedRepo;
   bool _deploying = false;
   late final TextEditingController _objectiveController;
 
@@ -159,6 +166,12 @@ class _DeploySheetState extends State<DeploySheet> {
                   const SizedBox(height: 16),
                 ],
 
+                // Repo picker (only shown if repos are available)
+                if (widget.repos.isNotEmpty) ...[
+                  _buildRepoSection(theme),
+                  const SizedBox(height: 16),
+                ],
+
                 // Objective field
                 Text('Objective (optional)', style: theme.textTheme.labelMedium),
                 const SizedBox(height: 6),
@@ -237,6 +250,51 @@ class _DeploySheetState extends State<DeploySheet> {
     );
   }
 
+  Widget _buildRepoSection(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Repo (optional)', style: theme.textTheme.labelMedium),
+        const SizedBox(height: 6),
+        InputDecorator(
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          ),
+          child: DropdownButton<String>(
+            value: _selectedRepo,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            hint: Text(
+              'Default (no override)',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                value: null,
+                child: Text(
+                  'Default (no override)',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.outline),
+                ),
+              ),
+              ...widget.repos.map(
+                (r) => DropdownMenuItem(
+                  value: r.name,
+                  child: Text(r.name),
+                ),
+              ),
+            ],
+            onChanged: _deploying
+                ? null
+                : (value) => setState(() => _selectedRepo = value),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _launch() async {
     if (!_canLaunch) return;
     setState(() => _deploying = true);
@@ -245,6 +303,7 @@ class _DeploySheetState extends State<DeploySheet> {
         _selectedTeam!,
         _selectedMode!,
         _objectiveController.text.trim(),
+        _selectedRepo,
       );
     } finally {
       if (mounted) setState(() => _deploying = false);

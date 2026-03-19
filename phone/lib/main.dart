@@ -81,6 +81,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     final teamBrowserProvider = TeamBrowserProvider(apiClient);
     teamBrowserProvider.refreshTeams();
     teamBrowserProvider.loadPaTeams();
+    teamBrowserProvider.loadPaRepos();
 
     setState(() {
       _db = db;

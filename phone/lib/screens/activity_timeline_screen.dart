@@ -280,6 +280,29 @@ class _DeploymentHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+          // Working directory
+          if (deployment.cwd != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.folder_outlined,
+                    size: 14, color: theme.colorScheme.outline),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    deployment.cwd!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           // Error details for failed/crashed
           if (deployment.isFailed &&
               (deployment.error != null || deployment.exitCode != null)) ...[
