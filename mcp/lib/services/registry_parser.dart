@@ -18,6 +18,9 @@ class RegistryEvent {
   final String? summary;
   final List<String>? agents;
   final int? exitCode;
+  final Map<String, String>? models; // agent name → model id
+  final String? error;
+  final String? logFile;
 
   RegistryEvent({
     required this.deploymentId,
@@ -29,9 +32,17 @@ class RegistryEvent {
     this.summary,
     this.agents,
     this.exitCode,
+    this.models,
+    this.error,
+    this.logFile,
   });
 
   factory RegistryEvent.fromJson(Map<String, dynamic> json) {
+    Map<String, String>? models;
+    final rawModels = json['models'];
+    if (rawModels is Map) {
+      models = rawModels.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
     return RegistryEvent(
       deploymentId: json['deployment_id'] as String,
       team: json['team'] as String,
@@ -42,6 +53,9 @@ class RegistryEvent {
       summary: json['summary'] as String?,
       agents: (json['agents'] as List?)?.cast<String>(),
       exitCode: json['exit_code'] as int?,
+      models: models,
+      error: json['error'] as String?,
+      logFile: json['log_file'] as String?,
     );
   }
 
@@ -55,6 +69,9 @@ class RegistryEvent {
         if (summary != null) 'summary': summary,
         if (agents != null) 'agents': agents,
         if (exitCode != null) 'exit_code': exitCode,
+        if (models != null) 'models': models,
+        if (error != null) 'error': error,
+        if (logFile != null) 'log_file': logFile,
       };
 }
 
@@ -67,6 +84,10 @@ class DeploymentStatus {
   final String? completedAt;
   final String? summary;
   final List<String> agents;
+  final Map<String, String>? models; // agent name → model id
+  final String? error;
+  final int? exitCode;
+  final String? logFile;
 
   DeploymentStatus({
     required this.deploymentId,
@@ -76,6 +97,10 @@ class DeploymentStatus {
     this.completedAt,
     this.summary,
     this.agents = const [],
+    this.models,
+    this.error,
+    this.exitCode,
+    this.logFile,
   });
 
   Map<String, dynamic> toJson() => {
@@ -86,6 +111,10 @@ class DeploymentStatus {
         if (completedAt != null) 'completed_at': completedAt,
         if (summary != null) 'summary': summary,
         if (agents.isNotEmpty) 'agents': agents,
+        if (models != null) 'models': models,
+        if (error != null) 'error': error,
+        if (exitCode != null) 'exit_code': exitCode,
+        if (logFile != null) 'log_file': logFile,
       };
 }
 
@@ -133,14 +162,23 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
     String? completedAt;
     String? summary;
 
+    String? error;
+    int? exitCode;
+    String? logFile;
+
     if (crashed != null) {
       status = 'crashed';
       completedAt = crashed.timestamp;
       summary = crashed.summary;
+      error = crashed.error;
+      exitCode = crashed.exitCode;
+      logFile = crashed.logFile;
     } else if (completed != null) {
       status = completed.status ?? 'success';
       completedAt = completed.timestamp;
       summary = completed.summary;
+      exitCode = completed.exitCode;
+      logFile = completed.logFile;
     } else {
       status = 'running';
     }
@@ -153,6 +191,10 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
       completedAt: completedAt,
       summary: summary,
       agents: started?.agents ?? [],
+      models: started?.models,
+      error: error,
+      exitCode: exitCode,
+      logFile: logFile,
     ));
   }
 
