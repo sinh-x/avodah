@@ -118,6 +118,10 @@ class AgentApiService {
         await _handleGetFeedbackChips(request);
       } else if (path == '/api/deployments' && method == 'GET') {
         await _handleListDeployments(request);
+      } else if (path.startsWith('/api/deployments/') &&
+          path.endsWith('/activity') &&
+          method == 'GET') {
+        await _handleGetDeploymentActivity(request);
       } else if (path == '/api/teams' && method == 'GET') {
         await _handleListTeams(request);
       } else if (path.startsWith('/api/teams/') && method == 'GET') {
@@ -774,6 +778,67 @@ class AgentApiService {
     _jsonResponse(request, HttpStatus.ok, {
       'deployments': deployments.map((d) => d.toJson()).toList(),
     });
+  }
+
+  /// GET /api/deployments/{id}/activity — Return activity.jsonl events.
+  ///
+  /// Query params:
+  ///   ?since=<ISO timestamp> — return only events after this timestamp
+  ///
+  /// Returns a JSON object with an `events` array. Each event has:
+  ///   ts, deploy_id, agent, event, data
+  Future<void> _handleGetDeploymentActivity(HttpRequest request) async {
+    final segments = request.uri.pathSegments;
+    // Path: /api/deployments/{id}/activity → segments: [api, deployments, {id}, activity]
+    if (segments.length < 4) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Missing deployment id'});
+      return;
+    }
+    final deployId = segments[2];
+
+    // Validate deployment id — must be alphanumeric with hyphens, no path traversal
+    if (!RegExp(r'^[a-zA-Z0-9\-]+$').hasMatch(deployId)) {
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Invalid deployment id'});
+      return;
+    }
+
+    final activityPath = p.join(
+        p.dirname(registryPath), // deployments/
+        deployId,
+        'activity.jsonl');
+    final file = File(activityPath);
+
+    if (!file.existsSync()) {
+      _jsonResponse(request, HttpStatus.ok, {'events': []});
+      return;
+    }
+
+    final sinceParam = request.uri.queryParameters['since'];
+    String? sinceTs;
+    if (sinceParam != null && sinceParam.isNotEmpty) {
+      sinceTs = sinceParam;
+    }
+
+    final events = <Map<String, dynamic>>[];
+    for (final line in file.readAsLinesSync()) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      try {
+        final json = jsonDecode(trimmed) as Map<String, dynamic>;
+        // Filter by since timestamp if provided (string comparison works for ISO 8601)
+        if (sinceTs != null) {
+          final ts = json['ts'] as String?;
+          if (ts == null || ts.compareTo(sinceTs) <= 0) continue;
+        }
+        events.add(json);
+      } catch (e) {
+        stderr.writeln('Skipping malformed activity line: $e');
+      }
+    }
+
+    _jsonResponse(request, HttpStatus.ok, {'events': events});
   }
 
   /// GET /api/teams — List agent teams.
