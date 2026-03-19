@@ -85,6 +85,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _startTimer(String taskId, String taskTitle) async {
+    final deltas = <Map<String, dynamic>>[];
+
+    // Stop current timer first (creates worklog)
+    final snapshot = widget.dashboardProvider.snapshot;
+    if (snapshot?.timer != null && snapshot!.timer!.isRunning) {
+      final result = await widget.writeService.stopTimerAndLog();
+      final stoppedTimerDelta = await widget.writeService.getTimerDelta();
+      if (stoppedTimerDelta != null) deltas.add(stoppedTimerDelta);
+      if (result.worklogId != null) {
+        final wlDelta =
+            await widget.writeService.getWorklogDelta(result.worklogId!);
+        if (wlDelta != null) deltas.add(wlDelta);
+      }
+    }
+
+    await widget.writeService.startTimer(
+      taskTitle: taskTitle,
+      taskId: taskId,
+    );
+    final timerDelta = await widget.writeService.getTimerDelta();
+    if (timerDelta != null) deltas.add(timerDelta);
+
+    // Push all deltas (fire-and-forget)
+    if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
+
+    await widget.dashboardProvider.refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Timer started: $taskTitle'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -189,7 +225,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Planned tasks
           PlannedTaskList(
             tasks: s.plannedTasks,
+            activeTimer: s.timer,
             onToggleDone: _toggleTaskDone,
+            onStartTimer: _startTimer,
           ),
           if (s.plannedTasks.isNotEmpty) const SizedBox(height: 8),
 

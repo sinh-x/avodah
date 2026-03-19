@@ -169,6 +169,89 @@ class LocalWriteService {
   }
 
   // ============================================================
+  // Plan operations
+  // ============================================================
+
+  /// Adds a new category-based plan entry for today.
+  ///
+  /// Returns the new entry ID.
+  Future<String> addPlanEntry({
+    required String category,
+    required int durationMs,
+  }) async {
+    final today = _today();
+    final doc = DailyPlanDocument.create(
+      clock: clock,
+      category: category,
+      day: today,
+      durationMs: durationMs,
+    );
+    await db
+        .into(db.dailyPlanEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+    debugPrint('[LocalWrite] Plan entry added: $category ${durationMs}ms');
+    return doc.id;
+  }
+
+  /// Updates the duration of an existing plan entry.
+  Future<void> updatePlanEntry({
+    required String id,
+    required int durationMs,
+  }) async {
+    final rows = await (db.select(db.dailyPlanEntries)
+          ..where((p) => p.id.equals(id)))
+        .get();
+    if (rows.isEmpty) {
+      debugPrint('[LocalWrite] updatePlanEntry: entry $id not found');
+      return;
+    }
+    final doc = DailyPlanDocument.fromDrift(entry: rows.first, clock: clock);
+    doc.durationMs = durationMs;
+    await db
+        .into(db.dailyPlanEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+    debugPrint('[LocalWrite] Plan entry $id updated: ${durationMs}ms');
+  }
+
+  /// Soft-deletes a plan entry via CRDT.
+  Future<void> removePlanEntry(String id) async {
+    final rows = await (db.select(db.dailyPlanEntries)
+          ..where((p) => p.id.equals(id)))
+        .get();
+    if (rows.isEmpty) {
+      debugPrint('[LocalWrite] removePlanEntry: entry $id not found');
+      return;
+    }
+    final doc = DailyPlanDocument.fromDrift(entry: rows.first, clock: clock);
+    doc.delete();
+    await db
+        .into(db.dailyPlanEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+    debugPrint('[LocalWrite] Plan entry $id removed');
+  }
+
+  /// Adds a task to today's day plan.
+  ///
+  /// Returns the new day plan task ID.
+  Future<String> addTaskToPlan({
+    required String taskId,
+    int estimateMs = 0,
+  }) async {
+    final today = _today();
+    final doc = DayPlanTaskDocument.create(
+      clock: clock,
+      taskId: taskId,
+      day: today,
+      estimateMs: estimateMs,
+    );
+    await db
+        .into(db.dayPlanTasks)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+    debugPrint('[LocalWrite] Task $taskId added to plan for $today');
+    return doc.id;
+  }
+
+  // ============================================================
   // Delta extraction (for Phase 7 push)
   // ============================================================
 
@@ -203,5 +286,36 @@ class LocalWriteService {
     final doc = WorklogDocument.fromDrift(worklog: rows.first, clock: clock);
     final json = doc.toJson();
     return {'type': 'worklog', 'id': json['id'], 'fields': json['fields']};
+  }
+
+  /// Returns the CRDT delta JSON for a daily plan entry.
+  Future<Map<String, dynamic>?> getPlanEntryDelta(String id) async {
+    final rows = await (db.select(db.dailyPlanEntries)
+          ..where((p) => p.id.equals(id)))
+        .get();
+    if (rows.isEmpty) return null;
+    final doc = DailyPlanDocument.fromDrift(entry: rows.first, clock: clock);
+    final json = doc.toJson();
+    return {'type': 'dailyPlan', 'id': json['id'], 'fields': json['fields']};
+  }
+
+  /// Returns the CRDT delta JSON for a day plan task entry.
+  Future<Map<String, dynamic>?> getDayPlanTaskDelta(String id) async {
+    final rows = await (db.select(db.dayPlanTasks)
+          ..where((p) => p.id.equals(id)))
+        .get();
+    if (rows.isEmpty) return null;
+    final doc = DayPlanTaskDocument.fromDrift(entry: rows.first, clock: clock);
+    final json = doc.toJson();
+    return {'type': 'dayPlanTask', 'id': json['id'], 'fields': json['fields']};
+  }
+
+  // ============================================================
+  // Helpers
+  // ============================================================
+
+  static String _today() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 }
