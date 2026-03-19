@@ -263,7 +263,9 @@ class _HomeShellState extends State<_HomeShell> {
               ],
             ),
             body: DeploymentScreen(
-                deploymentProvider: widget.deploymentProvider),
+              deploymentProvider: widget.deploymentProvider,
+              apiClient: widget.apiClient,
+            ),
           ),
           Scaffold(
             appBar: AppBar(
