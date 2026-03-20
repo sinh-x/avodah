@@ -13,7 +13,7 @@ import 'package:uuid/uuid.dart';
 ///
 /// Override with:
 /// 1. Constructor parameter (highest priority)
-/// 2. AVODAH_DATA_DIR environment variable
+/// 2. AVODAH_DATA_DIR / AVODAH_CONFIG_DIR environment variables
 /// 3. XDG defaults
 class AvodahPaths {
   final String? _dataDir;
@@ -50,7 +50,11 @@ class AvodahPaths {
     final override = _configDir;
     if (override != null) return override;
 
-    // 2. XDG default
+    // 2. Environment variable
+    final envOverride = Platform.environment['AVODAH_CONFIG_DIR'];
+    if (envOverride != null) return envOverride;
+
+    // 3. XDG default
     final xdgConfig = Platform.environment['XDG_CONFIG_HOME'] ?? p.join(home, '.config');
     return p.join(xdgConfig, 'avodah');
   }
