@@ -1,0 +1,43 @@
+# Flutter app source (not needed for sync server)
+lib/
+test/
+phone/
+linux/
+web/
+build/
+result/
+
+# Flutter build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Development / IDE
+*.iml
+*.log
+.idea/
+.vscode/
+
+# Project files not needed in Docker build context
+completions/
+docs/
+tool/
+flake.lock
+flake.nix
+*.nix
+analysis_options.yaml
+build.yaml
+CHANGELOG.md
+README.md
+DOCKER.md
+
+# Root pubspec (Flutter app — not used by Dockerfile)
+pubspec.yaml
+pubspec.lock
+
+# Keep:
+#   mcp/           — sync server source
+#   packages/      — local dependency (avodah_core)
+#   Dockerfile
+#   docker-compose.yml
