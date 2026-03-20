@@ -139,7 +139,8 @@ Future<void> _proxyHttp(HttpRequest request, String agentApiUrl) async {
       }
     });
     if (body.isNotEmpty) proxyRequest.bodyBytes = body;
-    final streamedResponse = await client.send(proxyRequest);
+    final streamedResponse =
+        await client.send(proxyRequest).timeout(const Duration(seconds: 10));
     request.response.statusCode = streamedResponse.statusCode;
     streamedResponse.headers.forEach((name, value) {
       try {
@@ -147,6 +148,13 @@ Future<void> _proxyHttp(HttpRequest request, String agentApiUrl) async {
       } catch (_) {}
     });
     await streamedResponse.stream.pipe(request.response);
+  } on Exception catch (e) {
+    stderr.writeln('Agent API proxy error: $e');
+    request.response
+      ..statusCode = HttpStatus.badGateway
+      ..headers.contentType = ContentType.json
+      ..write('{"error":"Agent API unavailable","code":"BAD_GATEWAY"}');
+    await request.response.close();
   } finally {
     client.close();
   }

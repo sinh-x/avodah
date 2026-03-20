@@ -3,10 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      # Host port is configurable via SYNC_PORT (default 9847)
-      # Container always listens on 9847
-      - "${SYNC_PORT:-9847}:9847"
+    network_mode: host
     volumes:
       # Config dir (read-only — node-id, config.toml, Jira credentials)
       - ${AVODAH_CONFIG:-~/.config/avodah}:/config:ro
@@ -17,9 +14,6 @@ services:
       - AVODAH_CONFIG_DIR=/config
       - SYNC_PORT=${SYNC_PORT:-9847}
       - JIRA_ENABLED=${JIRA_ENABLED:-false}
-      # Agent API URL — proxied to pa serve on host (port 9848)
-      - AGENT_API_URL=http://host.docker.internal:${AGENT_PORT:-9848}
-    extra_hosts:
-      # Resolve host.docker.internal to the Docker host gateway
-      - "host.docker.internal:host-gateway"
+      # Agent API URL — proxied to pa serve (same host, port 9848)
+      - AGENT_API_URL=http://localhost:${AGENT_PORT:-9848}
     restart: unless-stopped

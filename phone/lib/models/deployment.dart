@@ -29,7 +29,7 @@ class Deployment {
   factory Deployment.fromJson(Map<String, dynamic> json) {
     final rawModels = json['models'] as Map<String, dynamic>?;
     return Deployment(
-      deploymentId: json['deployment_id'] as String,
+      deploymentId: (json['deploy_id'] ?? json['deployment_id']) as String,
       team: json['team'] as String,
       status: json['status'] as String,
       startedAt: json['started_at'] as String? ?? '',

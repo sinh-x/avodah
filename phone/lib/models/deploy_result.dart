@@ -14,8 +14,8 @@ class DeployResult {
 
   factory DeployResult.fromJson(Map<String, dynamic> json) {
     return DeployResult(
-      deploymentId: json['deployment_id'] as String? ?? '',
-      started: json['started'] as bool? ?? false,
+      deploymentId: (json['deployment_id'] ?? json['deploy_id']) as String? ?? '',
+      started: json['started'] as bool? ?? json['status'] == 'launched',
       team: json['team'] as String? ?? '',
       mode: json['mode'] as String? ?? '',
     );
