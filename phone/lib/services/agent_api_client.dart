@@ -15,7 +15,8 @@ import '../models/timer_info.dart';
 
 /// HTTP client for the agent workflow API endpoints.
 ///
-/// Wraps the API exposed by `pa serve` (TypeScript/Hono).
+/// Wraps the API exposed by pa serve (TypeScript server on port 9848,
+/// proxied via Docker on port 9847).
 /// Base URL is derived from the WebSocket URL (same host:port, HTTP scheme).
 class AgentApiClient {
   final String baseUrl;
@@ -39,7 +40,7 @@ class AgentApiClient {
 
   /// List all inbox items with parsed metadata.
   Future<List<ReviewItem>> listInbox() async {
-    final response = await _get('/api/folders/inbox');
+    final response = await _get('/api/inbox');
     final items = response['items'] as List;
     return items
         .map((e) => ReviewItem.fromJson(e as Map<String, dynamic>))
@@ -61,7 +62,11 @@ class AgentApiClient {
     final encoded = Uri.encodeComponent(filename);
     final body = <String, dynamic>{'action': 'approve'};
     if (feedback != null && feedback.hasContent) {
-      body.addAll(feedback.toJson());
+      if (feedback.note != null && feedback.note!.isNotEmpty) body['note'] = feedback.note;
+      if (feedback.chips.isNotEmpty) body['chips'] = feedback.chips;
+      if (feedback.destinationTeam != null && feedback.destinationTeam!.isNotEmpty) {
+        body['destination_team'] = feedback.destinationTeam;
+      }
     }
     await _post('/api/inbox/$encoded/action', body: body);
   }
@@ -72,7 +77,17 @@ class AgentApiClient {
   Future<void> rejectItem(String filename, RejectFeedback feedback) async {
     final encoded = Uri.encodeComponent(filename);
     final body = <String, dynamic>{'action': 'reject'};
-    body.addAll(feedback.toJson());
+    if (feedback.pending) {
+      body['pending'] = true;
+    } else {
+      body['what_is_wrong'] = feedback.whatIsWrong;
+      body['what_to_fix'] = feedback.whatToFix;
+      body['priority'] = feedback.priority.apiValue;
+      if (feedback.chips.isNotEmpty) body['chips'] = feedback.chips;
+      if (feedback.destinationTeam != null && feedback.destinationTeam!.isNotEmpty) {
+        body['destination_team'] = feedback.destinationTeam;
+      }
+    }
     await _post('/api/inbox/$encoded/action', body: body);
   }
 
@@ -84,7 +99,9 @@ class AgentApiClient {
     final encoded = Uri.encodeComponent(filename);
     final body = <String, dynamic>{'action': 'defer'};
     if (feedback != null && feedback.hasContent) {
-      body.addAll(feedback.toJson());
+      if (feedback.reason != null && feedback.reason!.isNotEmpty) body['reason'] = feedback.reason;
+      if (feedback.requeueAfter != null) body['requeue_after'] = feedback.requeueAfter;
+      if (feedback.chips.isNotEmpty) body['chips'] = feedback.chips;
     }
     await _post('/api/inbox/$encoded/action', body: body);
   }
@@ -122,12 +139,6 @@ class AgentApiClient {
     final response = await _get('/api/config/feedback-chips');
     final chips = response['chips'] as List? ?? [];
     return chips.map((e) => e as String).toList();
-  }
-
-  /// Fetch the existing human_feedback block for a pending-reject-feedback item.
-  Future<Map<String, dynamic>> getItemFeedback(String filename) async {
-    final encoded = Uri.encodeComponent(filename);
-    return _get('/api/inbox/$encoded/feedback');
   }
 
   // --- For Later ---
@@ -189,8 +200,8 @@ class AgentApiClient {
   /// List files in a team's folder.
   Future<List<TeamFile>> listTeamFolder(String team, String folder) async {
     final response = await _get('/api/folders/teams/$team/$folder');
-    final files = response['items'] as List;
-    return files
+    final items = response['items'] as List;
+    return items
         .map((e) => TeamFile.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -239,13 +250,15 @@ class AgentApiClient {
   /// Adds `requeued_from: <folder>` to YAML frontmatter and moves the file.
   Future<void> requeueItem(String folder, String filename) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/sinh-inputs/$folder/$encoded/requeue');
+    await _post('/api/sinh-inputs/$folder/$encoded/action',
+        body: {'action': 'requeue'});
   }
 
   /// Archive an item from any folder by moving it to done/.
   Future<void> archiveItem(String folder, String filename) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/sinh-inputs/$folder/$encoded/archive');
+    await _post('/api/sinh-inputs/$folder/$encoded/action',
+        body: {'action': 'archive'});
   }
 
   /// Save an approved item for later (moves from approved/ to for-later/).
@@ -253,7 +266,8 @@ class AgentApiClient {
   /// Distinct from [saveForLater] which operates on inbox items.
   Future<void> saveApprovedForLater(String filename) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/sinh-inputs/approved/$encoded/save-for-later');
+    await _post('/api/sinh-inputs/approved/$encoded/action',
+        body: {'action': 'save-for-later'});
   }
 
   /// Create a new idea in ideas/ folder.
@@ -267,8 +281,8 @@ class AgentApiClient {
   Future<void> appendToIdea(
       String filename, String title, String content) async {
     final encoded = Uri.encodeComponent(filename);
-    await _post('/api/sinh-inputs/ideas/$encoded/append-section',
-        body: {'title': title, 'content': content});
+    await _post('/api/sinh-inputs/ideas/$encoded/action',
+        body: {'action': 'append-section', 'title': title, 'content': content});
   }
 
   /// List items in the done folder with search and pagination.
@@ -382,7 +396,7 @@ class AgentApiClient {
         .get(Uri.parse('$baseUrl$path'))
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw AgentApiException._fromResponse(response.statusCode, response.body);
+      _throwApiException(response.statusCode, response.body);
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
@@ -392,14 +406,29 @@ class AgentApiClient {
     final response = await _client
         .post(
           Uri.parse('$baseUrl$path'),
-          headers: body != null ? {'Content-Type': 'application/json'} : null,
-          body: body != null ? jsonEncode(body) : null,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body ?? {}),
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
-      throw AgentApiException._fromResponse(response.statusCode, response.body);
+      _throwApiException(response.statusCode, response.body);
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Never _throwApiException(int statusCode, String rawBody) {
+    try {
+      final json = jsonDecode(rawBody) as Map<String, dynamic>;
+      throw AgentApiException(
+        statusCode,
+        json['error'] as String? ?? rawBody,
+        json['code'] as String? ?? '',
+      );
+    } on AgentApiException {
+      rethrow;
+    } catch (_) {
+      throw AgentApiException(statusCode, rawBody);
+    }
   }
 
   void dispose() {
@@ -409,26 +438,13 @@ class AgentApiClient {
 
 class AgentApiException implements Exception {
   final int statusCode;
-  final String body;
-  final String? code;
+  final String message;
+  final String code;
 
-  AgentApiException(this.statusCode, this.body, {this.code});
-
-  factory AgentApiException._fromResponse(int statusCode, String responseBody) {
-    try {
-      final json = jsonDecode(responseBody) as Map<String, dynamic>;
-      final error = json['error'] as String? ?? responseBody;
-      final code = json['code'] as String?;
-      return AgentApiException(statusCode, error, code: code);
-    } catch (_) {
-      return AgentApiException(statusCode, responseBody);
-    }
-  }
+  AgentApiException(this.statusCode, this.message, [this.code = '']);
 
   @override
-  String toString() => code != null
-      ? 'AgentApiException($statusCode, $code): $body'
-      : 'AgentApiException($statusCode): $body';
+  String toString() => 'AgentApiException($statusCode/$code): $message';
 }
 
 /// Result type for paginated folder listing (done folder).
