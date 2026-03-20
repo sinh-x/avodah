@@ -9,6 +9,7 @@ import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';
 import '../widgets/planned_task_list.dart';
+import '../widgets/stop_timer_sheet.dart';
 import '../widgets/timer_status_bar.dart';
 import '../widgets/worklog_summary.dart';
 import 'edit_plan_screen.dart';
@@ -53,24 +54,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _stopTimer() async {
-    final result = await widget.writeService.stopTimerAndLog();
+  Future<void> _showStopTimerSheet(TimerSnapshot timer) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => StopTimerSheet(
+        initialMessage: timer.note,
+        taskId: timer.taskId,
+        onSave: (message, markDone) async {
+          final result =
+              await widget.writeService.stopTimerAndLog(comment: message);
 
-    // Push deltas to desktop (fire-and-forget)
-    final timerDelta = await widget.writeService.getTimerDelta();
-    final worklogDelta = result.worklogId != null
-        ? await widget.writeService.getWorklogDelta(result.worklogId!)
-        : null;
-    final deltas = [?timerDelta, ?worklogDelta];
-    if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
+          // Push deltas to desktop (fire-and-forget)
+          final timerDelta = await widget.writeService.getTimerDelta();
+          final worklogDelta = result.worklogId != null
+              ? await widget.writeService.getWorklogDelta(result.worklogId!)
+              : null;
+          final deltas = [?timerDelta, ?worklogDelta];
 
-    await widget.dashboardProvider.refresh();
-    if (!mounted) return;
-    final msg = result.worklogId != null
-        ? 'Timer stopped. Worklog created.'
-        : 'Timer stopped.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+          if (markDone && timer.taskId != null) {
+            await widget.writeService.toggleTaskDone(timer.taskId!);
+            final taskDelta =
+                await widget.writeService.getTaskDelta(timer.taskId!);
+            if (taskDelta != null) deltas.add(taskDelta);
+          }
+
+          if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
+
+          await widget.dashboardProvider.refresh();
+          if (!mounted) return;
+          Navigator.of(context).pop();
+          final msg = result.worklogId != null
+              ? 'Timer stopped. Worklog created.'
+              : 'Timer stopped.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+          );
+        },
+      ),
     );
   }
 
@@ -274,7 +295,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Timer
           TimerStatusBar(
             timer: s.timer,
-            onStop: s.timer != null ? _stopTimer : null,
+            onStop: s.timer != null
+                ? () => _showStopTimerSheet(s.timer!)
+                : null,
           ),
           const SizedBox(height: 8),
 
