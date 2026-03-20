@@ -30,12 +30,35 @@ class DeployMode {
   final String id;
   final String label;
 
-  const DeployMode({required this.id, required this.label});
+  /// Execution mode type from team YAML (`work`, `housekeeping`, `interactive`, etc.).
+  final String? modeType;
+
+  const DeployMode({required this.id, required this.label, this.modeType});
 
   factory DeployMode.fromJson(Map<String, dynamic> json) {
     return DeployMode(
       id: json['id'] as String,
       label: json['label'] as String,
+      modeType: json['mode_type'] as String?,
+    );
+  }
+}
+
+/// A repo entry from the PA repos registry.
+///
+/// Deserialized from GET /api/pa-repos response.
+class PaRepo {
+  final String name;
+  final String path;
+  final String? description;
+
+  const PaRepo({required this.name, required this.path, this.description});
+
+  factory PaRepo.fromJson(Map<String, dynamic> json) {
+    return PaRepo(
+      name: json['name'] as String,
+      path: json['path'] as String,
+      description: json['description'] as String?,
     );
   }
 }

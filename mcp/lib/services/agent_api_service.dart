@@ -128,6 +128,8 @@ class AgentApiService {
         await _handleTeamBrowse(request);
       } else if (path == '/api/pa-teams' && method == 'GET') {
         await _handleListPaTeams(request);
+      } else if (path == '/api/pa-repos' && method == 'GET') {
+        await _handleListPaRepos(request);
       } else if (path == '/api/agent-teams' && method == 'GET') {
         await _handleListAgentTeams(request);
       } else if (path == '/api/deploy' && method == 'POST') {
@@ -1732,6 +1734,117 @@ class AgentApiService {
         {'teams': teams.map((t) => t.toJson()).toList()});
   }
 
+  /// GET /api/pa-repos — List available PA repos from repos.yaml.
+  ///
+  /// Searches for repos.yaml in:
+  ///   1. PA_CONFIG/repos.yaml (if PA_CONFIG is set)
+  ///   2. ~/.config/sinh-x/personal-assistant/repos.yaml
+  ///   3. PA_HOME/repos.yaml
+  ///
+  /// Returns: `{"repos": [{"name": "...", "path": "...", "description": "..."}]}`
+  /// Returns empty list if no repos.yaml found — not an error.
+  Future<void> _handleListPaRepos(HttpRequest request) async {
+    final repos = _loadPaRepos();
+    _jsonResponse(request, HttpStatus.ok,
+        {'repos': repos.map((r) => r.toJson()).toList()});
+  }
+
+  /// Load repos from repos.yaml, searching config dir → user config dir → PA_HOME.
+  List<_PaRepo> _loadPaRepos() {
+    final home = Platform.environment['HOME'] ?? '/home';
+    final searchPaths = <String>[];
+    if (paConfigDir != null) {
+      searchPaths.add(p.join(paConfigDir!, 'repos.yaml'));
+    }
+    searchPaths
+        .add(p.join(home, '.config', 'sinh-x', 'personal-assistant', 'repos.yaml'));
+    searchPaths.add(p.join(paHome, 'repos.yaml'));
+
+    for (final path in searchPaths) {
+      final file = File(path);
+      if (!file.existsSync()) continue;
+      try {
+        return _parseReposYaml(file.readAsStringSync());
+      } catch (e) {
+        stderr.writeln('Error parsing repos.yaml at $path: $e');
+      }
+    }
+    return [];
+  }
+
+  /// Parse repos.yaml content into a list of [_PaRepo].
+  ///
+  /// Expected format:
+  /// ```yaml
+  /// repos:
+  ///   personal-assistant:
+  ///     path: ~/git-repos/.../personal-assistant
+  ///     description: Optional description
+  /// ```
+  List<_PaRepo> _parseReposYaml(String content) {
+    final repos = <_PaRepo>[];
+    final home = Platform.environment['HOME'] ?? '/home';
+
+    bool inRepos = false;
+    String? currentName;
+    String? currentPath;
+    String? currentDescription;
+
+    void flushCurrent() {
+      if (currentName != null && currentPath != null) {
+        final expandedPath = currentPath!.startsWith('~/')
+            ? p.join(home, currentPath!.substring(2))
+            : currentPath!;
+        repos.add(_PaRepo(
+          name: currentName!,
+          path: expandedPath,
+          description: currentDescription,
+        ));
+      }
+      currentName = null;
+      currentPath = null;
+      currentDescription = null;
+    }
+
+    for (final rawLine in content.split('\n')) {
+      final line = rawLine.trimRight();
+      if (line.isEmpty || line.trimLeft().startsWith('#')) continue;
+
+      // Top-level key (no indentation)
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        flushCurrent();
+        inRepos = line.trim() == 'repos:';
+        continue;
+      }
+
+      if (!inRepos) continue;
+
+      // 2-space indent: repo name (key only, no value)
+      final twoSpaceMatch = RegExp(r'^  ([a-zA-Z0-9_-]+):\s*$').firstMatch(line);
+      if (twoSpaceMatch != null) {
+        flushCurrent();
+        currentName = twoSpaceMatch.group(1);
+        continue;
+      }
+
+      // 4-space indent: key: value
+      if (currentName != null) {
+        final pathMatch = RegExp(r'^    path:\s*(.+)$').firstMatch(line);
+        if (pathMatch != null) {
+          currentPath = pathMatch.group(1)!.trim();
+          continue;
+        }
+        final descMatch = RegExp(r'^    description:\s*(.+)$').firstMatch(line);
+        if (descMatch != null) {
+          currentDescription = descMatch.group(1)!.trim();
+          continue;
+        }
+      }
+    }
+    flushCurrent();
+    return repos;
+  }
+
   /// POST /api/deploy — Trigger a PA team deployment.
   ///
   /// Body (JSON): `{"team": "builder", "mode": "background", "objective": "..."}`
@@ -1770,6 +1883,7 @@ class AgentApiService {
     final team = json['team'] as String?;
     final mode = json['mode'] as String?;
     final objective = json['objective'] as String?;
+    final repo = json['repo'] as String?;
 
     if (team == null || team.isEmpty) {
       _jsonResponse(
@@ -1787,6 +1901,15 @@ class AgentApiService {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Invalid team name'});
       return;
+    }
+
+    // Validate repo if provided (alphanumeric + hyphens only — no shell injection)
+    if (repo != null && repo.isNotEmpty) {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(repo)) {
+        _jsonResponse(
+            request, HttpStatus.badRequest, {'error': 'Invalid repo name'});
+        return;
+      }
     }
 
     // Validate team + mode against YAML whitelist
@@ -1810,6 +1933,13 @@ class AgentApiService {
       return;
     }
 
+    // Reject interactive modes — cannot be launched headlessly from phone
+    if (deployMode.modeType == 'interactive') {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Interactive modes cannot be launched from phone'});
+      return;
+    }
+
     // Validate objective (optional field)
     if (objective != null && objective.isNotEmpty) {
       if (objective.length > 500) {
@@ -1826,15 +1956,17 @@ class AgentApiService {
     }
 
     // Build pa command
-    // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> [--flag]`
+    // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> --mode <mode> --background`
     final List<String> args;
     if (team == 'daily') {
       args = ['daily', mode];
     } else {
-      args = ['deploy', team];
-      if (mode == 'background') args.add('--background');
-      if (mode == 'interactive') args.add('--interactive');
-      // foreground: no extra flag
+      args = ['deploy', team, '--mode', mode];
+      // All phone deploys run in background (interactive modes already rejected above)
+      args.add('--background');
+      if (repo != null && repo.isNotEmpty) {
+        args.addAll(['--repo', repo]);
+      }
     }
 
     // Append --objective flag if provided
@@ -2287,11 +2419,13 @@ class _DeployMode {
   final String id;
   final String label;
   final bool phoneVisible;
+  final String? modeType;
 
   const _DeployMode({
     required this.id,
     required this.label,
     required this.phoneVisible,
+    this.modeType,
   });
 
   /// Parse a deploy mode from a map of YAML key-value pairs.
@@ -2300,8 +2434,24 @@ class _DeployMode {
     final label = map['label'];
     if (id == null || id.isEmpty || label == null || label.isEmpty) return null;
     final phoneVisible = map['phone_visible']?.toLowerCase() == 'true';
-    return _DeployMode(id: id, label: label, phoneVisible: phoneVisible);
+    final modeType = map['mode_type'];
+    return _DeployMode(
+        id: id, label: label, phoneVisible: phoneVisible, modeType: modeType);
   }
 
   Map<String, dynamic> toJson() => {'id': id, 'label': label};
+}
+
+class _PaRepo {
+  final String name;
+  final String path;
+  final String? description;
+
+  const _PaRepo({required this.name, required this.path, this.description});
+
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{'name': name, 'path': path};
+    if (description != null) m['description'] = description;
+    return m;
+  }
 }

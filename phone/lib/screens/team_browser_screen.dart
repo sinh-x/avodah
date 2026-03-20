@@ -28,6 +28,9 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
     if (widget.teamProvider.paTeams.isEmpty) {
       widget.teamProvider.loadPaTeams();
     }
+    if (widget.teamProvider.paRepos.isEmpty) {
+      widget.teamProvider.loadRepos();
+    }
   }
 
   @override
@@ -99,13 +102,15 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
       isScrollControlled: true,
       builder: (_) => DeploySheet(
         paTeams: widget.teamProvider.paTeams,
-        onDeploy: (team, mode, objective) async {
+        paRepos: widget.teamProvider.paRepos,
+        onDeploy: (team, mode, objective, {repo}) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
               team,
               mode,
               objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
             );
             if (mounted) {
               messenger.showSnackBar(
@@ -611,15 +616,17 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
       isScrollControlled: true,
       builder: (_) => DeploySheet(
         paTeams: widget.teamProvider.paTeams,
+        paRepos: widget.teamProvider.paRepos,
         initialTeam: widget.team,
         initialObjective: widget.file.name,
-        onDeploy: (team, mode, objective) async {
+        onDeploy: (team, mode, objective, {repo}) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
               team,
               mode,
               objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
             );
             if (mounted) {
               messenger.showSnackBar(SnackBar(

@@ -315,18 +315,34 @@ class AgentApiClient {
         .toList();
   }
 
+  /// List available PA repos from the repos registry.
+  ///
+  /// Returns empty list if no repos.yaml configured — not an error.
+  Future<List<PaRepo>> listPaRepos() async {
+    final response = await _get('/api/pa-repos');
+    final repos = response['repos'] as List;
+    return repos
+        .map((e) => PaRepo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// Trigger a PA team deployment.
   ///
   /// Validates team + mode on the server before executing.
   /// Returns immediately after the subprocess is started.
+  /// Optional [repo] passes `--repo <name>` to PA (for codebase-aware modes).
   Future<DeployResult> triggerDeployment(
     String team,
     String mode, {
     String? objective,
+    String? repo,
   }) async {
     final body = <String, dynamic>{'team': team, 'mode': mode};
     if (objective != null && objective.isNotEmpty) {
       body['objective'] = objective;
+    }
+    if (repo != null && repo.isNotEmpty) {
+      body['repo'] = repo;
     }
     final response = await _post('/api/deploy', body: body);
     return DeployResult.fromJson(response);
