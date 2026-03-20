@@ -1770,6 +1770,7 @@ class AgentApiService {
     final team = json['team'] as String?;
     final mode = json['mode'] as String?;
     final objective = json['objective'] as String?;
+    final repo = json['repo'] as String?;
 
     if (team == null || team.isEmpty) {
       _jsonResponse(
@@ -1787,6 +1788,15 @@ class AgentApiService {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Invalid team name'});
       return;
+    }
+
+    // Validate repo if provided (alphanumeric + hyphens only — no shell injection)
+    if (repo != null && repo.isNotEmpty) {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(repo)) {
+        _jsonResponse(
+            request, HttpStatus.badRequest, {'error': 'Invalid repo name'});
+        return;
+      }
     }
 
     // Validate team + mode against YAML whitelist
@@ -1810,6 +1820,13 @@ class AgentApiService {
       return;
     }
 
+    // Reject interactive modes — cannot be launched headlessly from phone
+    if (deployMode.modeType == 'interactive') {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Interactive modes cannot be launched from phone'});
+      return;
+    }
+
     // Validate objective (optional field)
     if (objective != null && objective.isNotEmpty) {
       if (objective.length > 500) {
@@ -1826,15 +1843,17 @@ class AgentApiService {
     }
 
     // Build pa command
-    // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> [--flag]`
+    // daily team: `pa daily <mode>` — all other teams: `pa deploy <team> --mode <mode> --background`
     final List<String> args;
     if (team == 'daily') {
       args = ['daily', mode];
     } else {
-      args = ['deploy', team];
-      if (mode == 'background') args.add('--background');
-      if (mode == 'interactive') args.add('--interactive');
-      // foreground: no extra flag
+      args = ['deploy', team, '--mode', mode];
+      // All phone deploys run in background (interactive modes already rejected above)
+      args.add('--background');
+      if (repo != null && repo.isNotEmpty) {
+        args.addAll(['--repo', repo]);
+      }
     }
 
     // Append --objective flag if provided
@@ -2287,11 +2306,13 @@ class _DeployMode {
   final String id;
   final String label;
   final bool phoneVisible;
+  final String? modeType;
 
   const _DeployMode({
     required this.id,
     required this.label,
     required this.phoneVisible,
+    this.modeType,
   });
 
   /// Parse a deploy mode from a map of YAML key-value pairs.
@@ -2300,7 +2321,9 @@ class _DeployMode {
     final label = map['label'];
     if (id == null || id.isEmpty || label == null || label.isEmpty) return null;
     final phoneVisible = map['phone_visible']?.toLowerCase() == 'true';
-    return _DeployMode(id: id, label: label, phoneVisible: phoneVisible);
+    final modeType = map['mode_type'];
+    return _DeployMode(
+        id: id, label: label, phoneVisible: phoneVisible, modeType: modeType);
   }
 
   Map<String, dynamic> toJson() => {'id': id, 'label': label};
