@@ -64,7 +64,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final url = _controller.text.trim();
-      final uri = Uri.parse('$url/api/sync/deltas?since=0');
+      final uri = Uri.parse('$url/api/health');
       final response =
           await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {

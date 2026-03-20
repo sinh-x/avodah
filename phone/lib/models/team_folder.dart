@@ -39,7 +39,7 @@ class TeamFile {
 
   factory TeamFile.fromJson(Map<String, dynamic> json) {
     return TeamFile(
-      name: json['name'] as String,
+      name: json['id'] as String? ?? json['name'] as String,
       size: json['size'] as int? ?? 0,
       modified: DateTime.parse(json['modified'] as String),
     );
