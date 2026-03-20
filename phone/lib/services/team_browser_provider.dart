@@ -13,6 +13,7 @@ class TeamBrowserProvider extends ChangeNotifier {
   List<TeamFolder> _teams = [];
   List<TeamFile> _files = [];
   List<PaTeam> _paTeams = [];
+  List<PaRepo> _paRepos = [];
   bool _loading = false;
   String? _error;
 
@@ -21,6 +22,7 @@ class TeamBrowserProvider extends ChangeNotifier {
   List<TeamFolder> get teams => _teams;
   List<TeamFile> get files => _files;
   List<PaTeam> get paTeams => _paTeams;
+  List<PaRepo> get paRepos => _paRepos;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -43,9 +45,23 @@ class TeamBrowserProvider extends ChangeNotifier {
     }
   }
 
+  /// Fetch PA repos from the repos registry.
+  Future<void> loadRepos() async {
+    try {
+      _paRepos = await _client.listPaRepos();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('TeamBrowserProvider loadRepos error: $e');
+    }
+  }
+
   /// Trigger a PA team deployment.
-  Future<DeployResult> deploy(String team, String mode, {String? objective}) {
-    return _client.triggerDeployment(team, mode, objective: objective);
+  ///
+  /// Optional [repo] passes `--repo <name>` to PA for codebase-aware modes.
+  Future<DeployResult> deploy(String team, String mode,
+      {String? objective, String? repo}) {
+    return _client.triggerDeployment(team, mode,
+        objective: objective, repo: repo);
   }
 
   /// Fetch team list.

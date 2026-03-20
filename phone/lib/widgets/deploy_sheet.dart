@@ -25,6 +25,10 @@ class DeploySheet extends StatefulWidget {
   /// All PA teams with deploy modes.
   final List<PaTeam> paTeams;
 
+  /// Available PA repos for the optional repo picker.
+  /// When empty, the repo dropdown is hidden.
+  final List<PaRepo> paRepos;
+
   /// Pre-selected team name. If null, user must select from [paTeams].
   final String? initialTeam;
 
@@ -33,12 +37,14 @@ class DeploySheet extends StatefulWidget {
 
   /// Called when user taps Launch.
   /// [objective] may be empty string if user left the field blank.
-  final Future<void> Function(String team, String mode, String objective)
-      onDeploy;
+  /// [repo] is null when no repo was selected.
+  final Future<void> Function(String team, String mode, String objective,
+      {String? repo}) onDeploy;
 
   const DeploySheet({
     super.key,
     required this.paTeams,
+    this.paRepos = const [],
     this.initialTeam,
     this.initialObjective,
     required this.onDeploy,
@@ -51,6 +57,7 @@ class DeploySheet extends StatefulWidget {
 class _DeploySheetState extends State<DeploySheet> {
   String? _selectedTeam;
   String? _selectedMode;
+  String? _selectedRepo;
   bool _deploying = false;
   late final TextEditingController _objectiveController;
 
@@ -159,6 +166,19 @@ class _DeploySheetState extends State<DeploySheet> {
                   const SizedBox(height: 16),
                 ],
 
+                // Repo picker (hidden when no repos configured)
+                if (widget.paRepos.isNotEmpty) ...[
+                  Text('Repo (optional)', style: theme.textTheme.labelMedium),
+                  const SizedBox(height: 6),
+                  _RepoSelector(
+                    paRepos: widget.paRepos,
+                    selectedRepo: _selectedRepo,
+                    enabled: !_deploying,
+                    onChanged: (repo) => setState(() => _selectedRepo = repo),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Objective field
                 Text('Objective (optional)', style: theme.textTheme.labelMedium),
                 const SizedBox(height: 6),
@@ -245,10 +265,68 @@ class _DeploySheetState extends State<DeploySheet> {
         _selectedTeam!,
         _selectedMode!,
         _objectiveController.text.trim(),
+        repo: _selectedRepo,
       );
     } finally {
       if (mounted) setState(() => _deploying = false);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Repo selector widget
+// ---------------------------------------------------------------------------
+
+class _RepoSelector extends StatelessWidget {
+  final List<PaRepo> paRepos;
+  final String? selectedRepo;
+  final bool enabled;
+  final void Function(String?) onChanged;
+
+  const _RepoSelector({
+    required this.paRepos,
+    required this.selectedRepo,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButton<String>(
+        value: selectedRepo,
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        hint: Text(
+          'None (no repo context)',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.outline),
+        ),
+        items: [
+          DropdownMenuItem<String>(
+            value: null,
+            child: Text(
+              'None',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.outline),
+            ),
+          ),
+          ...paRepos.map(
+            (r) => DropdownMenuItem(
+              value: r.name,
+              child: Text(r.name),
+            ),
+          ),
+        ],
+        onChanged: enabled ? onChanged : null,
+      ),
+    );
   }
 }
 
