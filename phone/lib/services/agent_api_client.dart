@@ -332,6 +332,16 @@ class AgentApiClient {
     return DeployResult.fromJson(response);
   }
 
+  /// Fetch the merged list of categories from AvoConfig + task DB.
+  ///
+  /// Calls GET /api/config/categories (added in Phase 1 sync work).
+  /// Returns sorted list; empty on failure.
+  Future<List<String>> getCategories() async {
+    final response = await _get('/api/config/categories');
+    final cats = response['categories'] as List? ?? [];
+    return cats.map((e) => e as String).toList();
+  }
+
   /// List active PA systemd timers.
   Future<List<TimerInfo>> listTimers() async {
     final response = await _get('/api/timers');

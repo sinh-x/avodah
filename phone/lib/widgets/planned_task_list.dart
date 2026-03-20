@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../models/snapshot.dart';
+import 'task_action_sheet.dart';
 
 class PlannedTaskList extends StatelessWidget {
   final List<PlannedTaskSnapshot> tasks;
 
-  /// Called when user taps a task to toggle its done state.
+  /// Current active timer — passed to the action sheet for confirmation.
+  final TimerSnapshot? activeTimer;
+
+  /// Called when user wants to toggle the done state of a task.
   final Future<void> Function(String taskId)? onToggleDone;
 
-  const PlannedTaskList({super.key, required this.tasks, this.onToggleDone});
+  /// Called when user wants to start the timer for a task.
+  final Future<void> Function(String taskId, String taskTitle)? onStartTimer;
+
+  const PlannedTaskList({
+    super.key,
+    required this.tasks,
+    this.activeTimer,
+    this.onToggleDone,
+    this.onStartTimer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +51,12 @@ class PlannedTaskList extends StatelessWidget {
               ],
             ),
             const Divider(),
-            ...tasks.map((t) => _TaskRow(task: t, onToggleDone: onToggleDone)),
+            ...tasks.map((t) => _TaskRow(
+                  task: t,
+                  activeTimer: activeTimer,
+                  onToggleDone: onToggleDone,
+                  onStartTimer: onStartTimer,
+                )),
           ],
         ),
       ),
@@ -48,11 +66,28 @@ class PlannedTaskList extends StatelessWidget {
 
 class _TaskRow extends StatelessWidget {
   final PlannedTaskSnapshot task;
-
-  /// Called when user taps to toggle done state.
+  final TimerSnapshot? activeTimer;
   final Future<void> Function(String taskId)? onToggleDone;
+  final Future<void> Function(String taskId, String taskTitle)? onStartTimer;
 
-  const _TaskRow({required this.task, this.onToggleDone});
+  const _TaskRow({
+    required this.task,
+    this.activeTimer,
+    this.onToggleDone,
+    this.onStartTimer,
+  });
+
+  void _openActionSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => TaskActionSheet(
+        task: task,
+        activeTimer: activeTimer,
+        onStartTimer: onStartTimer,
+        onToggleDone: onToggleDone,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,9 +116,7 @@ class _TaskRow extends StatelessWidget {
     );
 
     return InkWell(
-      onTap: (onToggleDone != null && !task.isCancelled)
-          ? () => onToggleDone!(task.taskId)
-          : null,
+      onTap: task.isCancelled ? null : () => _openActionSheet(context),
       borderRadius: BorderRadius.circular(4),
       child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

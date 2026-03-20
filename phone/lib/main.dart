@@ -231,6 +231,7 @@ class _HomeShellState extends State<_HomeShell> {
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
+            apiClient: widget.apiClient,
             onPushDeltas: widget.onPushDeltas,
           ),
           Scaffold(

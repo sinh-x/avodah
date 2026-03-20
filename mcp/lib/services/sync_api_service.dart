@@ -15,6 +15,9 @@ import 'dart:io';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:drift/drift.dart' show Value;
 
+import '../config/avo_config.dart';
+import 'jira_service.dart';
+
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
   SyncDocType._();
@@ -39,10 +42,18 @@ class SyncApiService {
   /// phone changes without waiting for the next periodic tick.
   final void Function(int count)? onDeltasMerged;
 
+  /// Optional Jira service — if provided, triggers push after merging phone deltas.
+  final JiraService? jiraService;
+
+  /// User config for categories, etc.
+  final AvoConfig? config;
+
   SyncApiService({
     required this.db,
     required this.clock,
     this.onDeltasMerged,
+    this.jiraService,
+    this.config,
   });
 
   /// Routes a sync API request. Returns true if handled.
@@ -50,7 +61,9 @@ class SyncApiService {
     final path = request.uri.path;
     final method = request.method;
 
-    if (path != '/api/sync/deltas') return false;
+    if (path != '/api/sync/deltas' && path != '/api/config/categories') {
+      return false;
+    }
 
     // CORS headers
     request.response.headers.add('Access-Control-Allow-Origin', '*');
@@ -67,7 +80,14 @@ class SyncApiService {
     }
 
     try {
-      if (method == 'GET') {
+      if (path == '/api/config/categories') {
+        if (method == 'GET') {
+          await _handleGetCategories(request);
+        } else {
+          _jsonResponse(request, HttpStatus.methodNotAllowed,
+              {'error': 'Method not allowed'});
+        }
+      } else if (method == 'GET') {
         await _handlePullDeltas(request);
       } else if (method == 'POST') {
         await _handlePushDeltas(request);
@@ -133,6 +153,28 @@ class SyncApiService {
     });
   }
 
+  /// GET /api/config/categories
+  ///
+  /// Returns the merged and sorted list of categories from AvoConfig
+  /// (user-configured or defaults) plus any distinct category values
+  /// found on existing tasks in the DB.
+  Future<void> _handleGetCategories(HttpRequest request) async {
+    final configCategories =
+        (config?.effectiveCategories ?? AvoConfig.defaultCategories).toSet();
+
+    final tasks = await db.select(db.tasks).get();
+    final dbCategories = tasks
+        .map((t) => t.category)
+        .whereType<String>()
+        .where((c) => c.isNotEmpty)
+        .toSet();
+
+    final allCategories = {...configCategories, ...dbCategories}.toList()
+      ..sort();
+
+    _jsonResponse(request, HttpStatus.ok, {'categories': allCategories});
+  }
+
   /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.
   ///
   /// Records the received watermark and fires [onDeltasMerged] when at least
@@ -160,6 +202,12 @@ class SyncApiService {
     if (merged > 0) {
       await setWatermark(remoteNode, watermark, direction: 'received');
       onDeltasMerged?.call(merged);
+      // Trigger Jira push for any newly merged worklogs (fire-and-forget).
+      jiraService?.push().then(
+        (_) {},
+        onError: (Object e) =>
+            stderr.writeln('Jira push after phone sync failed: $e'),
+      );
     }
 
     return (merged: merged, errors: errors, watermark: watermark);

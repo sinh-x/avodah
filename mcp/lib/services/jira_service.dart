@@ -1400,10 +1400,15 @@ class JiraService {
     }
   }
 
-  /// Formats a DateTime for Jira's expected format.
+  /// Formats a DateTime for Jira's expected format using local timezone.
   static String _formatJiraDateTime(DateTime dt) {
-    final utc = dt.toUtc();
-    return '${utc.toIso8601String().split('.').first}.000+0000';
+    final local = dt.toLocal();
+    final offset = local.timeZoneOffset;
+    final hours = offset.inHours.abs().toString().padLeft(2, '0');
+    final mins = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+    final sign = offset.isNegative ? '-' : '+';
+    final dateStr = local.toIso8601String().split('.').first;
+    return '$dateStr.000$sign$hours$mins';
   }
 
   /// Parses a Jira Cloud timestamp string to UTC DateTime.

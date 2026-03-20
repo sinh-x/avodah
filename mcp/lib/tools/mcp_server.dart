@@ -550,6 +550,7 @@ class McpServer {
       case 'stop':
         try {
           final result = await timerService.stop();
+          final pushed = await jiraService.pushWorklog(result.worklogId);
           return {
             'ok': true,
             'running': false,
@@ -557,6 +558,7 @@ class McpServer {
             'worklogId': result.worklogId,
             'elapsed': result.elapsedFormatted,
             'task': result.taskTitle,
+            if (pushed) 'jira': 'worklog synced',
           };
         } on NoTimerRunningException {
           return {
