@@ -161,12 +161,17 @@ class AgentApiClient {
 
   // --- Deployments ---
 
-  /// List all deployments with computed status.
+  /// List recent deployments (last 3 days).
   Future<List<Deployment>> listDeployments() async {
     final response = await _get('/api/deployments');
     final deployments = response['deployments'] as List;
+    final cutoff = DateTime.now().subtract(const Duration(days: 3));
     return deployments
         .map((e) => Deployment.fromJson(e as Map<String, dynamic>))
+        .where((d) {
+          final started = DateTime.tryParse(d.startedAt);
+          return started != null && started.isAfter(cutoff);
+        })
         .toList();
   }
 
