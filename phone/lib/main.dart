@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
+import 'screens/kanban_board_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
+import 'services/board_provider.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/deployment_provider.dart';
 import 'services/local_dashboard_provider.dart';
@@ -38,6 +40,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
   TeamBrowserProvider? _teamBrowserProvider;
+  BoardProvider? _boardProvider;
   Timer? _syncTimer;
 
   @override
@@ -82,6 +85,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     teamBrowserProvider.refreshTeams();
     teamBrowserProvider.loadPaTeams();
 
+    final boardProvider = BoardProvider(apiClient);
+    boardProvider.refresh();
+    boardProvider.startPolling();
+
     setState(() {
       _db = db;
       _dashboardProvider = dashboardProvider;
@@ -91,6 +98,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
       _teamBrowserProvider = teamBrowserProvider;
+      _boardProvider = boardProvider;
     });
 
     // Initial pull + dashboard render
@@ -134,6 +142,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _boardProvider?.dispose();
     _teamBrowserProvider?.dispose();
     _deploymentProvider?.dispose();
     _reviewProvider?.dispose();
@@ -170,14 +179,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               reviewProvider: _reviewProvider!,
               deploymentProvider: _deploymentProvider!,
               teamBrowserProvider: _teamBrowserProvider!,
+              boardProvider: _boardProvider!,
               onPushDeltas: _pushDeltas,
             ),
     );
   }
-
 }
 
-/// Shell with bottom navigation between Dashboard, Agent Review, Deployments, and Teams.
+/// Shell with bottom navigation between Kanban, Dashboard, Agent Review, Deployments, and Teams.
 class _HomeShell extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
   final LocalWriteService writeService;
@@ -185,6 +194,7 @@ class _HomeShell extends StatefulWidget {
   final ReviewProvider reviewProvider;
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
+  final BoardProvider boardProvider;
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
 
   const _HomeShell({
@@ -194,6 +204,7 @@ class _HomeShell extends StatefulWidget {
     required this.reviewProvider,
     required this.deploymentProvider,
     required this.teamBrowserProvider,
+    required this.boardProvider,
     this.onPushDeltas,
   });
 
@@ -207,27 +218,31 @@ class _HomeShellState extends State<_HomeShell> {
   @override
   void initState() {
     super.initState();
-    widget.reviewProvider.addListener(_onReviewUpdate);
+    widget.reviewProvider.addListener(_onUpdate);
+    widget.boardProvider.addListener(_onUpdate);
   }
 
   @override
   void dispose() {
-    widget.reviewProvider.removeListener(_onReviewUpdate);
+    widget.reviewProvider.removeListener(_onUpdate);
+    widget.boardProvider.removeListener(_onUpdate);
     super.dispose();
   }
 
-  void _onReviewUpdate() {
+  void _onUpdate() {
     if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final pendingCount = widget.reviewProvider.pendingCount;
+    final actionableCount = widget.boardProvider.actionableCount;
 
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: [
+          KanbanBoardScreen(boardProvider: widget.boardProvider),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
@@ -299,6 +314,21 @@ class _HomeShellState extends State<_HomeShell> {
         onDestinationSelected: (index) =>
             setState(() => _currentIndex = index),
         destinations: [
+          NavigationDestination(
+            icon: actionableCount > 0
+                ? Badge(
+                    label: Text('$actionableCount'),
+                    child: const Icon(Icons.view_kanban_outlined),
+                  )
+                : const Icon(Icons.view_kanban_outlined),
+            selectedIcon: actionableCount > 0
+                ? Badge(
+                    label: Text('$actionableCount'),
+                    child: const Icon(Icons.view_kanban),
+                  )
+                : const Icon(Icons.view_kanban),
+            label: 'Kanban',
+          ),
           const NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
