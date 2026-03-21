@@ -41,6 +41,11 @@ class BoardProvider extends ChangeNotifier {
 
   BoardProvider(this._client);
 
+  // --- Client access ---
+
+  /// Exposes the underlying API client for direct ticket/bulletin operations.
+  AgentApiClient get client => _client;
+
   // --- Getters ---
 
   BoardView? get board => _board;

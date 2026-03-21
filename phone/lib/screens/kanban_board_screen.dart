@@ -3,18 +3,23 @@ import 'package:flutter/material.dart';
 import '../models/ticket.dart';
 import '../services/board_provider.dart';
 import '../widgets/board_column.dart';
+import '../widgets/bulletin_banner.dart';
 import '../widgets/ticket_card.dart';
+import 'create_bulletin_screen.dart';
+import 'create_ticket_screen.dart';
+import 'ticket_detail_screen.dart';
 
 /// Main Kanban board screen.
 ///
 /// Displays a horizontally scrollable board of [KanbanColumn] widgets,
 /// driven by [BoardProvider]. Features:
 /// - Project filter dropdown + team filter chips
-/// - Bulletin banner when active bulletins exist
+/// - [BulletinBanner] when active bulletins exist (with resolve action)
 /// - Toggle terminal columns (done/rejected/cancelled)
 /// - Collapsible on-hold section below the main board
 /// - Pull-to-refresh
-/// - FAB for ticket creation (placeholder — Phase 3)
+/// - FAB navigates to [CreateTicketScreen]
+/// - AppBar overflow menu includes "Create Bulletin" → [CreateBulletinScreen]
 class KanbanBoardScreen extends StatefulWidget {
   final BoardProvider boardProvider;
 
@@ -31,6 +36,40 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     if (widget.boardProvider.board == null) {
       widget.boardProvider.refresh();
     }
+  }
+
+  void _openTicketDetail(BuildContext context, Ticket ticket) {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (_) => TicketDetailScreen(
+            ticketId: ticket.id,
+            boardProvider: widget.boardProvider,
+          ),
+        ))
+        .then((_) => widget.boardProvider.refresh());
+  }
+
+  void _openCreateTicket(BuildContext context) {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (_) =>
+              CreateTicketScreen(boardProvider: widget.boardProvider),
+        ))
+        .then((_) => widget.boardProvider.refresh());
+  }
+
+  void _openCreateBulletin(BuildContext context) {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (_) =>
+              CreateBulletinScreen(boardProvider: widget.boardProvider),
+        ))
+        .then((_) => widget.boardProvider.refresh());
+  }
+
+  Future<void> _resolveBulletin(String id) async {
+    await widget.boardProvider.client.resolveBulletin(id);
+    await widget.boardProvider.refresh();
   }
 
   @override
@@ -53,8 +92,9 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                   ? Icons.visibility
                   : Icons.visibility_off_outlined,
             ),
-            tooltip:
-                provider.showTerminal ? 'Hide done/rejected' : 'Show done/rejected',
+            tooltip: provider.showTerminal
+                ? 'Hide done/rejected'
+                : 'Show done/rejected',
             onPressed: provider.toggleTerminal,
           ),
           IconButton(
@@ -62,12 +102,27 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             tooltip: 'Refresh',
             onPressed: provider.refresh,
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'create_bulletin') {
+                _openCreateBulletin(context);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'create_bulletin',
+                child: ListTile(
+                  leading: Icon(Icons.campaign_outlined),
+                  title: Text('Create Bulletin'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Create ticket — coming in Phase 3')),
-        ),
+        onPressed: () => _openCreateTicket(context),
         tooltip: 'New ticket',
         child: const Icon(Icons.add),
       ),
@@ -75,7 +130,10 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         children: [
           _buildFilterRow(context, provider),
           if (provider.activeBulletins.isNotEmpty)
-            _BulletinBanner(bulletins: provider.activeBulletins),
+            BulletinBanner(
+              bulletins: provider.activeBulletins,
+              onResolve: _resolveBulletin,
+            ),
           if (provider.loading && provider.board == null)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (provider.error != null && provider.board == null)
@@ -145,8 +203,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
           children: [
             Icon(Icons.cloud_off, size: 48, color: theme.colorScheme.error),
             const SizedBox(height: 12),
-            Text('Failed to load board',
-                style: theme.textTheme.titleMedium),
+            Text('Failed to load board', style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -197,6 +254,8 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                             padding: const EdgeInsets.only(right: 10),
                             child: KanbanColumn(
                               column: col,
+                              onTicketTap: (ticket) =>
+                                  _openTicketDetail(context, ticket),
                               onTicketDropped: (ticket, newStatus) =>
                                   provider.updateTicketStatus(
                                       ticket.id, newStatus),
@@ -217,6 +276,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         if (onHold != null && onHold.tickets.isNotEmpty)
           _OnHoldSection(
             column: onHold,
+            onTicketTap: (ticket) => _openTicketDetail(context, ticket),
             onStatusChange: (ticket, newStatus) =>
                 provider.updateTicketStatus(ticket.id, newStatus),
           ),
@@ -225,61 +285,15 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   }
 }
 
-/// Banner shown when there are active bulletins.
-class _BulletinBanner extends StatelessWidget {
-  final List<dynamic> bulletins;
-
-  const _BulletinBanner({required this.bulletins});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isCritical = bulletins.any((b) {
-      final block = b.block;
-      return block == 'all';
-    });
-
-    final bgColor =
-        isCritical ? theme.colorScheme.errorContainer : Colors.amber.shade100;
-    final fgColor = isCritical
-        ? theme.colorScheme.onErrorContainer
-        : Colors.amber.shade900;
-
-    final titles =
-        bulletins.map((b) => b.title as String).join(' · ');
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: bgColor,
-      child: Row(
-        children: [
-          Icon(
-            isCritical ? Icons.block : Icons.warning_amber,
-            size: 16,
-            color: fgColor,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              titles,
-              style: theme.textTheme.bodySmall?.copyWith(color: fgColor),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Collapsible on-hold section below the main board.
 class _OnHoldSection extends StatelessWidget {
   final BoardColumn column;
+  final void Function(Ticket ticket) onTicketTap;
   final void Function(Ticket ticket, String newStatus) onStatusChange;
 
   const _OnHoldSection({
     required this.column,
+    required this.onTicketTap,
     required this.onStatusChange,
   });
 
@@ -292,8 +306,8 @@ class _OnHoldSection extends StatelessWidget {
         children: [
           Text(
             'On Hold',
-            style:
-                theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 8),
           Container(
@@ -322,8 +336,8 @@ class _OnHoldSection extends StatelessWidget {
               final ticket = column.tickets[index];
               return TicketCard(
                 ticket: ticket,
-                onStatusChange: (newStatus) =>
-                    onStatusChange(ticket, newStatus),
+                onTap: () => onTicketTap(ticket),
+                onStatusChange: (newStatus) => onStatusChange(ticket, newStatus),
               );
             },
           ),
