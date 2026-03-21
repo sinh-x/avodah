@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/activity_event.dart';
 import '../models/agent_team.dart';
+import '../models/bulletin.dart';
 import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
 import '../models/deployment.dart';
@@ -11,6 +12,7 @@ import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
 import '../models/review_item.dart';
 import '../models/team_folder.dart';
+import '../models/ticket.dart';
 import '../models/timer_info.dart';
 
 /// HTTP client for the agent workflow API endpoints.
@@ -394,6 +396,99 @@ class AgentApiClient {
         .toList();
   }
 
+  // --- Tickets ---
+
+  /// Get the kanban board view for a project.
+  ///
+  /// GET /api/board?project=X&team=Y → {"board": {...}}
+  Future<BoardView> getBoard({required String project, String? team}) async {
+    final params = <String, String>{'project': project};
+    if (team != null) params['team'] = team;
+    final query = '?${Uri(queryParameters: params).query}';
+    final response = await _get('/api/board$query');
+    return BoardView.fromJson(response['board'] as Map<String, dynamic>);
+  }
+
+  /// Get a single ticket by ID.
+  ///
+  /// GET /api/tickets/$id → {"ticket": {...}}
+  Future<Ticket> getTicket(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    final response = await _get('/api/tickets/$encoded');
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
+  /// List tickets with optional filters.
+  ///
+  /// GET /api/tickets?project=X&team=Y&status=Z → {"tickets": [...], "count": N}
+  Future<List<Ticket>> listTickets({
+    String? project,
+    String? team,
+    String? status,
+    String? priority,
+    String? type,
+  }) async {
+    final params = <String, String>{};
+    if (project != null) params['project'] = project;
+    if (team != null) params['team'] = team;
+    if (status != null) params['status'] = status;
+    if (priority != null) params['priority'] = priority;
+    if (type != null) params['type'] = type;
+    final query =
+        params.isNotEmpty ? '?${Uri(queryParameters: params).query}' : '';
+    final response = await _get('/api/tickets$query');
+    final tickets = response['tickets'] as List;
+    return tickets
+        .map((e) => Ticket.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Create a new ticket.
+  ///
+  /// POST /api/tickets body=data → {"ticket": {...}} (201)
+  Future<Ticket> createTicket(Map<String, dynamic> data) async {
+    final response = await _post('/api/tickets', body: data);
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
+  /// Update an existing ticket.
+  ///
+  /// PATCH /api/tickets/$id body=updates → {"ticket": {...}}
+  Future<Ticket> updateTicket(String id, Map<String, dynamic> updates) async {
+    final encoded = Uri.encodeComponent(id);
+    final response = await _patch('/api/tickets/$encoded', body: updates);
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
+  // --- Bulletins ---
+
+  /// List all bulletins.
+  ///
+  /// GET /api/bulletin → {"bulletins": [...], "count": N}
+  Future<List<Bulletin>> getBulletins() async {
+    final response = await _get('/api/bulletin');
+    final bulletins = response['bulletins'] as List;
+    return bulletins
+        .map((e) => Bulletin.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Create a new bulletin.
+  ///
+  /// POST /api/bulletin body=data → {"bulletin": {...}} (201)
+  Future<Bulletin> createBulletin(Map<String, dynamic> data) async {
+    final response = await _post('/api/bulletin', body: data);
+    return Bulletin.fromJson(response['bulletin'] as Map<String, dynamic>);
+  }
+
+  /// Resolve (dismiss) a bulletin.
+  ///
+  /// PATCH /api/bulletin/$id body={"status": "resolved"} → {"success": true}
+  Future<void> resolveBulletin(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    await _patch('/api/bulletin/$encoded', body: {'status': 'resolved'});
+  }
+
   // --- HTTP helpers ---
 
   Future<Map<String, dynamic>> _get(String path) async {
@@ -415,7 +510,22 @@ class AgentApiClient {
           body: jsonEncode(body ?? {}),
         )
         .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwApiException(response.statusCode, response.body);
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> _patch(String path,
+      {Map<String, dynamic>? body}) async {
+    final response = await _client
+        .patch(
+          Uri.parse('$baseUrl$path'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body ?? {}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
