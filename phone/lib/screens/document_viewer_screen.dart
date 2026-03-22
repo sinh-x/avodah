@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../services/agent_api_client.dart';
@@ -13,7 +13,7 @@ import '../services/agent_api_client.dart';
 /// Fetches the document at [path] via [AgentApiClient.getDocument] and renders
 /// it based on file type: markdown (.md/.markdown) → [MarkdownBody], PDF →
 /// [PDFView] (Android/iOS) or fallback message (other platforms), image →
-/// placeholder, directory → entry list. Shows a loading indicator while
+/// [Image.memory], directory → entry list. Shows a loading indicator while
 /// fetching and an error state with retry button on failure.
 class DocumentViewerScreen extends StatefulWidget {
   final String path;
@@ -77,16 +77,16 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       _error = null;
     });
     try {
-      if (_isPdf) {
-        await _loadPdfToTempFile();
-        return;
-      }
       final doc = await widget.client.getDocument(widget.path);
-      if (mounted) {
-        setState(() {
-          _document = doc;
-          _loading = false;
-        });
+      if (_isPdf && (Platform.isAndroid || Platform.isIOS)) {
+        await _writeBinaryToTempFile(doc);
+      } else {
+        if (mounted) {
+          setState(() {
+            _document = doc;
+            _loading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -98,25 +98,17 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
   }
 
-  /// Downloads the PDF to a temp file for [PDFView].
-  ///
-  /// On non-Android/iOS platforms (e.g. Linux desktop testing), no download
-  /// is performed — the viewer falls back to a platform-unsupported message.
-  Future<void> _loadPdfToTempFile() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final url =
-        '${widget.client.baseUrl}/api/documents?path=${Uri.encodeComponent(widget.path)}';
-    final response =
-        await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}');
+  /// Writes binary content from [DocumentContent] to a temp file for PDF
+  /// viewing. Uses latin1 encoding to preserve byte values from the JSON
+  /// string (best-effort until PA adds a raw binary endpoint — see PA-902).
+  Future<void> _writeBinaryToTempFile(DocumentContent doc) async {
+    final content = doc.content;
+    if (content == null || content.isEmpty) {
+      throw Exception('No content returned for PDF');
     }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$_filename');
-    await file.writeAsBytes(response.bodyBytes);
+    await file.writeAsBytes(latin1.encode(content));
     if (mounted) {
       setState(() {
         _pdfTempPath = file.path;
@@ -174,7 +166,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       return _buildDirectoryListing(doc);
     }
     if (_isImage) {
-      return _buildImagePlaceholder();
+      return _buildImageViewer(doc);
     }
     return _buildMarkdown(doc.content ?? '');
   }
@@ -223,18 +215,47 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
-  Widget _buildImagePlaceholder() {
+  /// Renders image from the API content string using latin1 byte decoding.
+  /// Best-effort until PA adds a raw binary endpoint (PA-902).
+  Widget _buildImageViewer(DocumentContent doc) {
+    final content = doc.content;
+    if (content == null || content.isEmpty) {
+      return _buildImageError('No image content returned');
+    }
+    try {
+      final bytes = latin1.encode(content);
+      return InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 4.0,
+        child: Center(
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (_, error, _) =>
+                _buildImageError(error.toString()),
+          ),
+        ),
+      );
+    } catch (e) {
+      return _buildImageError(e.toString());
+    }
+  }
+
+  Widget _buildImageError(String message) {
     final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.image, size: 64, color: theme.colorScheme.secondary),
+          Icon(Icons.broken_image, size: 64, color: theme.colorScheme.error),
           const SizedBox(height: 16),
-          Text('Image preview not yet available',
-              style: theme.textTheme.titleMedium),
+          Text('Failed to load image', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          Text(_filename, style: theme.textTheme.bodySmall),
+          Text(message, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 8),
+          Text(_filename,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
         ],
       ),
     );
