@@ -110,6 +110,12 @@ class _TicketCardBody extends StatelessWidget {
                   if (ticket.type != null) _TypeBadge(type: ticket.type!),
                   if (ticket.estimate != null)
                     _EstimateBadge(estimate: ticket.estimate!),
+                  if (ticket.docRef != null && ticket.docRef!.isNotEmpty)
+                    Icon(
+                      Icons.description_outlined,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                    ),
                 ],
               ),
               if (ticket.team != null) ...[
