@@ -146,7 +146,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   }
 
   Widget _buildFilterRow(BuildContext context, BoardProvider provider) {
-    final projects = <String>['personal-assistant'];
+    final projects = <String>['personal-assistant', 'avodah'];
     if (provider.board != null &&
         !projects.contains(provider.board!.project)) {
       projects.add(provider.board!.project);
