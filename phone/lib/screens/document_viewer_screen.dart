@@ -1,20 +1,14 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../services/agent_api_client.dart';
 
 /// Full-screen document viewer.
 ///
 /// Fetches the document at [path] via [AgentApiClient.getDocument] and renders
-/// it based on file type: markdown (.md/.markdown) → [MarkdownBody], PDF →
-/// [PDFView] (Android/iOS) or fallback message (other platforms), image →
-/// [Image.memory], directory → entry list. Shows a loading indicator while
-/// fetching and an error state with retry button on failure.
+/// it based on file type: markdown (.md/.markdown) → [MarkdownBody],
+/// directory → entry list. PDF and image viewing require a raw binary API
+/// endpoint (PA-902) and show an informative placeholder until then.
 class DocumentViewerScreen extends StatefulWidget {
   final String path;
   final AgentApiClient client;
@@ -33,7 +27,6 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   DocumentContent? _document;
   bool _loading = true;
   String? _error;
-  String? _pdfTempPath;
 
   String get _filename {
     final parts = widget.path.split('/');
@@ -52,41 +45,31 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     return imageExts.contains(_extension);
   }
 
+  bool get _isBinary => _isPdf || _isImage;
+
   @override
   void initState() {
     super.initState();
     _loadDocument();
   }
 
-  @override
-  void dispose() {
-    _cleanupTempFile();
-    super.dispose();
-  }
-
-  void _cleanupTempFile() {
-    final path = _pdfTempPath;
-    if (path != null) {
-      File(path).delete().ignore();
-    }
-  }
-
   Future<void> _loadDocument() async {
+    // Binary files can't be served correctly through the JSON API — skip fetch.
+    if (_isBinary) {
+      setState(() => _loading = false);
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final doc = await widget.client.getDocument(widget.path);
-      if (_isPdf && (Platform.isAndroid || Platform.isIOS)) {
-        await _writeBinaryToTempFile(doc);
-      } else {
-        if (mounted) {
-          setState(() {
-            _document = doc;
-            _loading = false;
-          });
-        }
+      if (mounted) {
+        setState(() {
+          _document = doc;
+          _loading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -95,25 +78,6 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           _loading = false;
         });
       }
-    }
-  }
-
-  /// Writes binary content from [DocumentContent] to a temp file for PDF
-  /// viewing. Uses latin1 encoding to preserve byte values from the JSON
-  /// string (best-effort until PA adds a raw binary endpoint — see PA-902).
-  Future<void> _writeBinaryToTempFile(DocumentContent doc) async {
-    final content = doc.content;
-    if (content == null || content.isEmpty) {
-      throw Exception('No content returned for PDF');
-    }
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$_filename');
-    await file.writeAsBytes(latin1.encode(content));
-    if (mounted) {
-      setState(() {
-        _pdfTempPath = file.path;
-        _loading = false;
-      });
     }
   }
 
@@ -158,15 +122,12 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Widget _buildContent() {
-    if (_isPdf) {
-      return _buildPdfViewer();
-    }
+    if (_isPdf) return _buildBinaryPlaceholder(Icons.picture_as_pdf, 'PDF');
+    if (_isImage) return _buildBinaryPlaceholder(Icons.image, 'Image');
+
     final doc = _document!;
     if (doc.type == 'directory') {
       return _buildDirectoryListing(doc);
-    }
-    if (_isImage) {
-      return _buildImageViewer(doc);
     }
     return _buildMarkdown(doc.content ?? '');
   }
@@ -181,81 +142,24 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
-  Widget _buildPdfViewer() {
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      return _buildPdfDesktopFallback();
-    }
-    if (_pdfTempPath == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return PDFView(
-      filePath: _pdfTempPath!,
-      enableSwipe: true,
-      swipeHorizontal: false,
-      autoSpacing: false,
-      pageFling: true,
-    );
-  }
-
-  Widget _buildPdfDesktopFallback() {
+  Widget _buildBinaryPlaceholder(IconData icon, String typeLabel) {
     final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.picture_as_pdf,
-              size: 64, color: theme.colorScheme.secondary),
+          Icon(icon, size: 64, color: theme.colorScheme.secondary),
           const SizedBox(height: 16),
-          Text('PDF viewing not supported on this platform',
+          Text('$typeLabel preview not available',
               style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(_filename, style: theme.textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-
-  /// Renders image from the API content string using latin1 byte decoding.
-  /// Best-effort until PA adds a raw binary endpoint (PA-902).
-  Widget _buildImageViewer(DocumentContent doc) {
-    final content = doc.content;
-    if (content == null || content.isEmpty) {
-      return _buildImageError('No image content returned');
-    }
-    try {
-      final bytes = latin1.encode(content);
-      return InteractiveViewer(
-        minScale: 0.5,
-        maxScale: 4.0,
-        child: Center(
-          child: Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-            errorBuilder: (_, error, _) =>
-                _buildImageError(error.toString()),
-          ),
-        ),
-      );
-    } catch (e) {
-      return _buildImageError(e.toString());
-    }
-  }
-
-  Widget _buildImageError(String message) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.broken_image, size: 64, color: theme.colorScheme.error),
           const SizedBox(height: 16),
-          Text('Failed to load image', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(message, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 8),
-          Text(_filename,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
+          Text(
+            'Requires raw binary API endpoint (PA-902)',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
         ],
       ),
     );
