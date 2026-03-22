@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/ticket.dart';
+import '../screens/document_viewer_screen.dart';
 import '../services/board_provider.dart';
 import '../widgets/status_picker_sheet.dart';
 
 /// Full ticket detail view with read and edit modes.
 ///
 /// Fetches the ticket by ID on init using [boardProvider.client].
-/// In read mode, displays all ticket fields.
+/// In read mode, displays all ticket fields. Doc ref and attachments are
+/// tappable — they navigate to [DocumentViewerScreen].
+/// A comment input bar is fixed at the bottom of the read view.
 /// Toggle to edit mode via the AppBar edit icon to change status, priority,
 /// team, assignee, estimate, and tags. Save calls [boardProvider.client.updateTicket].
 class TicketDetailScreen extends StatefulWidget {
@@ -31,6 +34,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   String? _error;
   bool _editMode = false;
   bool _saving = false;
+  bool _submittingComment = false;
 
   // Edit state
   String _editStatus = '';
@@ -40,6 +44,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final _teamController = TextEditingController();
   final _assigneeController = TextEditingController();
   final _tagInputController = TextEditingController();
+  final _commentController = TextEditingController();
 
   @override
   void initState() {
@@ -52,6 +57,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     _teamController.dispose();
     _assigneeController.dispose();
     _tagInputController.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
@@ -125,6 +131,30 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
+  Future<void> _addComment() async {
+    final content = _commentController.text.trim();
+    if (content.isEmpty || _ticket == null) return;
+    setState(() => _submittingComment = true);
+    try {
+      final updated = await widget.boardProvider.client
+          .addComment(_ticket!.id, content, 'sinh');
+      if (mounted) {
+        setState(() {
+          _ticket = updated;
+          _submittingComment = false;
+        });
+        _commentController.clear();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submittingComment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add comment: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,7 +212,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       );
     }
     if (_ticket == null) return const SizedBox.shrink();
-    return _editMode ? _buildEditView(context) : _buildReadView(context);
+    if (_editMode) return _buildEditView(context);
+    return Column(
+      children: [
+        Expanded(child: _buildReadView(context)),
+        _buildCommentInputBar(),
+      ],
+    );
   }
 
   Widget _buildReadView(BuildContext context) {
@@ -247,10 +283,52 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 16),
             _SectionLabel('Doc Ref'),
             const SizedBox(height: 4),
-            Text(
-              ticket.docRef!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.primary),
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DocumentViewerScreen(
+                    path: ticket.docRef!,
+                    client: widget.boardProvider.client,
+                  ),
+                ),
+              ),
+              child: Text(
+                ticket.docRef!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+          if (ticket.attachments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _SectionLabel('Attachments'),
+            const SizedBox(height: 4),
+            ...ticket.attachments.map(
+              (attachment) => ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.attach_file,
+                    size: 16, color: theme.colorScheme.primary),
+                title: Text(
+                  attachment.split('/').last,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DocumentViewerScreen(
+                      path: attachment,
+                      client: widget.boardProvider.client,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
           if (ticket.tags.isNotEmpty) ...[
@@ -286,6 +364,44 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           ),
           const SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCommentInputBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentController,
+                decoration: const InputDecoration(
+                  hintText: 'Add a comment…',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                maxLines: null,
+                textInputAction: TextInputAction.newline,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _submittingComment
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.send),
+                    tooltip: 'Send comment',
+                    onPressed: _addComment,
+                  ),
+          ],
+        ),
       ),
     );
   }
@@ -556,6 +672,16 @@ class _CommentCard extends StatelessWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline),
                 ),
+                if (comment.editedAt != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    'edited',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),
