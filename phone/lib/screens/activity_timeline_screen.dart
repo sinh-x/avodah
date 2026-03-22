@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/activity_event.dart';
 import '../models/deployment.dart';
 import '../services/agent_api_client.dart';
+import '../utils/deploy_helpers.dart';
 import '../widgets/activity_event_tile.dart';
 
 /// Full-screen activity timeline for a single deployment.
@@ -187,7 +189,7 @@ class _DeploymentHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _statusColor(context, deployment.status);
+    final color = statusColor(context,deployment.status);
 
     return Container(
       width: double.infinity,
@@ -210,7 +212,7 @@ class _DeploymentHeader extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(_statusIcon(deployment.status), color: color, size: 16),
+                  Icon(statusIcon(deployment.status), color: color, size: 16),
                   const SizedBox(width: 4),
                   Text(
                     deployment.status,
@@ -285,6 +287,36 @@ class _DeploymentHeader extends StatelessWidget {
               (deployment.error != null || deployment.exitCode != null)) ...[
             const SizedBox(height: 10),
             _ErrorDetailsSection(deployment: deployment),
+          ],
+          // Log file link
+          if (deployment.logFile != null) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: deployment.logFile!));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Log file path copied')),
+                );
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.description_outlined,
+                      size: 14, color: theme.colorScheme.primary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      deployment.logFile!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ],
       ),
@@ -388,38 +420,3 @@ class _ErrorDetailsSection extends StatelessWidget {
   }
 }
 
-// --- Shared helpers ---
-
-Color _statusColor(BuildContext context, String status) {
-  switch (status.toLowerCase()) {
-    case 'running':
-      return Colors.blue;
-    case 'success':
-    case 'completed':
-      return Colors.green;
-    case 'partial':
-      return Colors.orange;
-    case 'failed':
-    case 'crashed':
-      return Colors.red;
-    default:
-      return Theme.of(context).colorScheme.outline;
-  }
-}
-
-IconData _statusIcon(String status) {
-  switch (status.toLowerCase()) {
-    case 'running':
-      return Icons.play_circle_outline;
-    case 'success':
-    case 'completed':
-      return Icons.check_circle_outline;
-    case 'partial':
-      return Icons.warning_amber_outlined;
-    case 'failed':
-    case 'crashed':
-      return Icons.error_outline;
-    default:
-      return Icons.help_outline;
-  }
-}

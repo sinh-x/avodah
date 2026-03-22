@@ -79,7 +79,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     reviewProvider.startAutoRefresh();
 
     final deploymentProvider = DeploymentProvider(apiClient);
-    deploymentProvider.refresh();
+    deploymentProvider.startAutoRefresh();
 
     final teamBrowserProvider = TeamBrowserProvider(apiClient);
     teamBrowserProvider.refreshTeams();

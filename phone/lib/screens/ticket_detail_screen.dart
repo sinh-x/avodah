@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../models/deploy_routing.dart';
+import '../models/deployment.dart';
 import '../models/ticket.dart';
 import '../screens/document_viewer_screen.dart';
 import '../services/board_provider.dart';
+import '../widgets/deploy_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
+import 'activity_timeline_screen.dart';
 
 /// Full ticket detail view with read and edit modes.
 ///
@@ -35,6 +39,10 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   bool _editMode = false;
   bool _saving = false;
   bool _submittingComment = false;
+
+  // Deploy state
+  DeployRouting? _deployRouting;
+  bool _fetchingRouting = false;
 
   // Edit state
   String _editStatus = '';
@@ -129,6 +137,109 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _onDeploy() async {
+    if (_ticket == null) return;
+    final ticket = _ticket!;
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    final client = widget.boardProvider.client;
+
+    // Fetch routing if not cached.
+    if (_deployRouting == null) {
+      setState(() => _fetchingRouting = true);
+      try {
+        final routing = await client.getDeployRouting();
+        if (mounted) setState(() => _deployRouting = routing);
+      } catch (e) {
+        if (mounted) {
+          setState(() => _fetchingRouting = false);
+          messenger.showSnackBar(SnackBar(
+            content: Text('Failed to load deploy routing: $e'),
+            backgroundColor: errorColor,
+          ));
+        }
+        return;
+      }
+      if (mounted) setState(() => _fetchingRouting = false);
+    }
+
+    if (!mounted) return;
+    final routing = _deployRouting!;
+    final paTeams = routing.toPaTeams();
+
+    // Auto-suggest team from ticket.assignee.
+    String? initialTeam;
+    if (ticket.assignee != null &&
+        paTeams.any((t) => t.name == ticket.assignee)) {
+      initialTeam = ticket.assignee;
+    }
+
+    // Pre-fill objective as "{id}: {title}" and repo from project.
+    final initialObjective = '${ticket.id}: ${ticket.title}';
+    final initialRepo = ticket.project.isNotEmpty ? ticket.project : null;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DeploySheet(
+        paTeams: paTeams,
+        paRepos: routing.repos,
+        initialTeam: initialTeam,
+        initialObjective: initialObjective,
+        initialRepo: initialRepo,
+        onDeploy: (team, mode, objective, {repo}) async {
+          Navigator.pop(context);
+          try {
+            final result = await client.triggerDeployment(
+              team,
+              mode,
+              objective: objective.isNotEmpty ? objective : null,
+              repo: repo,
+              ticket: ticket.id,
+            );
+            if (mounted) {
+              final deployment = Deployment(
+                deploymentId: result.deploymentId,
+                team: result.team,
+                status: 'running',
+                startedAt: DateTime.now().toIso8601String(),
+              );
+              messenger.showSnackBar(SnackBar(
+                content: Text(
+                  result.deploymentId.isNotEmpty
+                      ? 'Deployed ${result.deploymentId}'
+                      : 'Deployment started',
+                ),
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'View',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => ActivityTimelineScreen(
+                          deployment: deployment,
+                          client: client,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ));
+            }
+          } catch (e) {
+            if (mounted) {
+              messenger.showSnackBar(SnackBar(
+                content: Text('Deploy failed: $e'),
+                backgroundColor: errorColor,
+              ));
+            }
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _addComment() async {
@@ -374,6 +485,20 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         title: Text(_ticket?.id ?? 'Ticket'),
         actions: [
           if (_ticket != null) ...[
+            _fetchingRouting
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.rocket_launch_outlined),
+                    tooltip: 'Deploy agent',
+                    onPressed: _editMode ? null : _onDeploy,
+                  ),
             IconButton(
               icon: Icon(_editMode ? Icons.close : Icons.edit_outlined),
               tooltip: _editMode ? 'Cancel edit' : 'Edit',

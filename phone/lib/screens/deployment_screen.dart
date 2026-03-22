@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/deployment.dart';
 import '../services/agent_api_client.dart';
 import '../services/deployment_provider.dart';
+import '../utils/deploy_helpers.dart';
 import 'activity_timeline_screen.dart';
 
 /// Shows deployment status with filtering by team and status.
@@ -225,9 +226,9 @@ class _FilterBar extends StatelessWidget {
                 label: Text(status),
                 selected: provider.filterStatus == status,
                 avatar: Icon(
-                  _statusIcon(status),
+                  statusIcon(status),
                   size: 14,
-                  color: _statusColor(context, status),
+                  color: statusColor(context,status),
                 ),
                 onSelected: (selected) => provider.setFilterStatus(
                   selected ? status : null,
@@ -249,7 +250,7 @@ class _DeploymentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _statusColor(context, deployment.status);
+    final color = statusColor(context,deployment.status);
     final isCrashed = deployment.isFailed;
 
     return Card(
@@ -271,7 +272,7 @@ class _DeploymentTile extends StatelessWidget {
             leading: CircleAvatar(
               backgroundColor: color.withValues(alpha: 0.15),
               child:
-                  Icon(_statusIcon(deployment.status), color: color, size: 20),
+                  Icon(statusIcon(deployment.status), color: color, size: 20),
             ),
             title: Text(
               deployment.deploymentId,
@@ -341,10 +342,28 @@ class _DeploymentTile extends StatelessWidget {
       ));
     }
 
-    return Text.rich(
+    final firstLine = Text.rich(
       TextSpan(children: parts),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
+    );
+
+    final summary = deployment.summary;
+    if (summary == null || summary.isEmpty) return firstLine;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        firstLine,
+        Text(
+          summary,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 }
@@ -376,41 +395,7 @@ class _CompactModelBadge extends StatelessWidget {
   }
 }
 
-// --- Shared helpers ---
-
-Color _statusColor(BuildContext context, String status) {
-  switch (status.toLowerCase()) {
-    case 'running':
-      return Colors.blue;
-    case 'success':
-    case 'completed':
-      return Colors.green;
-    case 'partial':
-      return Colors.orange;
-    case 'failed':
-    case 'crashed':
-      return Colors.red;
-    default:
-      return Theme.of(context).colorScheme.outline;
-  }
-}
-
-IconData _statusIcon(String status) {
-  switch (status.toLowerCase()) {
-    case 'running':
-      return Icons.play_circle_outline;
-    case 'success':
-    case 'completed':
-      return Icons.check_circle_outline;
-    case 'partial':
-      return Icons.warning_amber_outlined;
-    case 'failed':
-    case 'crashed':
-      return Icons.error_outline;
-    default:
-      return Icons.help_outline;
-  }
-}
+// --- Local helpers ---
 
 String _formatTimestamp(String iso) {
   // Show short date+time from ISO string, e.g. "2026-03-13T08:00:00+07:00" → "Mar 13 08:00"

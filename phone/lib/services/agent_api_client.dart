@@ -7,6 +7,7 @@ import '../models/agent_team.dart';
 import '../models/bulletin.dart';
 import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
+import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
 import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
@@ -355,16 +356,27 @@ class AgentApiClient {
         .toList();
   }
 
+  /// Fetch deploy routing — teams with non-interactive modes + repos.
+  ///
+  /// Calls GET /api/deploy-routing (added in PA-906).
+  /// Server already filters out interactive modes.
+  Future<DeployRouting> getDeployRouting() async {
+    final response = await _get('/api/deploy-routing');
+    return DeployRouting.fromJson(response);
+  }
+
   /// Trigger a PA team deployment.
   ///
   /// Validates team + mode on the server before executing.
   /// Returns immediately after the subprocess is started.
   /// Optional [repo] passes `--repo <name>` to PA (for codebase-aware modes).
+  /// Optional [ticket] links the deployment to a ticket in the registry.
   Future<DeployResult> triggerDeployment(
     String team,
     String mode, {
     String? objective,
     String? repo,
+    String? ticket,
   }) async {
     final body = <String, dynamic>{'team': team, 'mode': mode};
     if (objective != null && objective.isNotEmpty) {
@@ -372,6 +384,9 @@ class AgentApiClient {
     }
     if (repo != null && repo.isNotEmpty) {
       body['repo'] = repo;
+    }
+    if (ticket != null && ticket.isNotEmpty) {
+      body['ticket'] = ticket;
     }
     final response = await _post('/api/deploy', body: body);
     return DeployResult.fromJson(response);
