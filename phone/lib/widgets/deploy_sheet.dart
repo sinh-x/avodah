@@ -114,6 +114,17 @@ class _DeploySheetState extends State<DeploySheet> {
   bool get _canLaunch =>
       _selectedTeam != null && _selectedMode != null && !_deploying;
 
+  Color? _modeTypeColor(String? modeType) {
+    switch (modeType) {
+      case 'work':
+        return Colors.blue;
+      case 'housekeeping':
+        return Colors.orange;
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -252,9 +263,19 @@ class _DeploySheetState extends State<DeploySheet> {
           runSpacing: 4,
           children: paTeam.deployModes.map((mode) {
             final selected = _selectedMode == mode.id;
+            final modeColor = _modeTypeColor(mode.modeType);
             return FilterChip(
               label: Text(mode.label),
               selected: selected,
+              backgroundColor:
+                  modeColor?.withValues(alpha: 0.12),
+              selectedColor: modeColor?.withValues(alpha: 0.25),
+              avatar: modeColor != null
+                  ? CircleAvatar(
+                      backgroundColor: modeColor,
+                      radius: 5,
+                    )
+                  : null,
               onSelected: _deploying
                   ? null
                   : (_) => setState(() {
