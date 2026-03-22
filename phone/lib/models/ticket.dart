@@ -100,7 +100,7 @@ class Ticket {
       tags: tagsList.map((e) => e as String).toList(),
       dependencies: depsList.map((e) => e as String).toList(),
       attachments: attachmentsList.map((e) => e as String).toList(),
-      docRef: json['docRef'] as String?,
+      docRef: json['doc_ref'] as String?,
       comments: commentsList
           .map((e) => TicketComment.fromJson(e as Map<String, dynamic>))
           .toList(),
