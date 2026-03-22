@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import '../services/agent_api_client.dart';
 
@@ -7,8 +12,9 @@ import '../services/agent_api_client.dart';
 ///
 /// Fetches the document at [path] via [AgentApiClient.getDocument] and renders
 /// it based on file type: markdown (.md/.markdown) → [MarkdownBody], PDF →
-/// placeholder, image → placeholder, directory → entry list. Shows a loading
-/// indicator while fetching and an error state with retry button on failure.
+/// [PDFView] (Android/iOS) or fallback message (other platforms), image →
+/// placeholder, directory → entry list. Shows a loading indicator while
+/// fetching and an error state with retry button on failure.
 class DocumentViewerScreen extends StatefulWidget {
   final String path;
   final AgentApiClient client;
@@ -27,6 +33,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   DocumentContent? _document;
   bool _loading = true;
   String? _error;
+  String? _pdfTempPath;
 
   String get _filename {
     final parts = widget.path.split('/');
@@ -51,12 +58,29 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     _loadDocument();
   }
 
+  @override
+  void dispose() {
+    _cleanupTempFile();
+    super.dispose();
+  }
+
+  void _cleanupTempFile() {
+    final path = _pdfTempPath;
+    if (path != null) {
+      File(path).delete().ignore();
+    }
+  }
+
   Future<void> _loadDocument() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      if (_isPdf) {
+        await _loadPdfToTempFile();
+        return;
+      }
       final doc = await widget.client.getDocument(widget.path);
       if (mounted) {
         setState(() {
@@ -71,6 +95,33 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           _loading = false;
         });
       }
+    }
+  }
+
+  /// Downloads the PDF to a temp file for [PDFView].
+  ///
+  /// On non-Android/iOS platforms (e.g. Linux desktop testing), no download
+  /// is performed — the viewer falls back to a platform-unsupported message.
+  Future<void> _loadPdfToTempFile() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    final url =
+        '${widget.client.baseUrl}/api/documents?path=${Uri.encodeComponent(widget.path)}';
+    final response =
+        await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/$_filename');
+    await file.writeAsBytes(response.bodyBytes);
+    if (mounted) {
+      setState(() {
+        _pdfTempPath = file.path;
+        _loading = false;
+      });
     }
   }
 
@@ -115,12 +166,12 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Widget _buildContent() {
+    if (_isPdf) {
+      return _buildPdfViewer();
+    }
     final doc = _document!;
     if (doc.type == 'directory') {
       return _buildDirectoryListing(doc);
-    }
-    if (_isPdf) {
-      return _buildPdfPlaceholder();
     }
     if (_isImage) {
       return _buildImagePlaceholder();
@@ -138,7 +189,23 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
-  Widget _buildPdfPlaceholder() {
+  Widget _buildPdfViewer() {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return _buildPdfDesktopFallback();
+    }
+    if (_pdfTempPath == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return PDFView(
+      filePath: _pdfTempPath!,
+      enableSwipe: true,
+      swipeHorizontal: false,
+      autoSpacing: false,
+      pageFling: true,
+    );
+  }
+
+  Widget _buildPdfDesktopFallback() {
     final theme = Theme.of(context);
     return Center(
       child: Column(
@@ -147,7 +214,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           Icon(Icons.picture_as_pdf,
               size: 64, color: theme.colorScheme.secondary),
           const SizedBox(height: 16),
-          Text('PDF viewer not yet available',
+          Text('PDF viewing not supported on this platform',
               style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(_filename, style: theme.textTheme.bodySmall),
