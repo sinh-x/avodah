@@ -35,6 +35,9 @@ class DeploySheet extends StatefulWidget {
   /// Pre-filled objective text. User can edit before launching.
   final String? initialObjective;
 
+  /// Pre-selected repo name. User can change before launching.
+  final String? initialRepo;
+
   /// Called when user taps Launch.
   /// [objective] may be empty string if user left the field blank.
   /// [repo] is null when no repo was selected.
@@ -47,6 +50,7 @@ class DeploySheet extends StatefulWidget {
     this.paRepos = const [],
     this.initialTeam,
     this.initialObjective,
+    this.initialRepo,
     required this.onDeploy,
   });
 
@@ -66,6 +70,12 @@ class _DeploySheetState extends State<DeploySheet> {
     super.initState();
     _objectiveController =
         TextEditingController(text: widget.initialObjective ?? '');
+
+    // Pre-select repo if provided and it exists in the list.
+    if (widget.initialRepo != null &&
+        widget.paRepos.any((r) => r.name == widget.initialRepo)) {
+      _selectedRepo = widget.initialRepo;
+    }
 
     // Pre-select team from initialTeam, or auto-select if only one team.
     if (widget.initialTeam != null &&
