@@ -475,6 +475,58 @@ class AgentApiClient {
     return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
   }
 
+  /// Add a comment to a ticket.
+  ///
+  /// POST /api/tickets/:id/comments body={content, author} → {"ticket": {...}}
+  Future<Ticket> addComment(
+      String ticketId, String content, String author) async {
+    final encoded = Uri.encodeComponent(ticketId);
+    final response = await _post(
+      '/api/tickets/$encoded/comments',
+      body: {'content': content, 'author': author},
+    );
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
+  /// Edit a comment on a ticket.
+  ///
+  /// PATCH /api/tickets/:id/comments/:commentId body={content, actor} → {"ticket": {...}}
+  Future<Ticket> editComment(
+      String ticketId, String commentId, String content, String actor) async {
+    final encodedId = Uri.encodeComponent(ticketId);
+    final encodedComment = Uri.encodeComponent(commentId);
+    final response = await _patch(
+      '/api/tickets/$encodedId/comments/$encodedComment',
+      body: {'content': content, 'actor': actor},
+    );
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
+  /// Delete a comment from a ticket.
+  ///
+  /// DELETE /api/tickets/:id/comments/:commentId body={actor} → {"success": true}
+  Future<void> deleteComment(
+      String ticketId, String commentId, String actor) async {
+    final encodedId = Uri.encodeComponent(ticketId);
+    final encodedComment = Uri.encodeComponent(commentId);
+    await _delete(
+      '/api/tickets/$encodedId/comments/$encodedComment',
+      body: {'actor': actor},
+    );
+  }
+
+  // --- Documents ---
+
+  /// Fetch a document or directory listing from the PA file system.
+  ///
+  /// GET /api/documents?path=`<path>`
+  /// Returns file content (markdown, text, etc.) or a directory listing.
+  Future<DocumentContent> getDocument(String path) async {
+    final encoded = Uri.encodeComponent(path);
+    final response = await _get('/api/documents?path=$encoded');
+    return DocumentContent.fromJson(response);
+  }
+
   // --- Bulletins ---
 
   /// List all bulletins.
@@ -546,6 +598,20 @@ class AgentApiClient {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> _delete(String path,
+      {Map<String, dynamic>? body}) async {
+    final request = http.Request('DELETE', Uri.parse('$baseUrl$path'));
+    request.headers['Content-Type'] = 'application/json';
+    if (body != null) request.body = jsonEncode(body);
+    final streamed = await _client.send(request).timeout(const Duration(seconds: 10));
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwApiException(response.statusCode, response.body);
+    }
+    if (response.body.isEmpty) return {};
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Never _throwApiException(int statusCode, String rawBody) {
     try {
       final json = jsonDecode(rawBody) as Map<String, dynamic>;
@@ -575,6 +641,34 @@ class AgentApiException implements Exception {
 
   @override
   String toString() => 'AgentApiException($statusCode/$code): $message';
+}
+
+/// Result type for document fetch (file content or directory listing).
+class DocumentContent {
+  final String path;
+  final String type; // 'file' | 'directory'
+  final String? content; // text content for files (markdown, plain text)
+  final String? mimeType; // e.g. 'text/markdown', 'application/pdf'
+  final List<String>? entries; // directory entry names
+
+  const DocumentContent({
+    required this.path,
+    required this.type,
+    this.content,
+    this.mimeType,
+    this.entries,
+  });
+
+  factory DocumentContent.fromJson(Map<String, dynamic> json) {
+    final entriesRaw = json['entries'] as List?;
+    return DocumentContent(
+      path: json['path'] as String? ?? '',
+      type: json['type'] as String? ?? 'file',
+      content: json['content'] as String?,
+      mimeType: json['mimeType'] as String?,
+      entries: entriesRaw?.map((e) => e as String).toList(),
+    );
+  }
 }
 
 /// Result type for paginated folder listing (done folder).

@@ -4,22 +4,28 @@
 // JSON keys are camelCase as returned by the server.
 
 class TicketComment {
+  final String id;
   final String author;
   final String content;
   final DateTime timestamp;
+  final String? editedAt;
 
   const TicketComment({
+    required this.id,
     required this.author,
     required this.content,
     required this.timestamp,
+    this.editedAt,
   });
 
   factory TicketComment.fromJson(Map<String, dynamic> json) {
     return TicketComment(
+      id: json['id'] as String? ?? '',
       author: json['author'] as String? ?? '',
       content: json['content'] as String? ?? '',
       timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
           DateTime.now(),
+      editedAt: json['editedAt'] as String?,
     );
   }
 }
@@ -40,6 +46,7 @@ class Ticket {
   final String? to;
   final List<String> tags;
   final List<String> dependencies;
+  final List<String> attachments;
   final String? docRef;
   final List<TicketComment> comments;
   final DateTime createdAt;
@@ -62,6 +69,7 @@ class Ticket {
     this.to,
     required this.tags,
     required this.dependencies,
+    required this.attachments,
     this.docRef,
     required this.comments,
     required this.createdAt,
@@ -72,6 +80,7 @@ class Ticket {
   factory Ticket.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List? ?? [];
     final depsList = json['dependencies'] as List? ?? [];
+    final attachmentsList = json['attachments'] as List? ?? [];
     final commentsList = json['comments'] as List? ?? [];
 
     return Ticket(
@@ -90,7 +99,8 @@ class Ticket {
       to: json['to'] as String?,
       tags: tagsList.map((e) => e as String).toList(),
       dependencies: depsList.map((e) => e as String).toList(),
-      docRef: json['docRef'] as String?,
+      attachments: attachmentsList.map((e) => e as String).toList(),
+      docRef: json['doc_ref'] as String?,
       comments: commentsList
           .map((e) => TicketComment.fromJson(e as Map<String, dynamic>))
           .toList(),

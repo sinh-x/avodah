@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
 import '../models/ticket.dart';
+import '../screens/document_viewer_screen.dart';
 import '../services/board_provider.dart';
 import '../widgets/deploy_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
@@ -12,7 +13,9 @@ import 'activity_timeline_screen.dart';
 /// Full ticket detail view with read and edit modes.
 ///
 /// Fetches the ticket by ID on init using [boardProvider.client].
-/// In read mode, displays all ticket fields.
+/// In read mode, displays all ticket fields. Doc ref and attachments are
+/// tappable — they navigate to [DocumentViewerScreen].
+/// A comment input bar is fixed at the bottom of the read view.
 /// Toggle to edit mode via the AppBar edit icon to change status, priority,
 /// team, assignee, estimate, and tags. Save calls [boardProvider.client.updateTicket].
 class TicketDetailScreen extends StatefulWidget {
@@ -35,6 +38,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   String? _error;
   bool _editMode = false;
   bool _saving = false;
+  bool _submittingComment = false;
 
   // Deploy state
   DeployRouting? _deployRouting;
@@ -48,6 +52,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final _teamController = TextEditingController();
   final _assigneeController = TextEditingController();
   final _tagInputController = TextEditingController();
+  final _commentController = TextEditingController();
 
   @override
   void initState() {
@@ -60,6 +65,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     _teamController.dispose();
     _assigneeController.dispose();
     _tagInputController.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
@@ -236,6 +242,242 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  Future<void> _addComment() async {
+    final content = _commentController.text.trim();
+    if (content.isEmpty || _ticket == null) return;
+    setState(() => _submittingComment = true);
+    try {
+      final updated = await widget.boardProvider.client
+          .addComment(_ticket!.id, content, 'sinh');
+      if (mounted) {
+        setState(() {
+          _ticket = updated;
+          _submittingComment = false;
+        });
+        _commentController.clear();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submittingComment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add comment: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildCommentItem(TicketComment comment) {
+    return Dismissible(
+      key: Key('comment-${comment.id}'),
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          // Swipe left → delete
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Delete Comment'),
+              content: const Text('Delete this comment?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: TextButton.styleFrom(
+                      foregroundColor:
+                          Theme.of(context).colorScheme.error),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          );
+          if (confirmed == true) await _deleteComment(comment);
+          return false;
+        } else {
+          // Swipe right → edit
+          _showEditCommentSheet(comment);
+          return false;
+        }
+      },
+      background: _buildSwipeBackground(isEdit: true),
+      secondaryBackground: _buildSwipeBackground(isEdit: false),
+      child: GestureDetector(
+        onLongPress: () => _showCommentContextMenu(comment),
+        child: _CommentCard(comment: comment),
+      ),
+    );
+  }
+
+  Widget _buildSwipeBackground({required bool isEdit}) {
+    final color = isEdit ? Colors.blue : Colors.red;
+    return Container(
+      alignment: isEdit ? Alignment.centerLeft : Alignment.centerRight,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      color: color.withValues(alpha: 0.15),
+      child: Icon(
+        isEdit ? Icons.edit_outlined : Icons.delete_outlined,
+        color: color,
+      ),
+    );
+  }
+
+  void _showCommentContextMenu(TicketComment comment) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outlined, color: errorColor),
+              title: Text('Delete',
+                  style: TextStyle(color: errorColor)),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    ).then((action) async {
+      if (!mounted) return;
+      if (action == 'edit') {
+        _showEditCommentSheet(comment);
+      } else if (action == 'delete') {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete Comment'),
+            content: const Text('Delete this comment?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(
+                    foregroundColor:
+                        Theme.of(context).colorScheme.error),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true && mounted) await _deleteComment(comment);
+      }
+    });
+  }
+
+  void _showEditCommentSheet(TicketComment comment) {
+    final editController = TextEditingController(text: comment.content);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Edit Comment',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            TextField(
+              controller: editController,
+              autofocus: true,
+              maxLines: null,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () {
+                final content = editController.text.trim();
+                Navigator.pop(sheetCtx);
+                if (content.isNotEmpty && content != comment.content) {
+                  _editComment(comment, content);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editComment(TicketComment comment, String content) async {
+    if (_ticket == null) return;
+    try {
+      final updated = await widget.boardProvider.client
+          .editComment(_ticket!.id, comment.id, content, 'sinh');
+      if (mounted) setState(() => _ticket = updated);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to edit comment: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteComment(TicketComment comment) async {
+    if (_ticket == null) return;
+    try {
+      await widget.boardProvider.client
+          .deleteComment(_ticket!.id, comment.id, 'sinh');
+      if (mounted) {
+        setState(() {
+          _ticket = Ticket(
+            id: _ticket!.id,
+            project: _ticket!.project,
+            title: _ticket!.title,
+            summary: _ticket!.summary,
+            description: _ticket!.description,
+            status: _ticket!.status,
+            priority: _ticket!.priority,
+            type: _ticket!.type,
+            team: _ticket!.team,
+            assignee: _ticket!.assignee,
+            estimate: _ticket!.estimate,
+            from: _ticket!.from,
+            to: _ticket!.to,
+            tags: _ticket!.tags,
+            dependencies: _ticket!.dependencies,
+            attachments: _ticket!.attachments,
+            docRef: _ticket!.docRef,
+            comments: _ticket!.comments
+                .where((c) => c.id != comment.id)
+                .toList(),
+            createdAt: _ticket!.createdAt,
+            updatedAt: _ticket!.updatedAt,
+            resolvedAt: _ticket!.resolvedAt,
+          );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete comment: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,7 +549,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       );
     }
     if (_ticket == null) return const SizedBox.shrink();
-    return _editMode ? _buildEditView(context) : _buildReadView(context);
+    if (_editMode) return _buildEditView(context);
+    return Column(
+      children: [
+        Expanded(child: _buildReadView(context)),
+        _buildCommentInputBar(),
+      ],
+    );
   }
 
   Widget _buildReadView(BuildContext context) {
@@ -372,10 +620,52 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 16),
             _SectionLabel('Doc Ref'),
             const SizedBox(height: 4),
-            Text(
-              ticket.docRef!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.primary),
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DocumentViewerScreen(
+                    path: ticket.docRef!,
+                    client: widget.boardProvider.client,
+                  ),
+                ),
+              ),
+              child: Text(
+                ticket.docRef!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+          if (ticket.attachments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _SectionLabel('Attachments'),
+            const SizedBox(height: 4),
+            ...ticket.attachments.map(
+              (attachment) => ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.attach_file,
+                    size: 16, color: theme.colorScheme.primary),
+                title: Text(
+                  attachment.split('/').last,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DocumentViewerScreen(
+                      path: attachment,
+                      client: widget.boardProvider.client,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
           if (ticket.tags.isNotEmpty) ...[
@@ -399,7 +689,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 16),
             _SectionLabel('Comments'),
             const SizedBox(height: 6),
-            ...ticket.comments.map((c) => _CommentCard(comment: c)),
+            ...ticket.comments.map((c) => _buildCommentItem(c)),
           ],
           const SizedBox(height: 16),
           Text(
@@ -411,6 +701,44 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           ),
           const SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCommentInputBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentController,
+                decoration: const InputDecoration(
+                  hintText: 'Add a comment…',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                maxLines: null,
+                textInputAction: TextInputAction.newline,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _submittingComment
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.send),
+                    tooltip: 'Send comment',
+                    onPressed: _addComment,
+                  ),
+          ],
+        ),
       ),
     );
   }
@@ -681,6 +1009,16 @@ class _CommentCard extends StatelessWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline),
                 ),
+                if (comment.editedAt != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    'edited',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 4),

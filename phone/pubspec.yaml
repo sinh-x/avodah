@@ -12,6 +12,7 @@ dependencies:
   shared_preferences: ^2.2.0
   http: ^1.2.0
   flutter_markdown: ^0.7.0
+  flutter_pdfview: ^1.4.4
 
   # Local Database (Drift - SQLite)
   drift: ^2.22.1
