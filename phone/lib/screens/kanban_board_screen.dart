@@ -146,11 +146,9 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   }
 
   Widget _buildFilterRow(BuildContext context, BoardProvider provider) {
-    final projects = <String>['personal-assistant', 'avodah'];
-    if (provider.board != null &&
-        !projects.contains(provider.board!.project)) {
-      projects.add(provider.board!.project);
-    }
+    // Build project list from API response, sorted alphabetically.
+    final projectItems = provider.projects.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     final teams = provider.board != null
         ? (provider.board!.teamCounts.keys.toList()..sort())
@@ -161,17 +159,26 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          DropdownButton<String>(
-            value: provider.selectedProject,
-            isDense: true,
-            underline: const SizedBox.shrink(),
-            items: projects
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (p) {
-              if (p != null) provider.setProject(p);
-            },
-          ),
+          if (projectItems.isEmpty)
+            const Text('No projects')
+          else
+            DropdownButton<String>(
+              value: provider.selectedProject != null &&
+                      projectItems
+                          .any((p) => p.key == provider.selectedProject)
+                  ? provider.selectedProject
+                  : null,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              items: projectItems
+                  .map((p) => DropdownMenuItem(
+                      value: p.key,
+                      child: Text('${p.key} (${p.activeTicketCount})')))
+                  .toList(),
+              onChanged: (p) {
+                if (p != null) provider.setProject(p);
+              },
+            ),
           if (teams.isNotEmpty) ...[
             const SizedBox(width: 12),
             FilterChip(

@@ -413,6 +413,26 @@ class AgentApiClient {
 
   // --- Tickets ---
 
+  /// List available projects with full metadata.
+  ///
+  /// GET /api/projects → {"projects": [{key, prefix, description, path, activeTicketCount}, ...]}
+  /// Filters to projects with activeTicketCount > 0 for the dropdown.
+  /// Returns empty list on failure.
+  ///
+  /// Note: GET /api/ticket-projects is deprecated; this endpoint supersedes it.
+  Future<List<TicketProject>> getProjects() async {
+    try {
+      final response = await _get('/api/projects');
+      final projects = response['projects'] as List? ?? [];
+      return projects
+          .map((e) => TicketProject.fromJson(e as Map<String, dynamic>))
+          .where((p) => p.activeTicketCount > 0)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Get the kanban board view for a project.
   ///
   /// GET /api/board?project=X&team=Y → {"board": {...}}
