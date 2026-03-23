@@ -140,14 +140,26 @@ class BoardColumn {
 
 class TicketProject {
   final String key;
-  final int count;
+  final String? prefix;
+  final String? description;
+  final String? path;
+  final int activeTicketCount;
 
-  const TicketProject({required this.key, required this.count});
+  const TicketProject({
+    required this.key,
+    this.prefix,
+    this.description,
+    this.path,
+    required this.activeTicketCount,
+  });
 
   factory TicketProject.fromJson(Map<String, dynamic> json) {
     return TicketProject(
       key: json['key'] as String? ?? '',
-      count: json['count'] as int? ?? 0,
+      prefix: json['prefix'] as String?,
+      description: json['description'] as String?,
+      path: json['path'] as String?,
+      activeTicketCount: json['activeTicketCount'] as int? ?? 0,
     );
   }
 }

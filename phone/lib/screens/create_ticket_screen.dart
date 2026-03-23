@@ -19,7 +19,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _saving = false;
 
-  String _selectedProject = 'personal-assistant';
+  late String? _selectedProject;
   String _selectedType = 'task';
   String _selectedPriority = 'medium';
   String? _selectedEstimate;
@@ -28,7 +28,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   final _teamController = TextEditingController();
   final _summaryController = TextEditingController();
 
-  static const _projects = ['personal-assistant', 'avodah'];
   static const _types = [
     'feature',
     'bug',
@@ -43,6 +42,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   static const _estimates = ['XS', 'S', 'M', 'L', 'XL'];
 
   @override
+  void initState() {
+    super.initState();
+    _selectedProject = widget.boardProvider.selectedProject;
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _teamController.dispose();
@@ -55,7 +60,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     setState(() => _saving = true);
     try {
       final body = <String, dynamic>{
-        'project': _selectedProject,
+        'project': _selectedProject ?? '',
         'title': _titleController.text.trim(),
         'type': _selectedType,
         'priority': _selectedPriority,
@@ -109,21 +114,38 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Project
-            DropdownButtonFormField<String>(
-              initialValue: _selectedProject,
-              decoration: const InputDecoration(
-                labelText: 'Project',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: _projects
-                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                  .toList(),
-              onChanged: (p) {
-                if (p != null) setState(() => _selectedProject = p);
-              },
-            ),
+            // Project — populated from API via boardProvider.projects
+            Builder(builder: (context) {
+              final projects = widget.boardProvider.projects;
+              if (projects.isEmpty) {
+                return const InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Project',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  child: Text('No projects'),
+                );
+              }
+              // Ensure current selection is valid.
+              final validKey = projects.any((p) => p.key == _selectedProject)
+                  ? _selectedProject
+                  : projects.first.key;
+              return DropdownButtonFormField<String>(
+                initialValue: validKey,
+                decoration: const InputDecoration(
+                  labelText: 'Project',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: projects
+                    .map((p) => DropdownMenuItem(value: p.key, child: Text(p.key)))
+                    .toList(),
+                onChanged: (p) {
+                  if (p != null) setState(() => _selectedProject = p);
+                },
+              );
+            }),
             const SizedBox(height: 16),
 
             // Title

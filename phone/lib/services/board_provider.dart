@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/bulletin.dart';
 import '../models/ticket.dart';
 import 'agent_api_client.dart';
+
+const _prefSelectedProject = 'selected_board_project';
 
 /// Kanban board status categorization.
 const _activeStatuses = {
@@ -35,12 +38,20 @@ class BoardProvider extends ChangeNotifier {
   List<TicketProject> _projects = [];
   bool _loading = false;
   String? _error;
-  String _selectedProject = 'personal-assistant';
+  String? _selectedProject;
   String? _selectedTeam;
   bool _showTerminal = false;
   Timer? _pollTimer;
+  SharedPreferences? _prefs;
 
-  BoardProvider(this._client);
+  BoardProvider(this._client) {
+    _initPrefs();
+  }
+
+  Future<void> _initPrefs() async {
+    _prefs = await SharedPreferences.getInstance();
+    _selectedProject = _prefs!.getString(_prefSelectedProject);
+  }
 
   // --- Client access ---
 
@@ -54,7 +65,7 @@ class BoardProvider extends ChangeNotifier {
   List<TicketProject> get projects => _projects;
   bool get loading => _loading;
   String? get error => _error;
-  String get selectedProject => _selectedProject;
+  String? get selectedProject => _selectedProject;
   String? get selectedTeam => _selectedTeam;
   bool get showTerminal => _showTerminal;
 
@@ -105,6 +116,7 @@ class BoardProvider extends ChangeNotifier {
   void setProject(String project) {
     if (_selectedProject == project) return;
     _selectedProject = project;
+    _prefs?.setString(_prefSelectedProject, project);
     notifyListeners();
     refresh();
   }
@@ -132,20 +144,23 @@ class BoardProvider extends ChangeNotifier {
     }
 
     try {
-      final results = await Future.wait([
-        _client.getBoard(project: _selectedProject, team: _selectedTeam),
-        _client.getBulletins(),
-        _client.getTicketProjects(),
-      ]);
-      _board = results[0] as BoardView;
-      _bulletins = results[1] as List<Bulletin>;
-      _projects = results[2] as List<TicketProject>;
-      // Update selected project to first alphabetically if current selection
-      // is not in the project list (and projects are available).
+      // Load projects first to determine selected project before fetching board.
+      final projectsList = await _client.getProjects();
+      _projects = projectsList;
+
+      // Resolve selected project: persisted → first alphabetically.
       if (_projects.isNotEmpty &&
           !_projects.any((p) => p.key == _selectedProject)) {
         _selectedProject = (_projects.map((p) => p.key).toList()..sort()).first;
       }
+
+      final results = await Future.wait([
+        _client.getBoard(
+            project: _selectedProject ?? '', team: _selectedTeam),
+        _client.getBulletins(),
+      ]);
+      _board = results[0] as BoardView;
+      _bulletins = results[1] as List<Bulletin>;
       _error = null;
     } catch (e) {
       _error = e.toString();

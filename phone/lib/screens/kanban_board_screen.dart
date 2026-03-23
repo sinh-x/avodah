@@ -163,14 +163,17 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             const Text('No projects')
           else
             DropdownButton<String>(
-              value: projectItems.any((p) => p.key == provider.selectedProject)
+              value: provider.selectedProject != null &&
+                      projectItems
+                          .any((p) => p.key == provider.selectedProject)
                   ? provider.selectedProject
                   : null,
               isDense: true,
               underline: const SizedBox.shrink(),
               items: projectItems
                   .map((p) => DropdownMenuItem(
-                      value: p.key, child: Text('${p.key} (${p.count})')))
+                      value: p.key,
+                      child: Text('${p.key} (${p.activeTicketCount})')))
                   .toList(),
               onChanged: (p) {
                 if (p != null) provider.setProject(p);
