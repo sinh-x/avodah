@@ -138,6 +138,20 @@ class BoardColumn {
   }
 }
 
+class TicketProject {
+  final String key;
+  final int count;
+
+  const TicketProject({required this.key, required this.count});
+
+  factory TicketProject.fromJson(Map<String, dynamic> json) {
+    return TicketProject(
+      key: json['key'] as String? ?? '',
+      count: json['count'] as int? ?? 0,
+    );
+  }
+}
+
 class BoardView {
   final String project;
   final List<BoardColumn> columns;

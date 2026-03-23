@@ -32,6 +32,7 @@ class BoardProvider extends ChangeNotifier {
 
   BoardView? _board;
   List<Bulletin> _bulletins = [];
+  List<TicketProject> _projects = [];
   bool _loading = false;
   String? _error;
   String _selectedProject = 'personal-assistant';
@@ -50,6 +51,7 @@ class BoardProvider extends ChangeNotifier {
 
   BoardView? get board => _board;
   List<Bulletin> get bulletins => _bulletins;
+  List<TicketProject> get projects => _projects;
   bool get loading => _loading;
   String? get error => _error;
   String get selectedProject => _selectedProject;
@@ -133,9 +135,17 @@ class BoardProvider extends ChangeNotifier {
       final results = await Future.wait([
         _client.getBoard(project: _selectedProject, team: _selectedTeam),
         _client.getBulletins(),
+        _client.getTicketProjects(),
       ]);
       _board = results[0] as BoardView;
       _bulletins = results[1] as List<Bulletin>;
+      _projects = results[2] as List<TicketProject>;
+      // Update selected project to first alphabetically if current selection
+      // is not in the project list (and projects are available).
+      if (_projects.isNotEmpty &&
+          !_projects.any((p) => p.key == _selectedProject)) {
+        _selectedProject = (_projects.map((p) => p.key).toList()..sort()).first;
+      }
       _error = null;
     } catch (e) {
       _error = e.toString();

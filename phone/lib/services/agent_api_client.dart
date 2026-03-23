@@ -413,6 +413,22 @@ class AgentApiClient {
 
   // --- Tickets ---
 
+  /// List available ticket projects with active ticket counts.
+  ///
+  /// GET /api/ticket-projects → {"projects": [{"key": "avodah", "count": 5}, ...]}
+  /// Returns empty list on failure.
+  Future<List<TicketProject>> getTicketProjects() async {
+    try {
+      final response = await _get('/api/ticket-projects');
+      final projects = response['projects'] as List? ?? [];
+      return projects
+          .map((e) => TicketProject.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Get the kanban board view for a project.
   ///
   /// GET /api/board?project=X&team=Y → {"board": {...}}
