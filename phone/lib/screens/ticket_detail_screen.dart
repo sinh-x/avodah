@@ -13,8 +13,8 @@ import 'activity_timeline_screen.dart';
 /// Full ticket detail view with read and edit modes.
 ///
 /// Fetches the ticket by ID on init using [boardProvider.client].
-/// In read mode, displays all ticket fields. Doc ref and attachments are
-/// tappable — they navigate to [DocumentViewerScreen].
+/// In read mode, displays all ticket fields. Doc refs are tappable rows
+/// with type badges — they navigate to [DocumentViewerScreen].
 /// A comment input bar is fixed at the bottom of the read view.
 /// Toggle to edit mode via the AppBar edit icon to change status, priority,
 /// team, assignee, estimate, and tags. Save calls [boardProvider.client.updateTicket].
@@ -457,9 +457,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             from: _ticket!.from,
             to: _ticket!.to,
             tags: _ticket!.tags,
-            dependencies: _ticket!.dependencies,
-            attachments: _ticket!.attachments,
-            docRef: _ticket!.docRef,
+            blockedBy: _ticket!.blockedBy,
+            docRefs: _ticket!.docRefs,
             comments: _ticket!.comments
                 .where((c) => c.id != comment.id)
                 .toList(),
@@ -598,7 +597,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   Icon(Icons.person_outline,
                       size: 14, color: theme.colorScheme.outline),
                   const SizedBox(width: 4),
-                  Text(ticket.assignee!, style: theme.textTheme.bodySmall),
+                  _AssigneeText(assignee: ticket.assignee!),
                 ],
               ],
             ),
@@ -616,51 +615,18 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 4),
             MarkdownBody(data: ticket.description!),
           ],
-          if (ticket.docRef != null && ticket.docRef!.isNotEmpty) ...[
+          if (ticket.docRefs.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _SectionLabel('Doc Ref'),
+            _SectionLabel('Doc Refs'),
             const SizedBox(height: 4),
-            InkWell(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DocumentViewerScreen(
-                    path: ticket.docRef!,
-                    client: widget.boardProvider.client,
-                  ),
-                ),
-              ),
-              child: Text(
-                ticket.docRef!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
-          if (ticket.attachments.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _SectionLabel('Attachments'),
-            const SizedBox(height: 4),
-            ...ticket.attachments.map(
-              (attachment) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.attach_file,
-                    size: 16, color: theme.colorScheme.primary),
-                title: Text(
-                  attachment.split('/').last,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
+            ...ticket.docRefs.map(
+              (ref) => _DocRefRow(
+                docRef: ref,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => DocumentViewerScreen(
-                      path: attachment,
+                      path: ref.path,
                       client: widget.boardProvider.client,
                     ),
                   ),
@@ -973,6 +939,138 @@ class _InfoChip extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
           fontSize: 11,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+/// Displays an assignee string with team/agent parsing.
+/// If [assignee] contains '/', renders "team/" in muted text + "agent" in bold.
+class _AssigneeText extends StatelessWidget {
+  final String assignee;
+  const _AssigneeText({required this.assignee});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!assignee.contains('/')) {
+      return Text(assignee, style: theme.textTheme.bodySmall);
+    }
+    final idx = assignee.indexOf('/');
+    final teamPart = assignee.substring(0, idx + 1); // includes '/'
+    final agentPart = assignee.substring(idx + 1);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          teamPart,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        Text(
+          agentPart,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A tappable row displaying a single [DocRef] with a type badge, optional
+/// star for primary, and the ref path.
+class _DocRefRow extends StatelessWidget {
+  final DocRef docRef;
+  final VoidCallback onTap;
+  const _DocRefRow({required this.docRef, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            _DocRefBadge(type: docRef.type),
+            const SizedBox(width: 8),
+            if (docRef.primary) ...[
+              const Icon(Icons.star, size: 12, color: Colors.amber),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: Text(
+                docRef.path,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Colored badge chip showing the doc ref type abbreviation.
+class _DocRefBadge extends StatelessWidget {
+  final String type;
+  const _DocRefBadge({required this.type});
+
+  String get _label {
+    switch (type) {
+      case 'requirements':
+        return 'REQ';
+      case 'implementation':
+        return 'IMPL';
+      case 'spike':
+        return 'SPIKE';
+      case 'review-report':
+        return 'REVIEW';
+      default:
+        return 'ATTACH';
+    }
+  }
+
+  Color get _color {
+    switch (type) {
+      case 'requirements':
+        return Colors.indigo;
+      case 'implementation':
+        return Colors.green;
+      case 'spike':
+        return Colors.teal;
+      case 'review-report':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        _label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
