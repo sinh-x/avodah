@@ -218,23 +218,46 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ));
               return;
             }
-            // Fetch real deployment from server instead of fabricating one.
+            // Server may return empty deployment_id (ID generated async).
+            // Poll listDeployments to find the real deployment.
             Deployment? deployment;
-            if (result.deploymentId.isNotEmpty) {
-              await Future<void>.delayed(const Duration(seconds: 1));
+            final beforeDeploy = DateTime.now().subtract(const Duration(seconds: 5));
+            for (var attempt = 0; attempt < 3; attempt++) {
+              await Future<void>.delayed(const Duration(seconds: 2));
+              if (!mounted) return;
               try {
                 final deployments = await client.listDeployments();
-                deployment = deployments.cast<Deployment?>().firstWhere(
-                      (d) => d!.deploymentId == result.deploymentId,
-                      orElse: () => null,
-                    );
+                // Match by exact ID if available, else by team + recent start.
+                if (result.deploymentId.isNotEmpty) {
+                  deployment = deployments.cast<Deployment?>().firstWhere(
+                        (d) => d!.deploymentId == result.deploymentId,
+                        orElse: () => null,
+                      );
+                } else {
+                  // Find most recent deployment for this team started after our trigger.
+                  final candidates = deployments.where((d) {
+                    if (d.team != team) return false;
+                    final started = DateTime.tryParse(d.startedAt);
+                    return started != null && started.isAfter(beforeDeploy);
+                  }).toList()
+                    ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+                  if (candidates.isNotEmpty) {
+                    deployment = candidates.first;
+                  }
+                }
+                if (deployment != null) break;
               } catch (_) {
-                // Non-fatal — we'll still show the SnackBar without View.
+                // Retry on next attempt.
               }
             }
             if (!mounted) return;
+            final displayId = deployment?.deploymentId ?? result.deploymentId;
             messenger.showSnackBar(SnackBar(
-              content: Text('Deployed ${result.deploymentId}'),
+              content: Text(
+                displayId.isNotEmpty
+                    ? 'Deployed $displayId'
+                    : 'Deployment launched',
+              ),
               duration: const Duration(seconds: 8),
               action: deployment != null
                   ? SnackBarAction(
