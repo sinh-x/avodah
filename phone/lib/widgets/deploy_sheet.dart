@@ -209,7 +209,7 @@ class _DeploySheetState extends State<DeploySheet> {
                   minLines: 2,
                   maxLines: 5,
                   decoration: InputDecoration(
-                    hintText: 'e.g. 2026-03-16-task.md or leave blank',
+                    hintText: 'e.g. AVO-008: Implement feature or leave blank',
                     border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,

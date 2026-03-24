@@ -42,6 +42,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   // Deploy state
   DeployRouting? _deployRouting;
+  DateTime? _deployRoutingFetchedAt;
   bool _fetchingRouting = false;
 
   // Edit state
@@ -146,12 +147,19 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     final errorColor = Theme.of(context).colorScheme.error;
     final client = widget.boardProvider.client;
 
-    // Fetch routing if not cached.
-    if (_deployRouting == null) {
+    // Fetch routing if not cached or stale (>5 min).
+    final routingStale = _deployRoutingFetchedAt != null &&
+        DateTime.now().difference(_deployRoutingFetchedAt!).inMinutes >= 5;
+    if (_deployRouting == null || routingStale) {
       setState(() => _fetchingRouting = true);
       try {
         final routing = await client.getDeployRouting();
-        if (mounted) setState(() => _deployRouting = routing);
+        if (mounted) {
+          setState(() {
+            _deployRouting = routing;
+            _deployRoutingFetchedAt = DateTime.now();
+          });
+        }
       } catch (e) {
         if (mounted) {
           setState(() => _fetchingRouting = false);
@@ -199,36 +207,52 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               repo: repo,
               ticket: ticket.id,
             );
-            if (mounted) {
-              final deployment = Deployment(
-                deploymentId: result.deploymentId,
-                team: result.team,
-                status: 'running',
-                startedAt: DateTime.now().toIso8601String(),
-              );
+            if (!mounted) return;
+            if (!result.started) {
               messenger.showSnackBar(SnackBar(
                 content: Text(
-                  result.deploymentId.isNotEmpty
-                      ? 'Deployed ${result.deploymentId}'
-                      : 'Deployment started',
+                  'Deploy failed: server did not start deployment'
+                  '${result.deploymentId.isNotEmpty ? ' (${result.deploymentId})' : ''}',
                 ),
-                duration: const Duration(seconds: 8),
-                action: SnackBarAction(
-                  label: 'View',
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => ActivityTimelineScreen(
-                          deployment: deployment,
-                          client: client,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                backgroundColor: errorColor,
               ));
+              return;
             }
+            // Fetch real deployment from server instead of fabricating one.
+            Deployment? deployment;
+            if (result.deploymentId.isNotEmpty) {
+              await Future<void>.delayed(const Duration(seconds: 1));
+              try {
+                final deployments = await client.listDeployments();
+                deployment = deployments.cast<Deployment?>().firstWhere(
+                      (d) => d!.deploymentId == result.deploymentId,
+                      orElse: () => null,
+                    );
+              } catch (_) {
+                // Non-fatal — we'll still show the SnackBar without View.
+              }
+            }
+            if (!mounted) return;
+            messenger.showSnackBar(SnackBar(
+              content: Text('Deployed ${result.deploymentId}'),
+              duration: const Duration(seconds: 8),
+              action: deployment != null
+                  ? SnackBarAction(
+                      label: 'View',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ActivityTimelineScreen(
+                              deployment: deployment!,
+                              client: client,
+                            ),
+                          ),
+                        );
+                      },
+                    )
+                  : null,
+            ));
           } catch (e) {
             if (mounted) {
               messenger.showSnackBar(SnackBar(
