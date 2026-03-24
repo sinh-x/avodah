@@ -110,7 +110,7 @@ class _TicketCardBody extends StatelessWidget {
                   if (ticket.type != null) _TypeBadge(type: ticket.type!),
                   if (ticket.estimate != null)
                     _EstimateBadge(estimate: ticket.estimate!),
-                  if (ticket.docRef != null && ticket.docRef!.isNotEmpty)
+                  if (ticket.docRefs.isNotEmpty)
                     Icon(
                       Icons.description_outlined,
                       size: 14,
@@ -118,14 +118,9 @@ class _TicketCardBody extends StatelessWidget {
                     ),
                 ],
               ),
-              if (ticket.team != null) ...[
+              if (ticket.assignee != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  ticket.team!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
+                _AssigneeText(assignee: ticket.assignee!),
               ],
             ],
           ),
@@ -339,6 +334,47 @@ class _EstimateBadge extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
+    );
+  }
+}
+
+/// Assignee display: if assignee contains '/', shows 'team/' in muted text
+/// followed by 'agent' in bold. Otherwise shows plain text.
+class _AssigneeText extends StatelessWidget {
+  final String assignee;
+
+  const _AssigneeText({required this.assignee});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!assignee.contains('/')) {
+      return Text(
+        assignee,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.outline,
+        ),
+      );
+    }
+    final idx = assignee.indexOf('/');
+    final teamPart = assignee.substring(0, idx + 1); // includes '/'
+    final agentPart = assignee.substring(idx + 1);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          teamPart,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        Text(
+          agentPart,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }
