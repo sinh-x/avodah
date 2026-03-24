@@ -435,9 +435,14 @@ class AgentApiClient {
 
   /// Get the kanban board view for a project.
   ///
-  /// GET /api/board?project=X&team=Y → {"board": {...}}
+  /// GET /api/board?project=X&team=Y&excludeTags=backlog,archived&excludeTypes=fyi,work-report → {"board": {...}}
+  /// Always excludes backlog/archived tickets and fyi/work-report types to match CLI defaults.
   Future<BoardView> getBoard({required String project, String? team}) async {
-    final params = <String, String>{'project': project};
+    final params = <String, String>{
+      'project': project,
+      'excludeTags': 'backlog,archived',
+      'excludeTypes': 'fyi,work-report',
+    };
     if (team != null) params['team'] = team;
     final query = '?${Uri(queryParameters: params).query}';
     final response = await _get('/api/board$query');
@@ -462,6 +467,9 @@ class AgentApiClient {
     String? status,
     String? priority,
     String? type,
+    String? tags,
+    String? excludeTags,
+    String? search,
   }) async {
     final params = <String, String>{};
     if (project != null) params['project'] = project;
@@ -469,6 +477,9 @@ class AgentApiClient {
     if (status != null) params['status'] = status;
     if (priority != null) params['priority'] = priority;
     if (type != null) params['type'] = type;
+    if (tags != null) params['tags'] = tags;
+    if (excludeTags != null) params['excludeTags'] = excludeTags;
+    if (search != null) params['search'] = search;
     final query =
         params.isNotEmpty ? '?${Uri(queryParameters: params).query}' : '';
     final response = await _get('/api/tickets$query');
