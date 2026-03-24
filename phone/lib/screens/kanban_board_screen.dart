@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/ticket.dart';
@@ -30,12 +32,29 @@ class KanbanBoardScreen extends StatefulWidget {
 }
 
 class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
+  final _searchController = TextEditingController();
+  Timer? _debounceTimer;
+
   @override
   void initState() {
     super.initState();
     if (widget.boardProvider.board == null) {
       widget.boardProvider.refresh();
     }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      widget.boardProvider.setSearchQuery(value);
+    });
   }
 
   void _openTicketDetail(BuildContext context, Ticket ticket) {
@@ -154,50 +173,79 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         ? (provider.board!.teamCounts.keys.toList()..sort())
         : <String>[];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          if (projectItems.isEmpty)
-            const Text('No projects')
-          else
-            DropdownButton<String>(
-              value: provider.selectedProject != null &&
-                      projectItems
-                          .any((p) => p.key == provider.selectedProject)
-                  ? provider.selectedProject
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              if (projectItems.isEmpty)
+                const Text('No projects')
+              else
+                DropdownButton<String>(
+                  value: provider.selectedProject != null &&
+                          projectItems
+                              .any((p) => p.key == provider.selectedProject)
+                      ? provider.selectedProject
+                      : null,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  items: projectItems
+                      .map((p) => DropdownMenuItem(
+                          value: p.key,
+                          child: Text('${p.key} (${p.activeTicketCount})')))
+                      .toList(),
+                  onChanged: (p) {
+                    if (p != null) provider.setProject(p);
+                  },
+                ),
+              if (teams.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                FilterChip(
+                  label: const Text('All'),
+                  selected: provider.selectedTeam == null,
+                  onSelected: (_) => provider.setTeam(null),
+                ),
+                ...teams.map((team) => Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: FilterChip(
+                        label: Text(team),
+                        selected: provider.selectedTeam == team,
+                        onSelected: (_) => provider.setTeam(
+                            provider.selectedTeam == team ? null : team),
+                      ),
+                    )),
+              ],
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Search tickets…',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: provider.searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        widget.boardProvider.setSearchQuery('');
+                      },
+                    )
                   : null,
               isDense: true,
-              underline: const SizedBox.shrink(),
-              items: projectItems
-                  .map((p) => DropdownMenuItem(
-                      value: p.key,
-                      child: Text('${p.key} (${p.activeTicketCount})')))
-                  .toList(),
-              onChanged: (p) {
-                if (p != null) provider.setProject(p);
-              },
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             ),
-          if (teams.isNotEmpty) ...[
-            const SizedBox(width: 12),
-            FilterChip(
-              label: const Text('All'),
-              selected: provider.selectedTeam == null,
-              onSelected: (_) => provider.setTeam(null),
-            ),
-            ...teams.map((team) => Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: FilterChip(
-                    label: Text(team),
-                    selected: provider.selectedTeam == team,
-                    onSelected: (_) => provider.setTeam(
-                        provider.selectedTeam == team ? null : team),
-                  ),
-                )),
-          ],
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 

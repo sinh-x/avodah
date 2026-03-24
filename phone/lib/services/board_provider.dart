@@ -41,6 +41,7 @@ class BoardProvider extends ChangeNotifier {
   String? _selectedProject;
   String? _selectedTeam;
   bool _showTerminal = false;
+  String _searchQuery = '';
   Timer? _pollTimer;
   SharedPreferences? _prefs;
 
@@ -68,12 +69,14 @@ class BoardProvider extends ChangeNotifier {
   String? get selectedProject => _selectedProject;
   String? get selectedTeam => _selectedTeam;
   bool get showTerminal => _showTerminal;
+  String get searchQuery => _searchQuery;
 
   /// Active (non-terminal, non-on-hold) columns in kanban order.
   List<BoardColumn> get activeColumns {
     if (_board == null) return [];
     return _board!.columns
         .where((c) => _activeStatuses.contains(c.status))
+        .map((c) => _applySearch(c))
         .toList();
   }
 
@@ -82,6 +85,7 @@ class BoardProvider extends ChangeNotifier {
     if (_board == null) return [];
     return _board!.columns
         .where((c) => _terminalStatuses.contains(c.status))
+        .map((c) => _applySearch(c))
         .toList();
   }
 
@@ -89,7 +93,8 @@ class BoardProvider extends ChangeNotifier {
   BoardColumn? get onHoldColumn {
     if (_board == null) return null;
     try {
-      return _board!.columns.firstWhere((c) => c.status == 'on-hold');
+      final col = _board!.columns.firstWhere((c) => c.status == 'on-hold');
+      return _applySearch(col);
     } catch (_) {
       return null;
     }
@@ -130,6 +135,12 @@ class BoardProvider extends ChangeNotifier {
 
   void toggleTerminal() {
     _showTerminal = !_showTerminal;
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    if (_searchQuery == query) return;
+    _searchQuery = query;
     notifyListeners();
   }
 
@@ -219,6 +230,19 @@ class BoardProvider extends ChangeNotifier {
   }
 
   // --- Private helpers ---
+
+  /// Filter a column's tickets by the current search query (client-side).
+  BoardColumn _applySearch(BoardColumn col) {
+    if (_searchQuery.isEmpty) return col;
+    final query = _searchQuery.toLowerCase();
+    final filtered =
+        col.tickets.where((t) => t.title.toLowerCase().contains(query)).toList();
+    return BoardColumn(
+      status: col.status,
+      tickets: filtered,
+      count: filtered.length,
+    );
+  }
 
   /// Rebuild a BoardView with one ticket moved to a new status column.
   BoardView _buildBoardWithUpdatedTicket(
