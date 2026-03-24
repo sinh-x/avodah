@@ -3,6 +3,34 @@
 // Matches the API response shapes from pa serve /api/tickets and /api/board.
 // JSON keys are camelCase as returned by the server.
 
+class DocRef {
+  final String type; // requirements|spike|implementation|review-report|attachment
+  final String path;
+  final bool primary;
+  final DateTime? addedAt;
+  final String? addedBy;
+
+  const DocRef({
+    required this.type,
+    required this.path,
+    this.primary = false,
+    this.addedAt,
+    this.addedBy,
+  });
+
+  factory DocRef.fromJson(Map<String, dynamic> json) {
+    return DocRef(
+      type: json['type'] as String? ?? 'attachment',
+      path: json['path'] as String? ?? '',
+      primary: json['primary'] as bool? ?? false,
+      addedAt: json['addedAt'] != null
+          ? DateTime.tryParse(json['addedAt'] as String)
+          : null,
+      addedBy: json['addedBy'] as String?,
+    );
+  }
+}
+
 class TicketComment {
   final String id;
   final String author;
@@ -45,9 +73,8 @@ class Ticket {
   final String? from;
   final String? to;
   final List<String> tags;
-  final List<String> dependencies;
-  final List<String> attachments;
-  final String? docRef;
+  final List<String> blockedBy;
+  final List<DocRef> docRefs;
   final List<TicketComment> comments;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -68,9 +95,8 @@ class Ticket {
     this.from,
     this.to,
     required this.tags,
-    required this.dependencies,
-    required this.attachments,
-    this.docRef,
+    required this.blockedBy,
+    required this.docRefs,
     required this.comments,
     required this.createdAt,
     required this.updatedAt,
@@ -79,9 +105,30 @@ class Ticket {
 
   factory Ticket.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List? ?? [];
-    final depsList = json['dependencies'] as List? ?? [];
-    final attachmentsList = json['attachments'] as List? ?? [];
     final commentsList = json['comments'] as List? ?? [];
+
+    // blockedBy: try new field first, fall back to deprecated dependencies
+    final blockedByRaw =
+        (json['blockedBy'] as List?) ?? (json['dependencies'] as List?) ?? [];
+
+    // doc_refs: try new array first, fall back to legacy doc_ref string
+    List<DocRef> docRefs;
+    final docRefsRaw = json['doc_refs'] as List?;
+    if (docRefsRaw != null && docRefsRaw.isNotEmpty) {
+      docRefs = docRefsRaw
+          .map((e) => DocRef.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else if (json['doc_ref'] != null) {
+      docRefs = [
+        DocRef(
+          type: 'attachment',
+          path: json['doc_ref'] as String,
+          primary: true,
+        ),
+      ];
+    } else {
+      docRefs = [];
+    }
 
     return Ticket(
       id: json['id'] as String? ?? '',
@@ -98,9 +145,8 @@ class Ticket {
       from: json['from'] as String?,
       to: json['to'] as String?,
       tags: tagsList.map((e) => e as String).toList(),
-      dependencies: depsList.map((e) => e as String).toList(),
-      attachments: attachmentsList.map((e) => e as String).toList(),
-      docRef: json['doc_ref'] as String?,
+      blockedBy: blockedByRaw.map((e) => e as String).toList(),
+      docRefs: docRefs,
       comments: commentsList
           .map((e) => TicketComment.fromJson(e as Map<String, dynamic>))
           .toList(),
