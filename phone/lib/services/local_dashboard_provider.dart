@@ -135,6 +135,7 @@ class LocalDashboardProvider extends ChangeNotifier {
           elapsed: _fmt(doc.elapsed),
           startedAt: doc.startedAt,
           note: doc.note,
+          category: doc.category,
         );
         timerSnapshot.snapshotTimestamp = now;
       }

@@ -402,6 +402,20 @@ class AgentApiClient {
     return cats.map((e) => e as String).toList();
   }
 
+  /// Fetch comment chip presets for a specific category.
+  ///
+  /// Calls GET /api/config/category-chips?category=X
+  /// Returns list of chip strings; empty on failure.
+  Future<List<String>> getCategoryChips(String category) async {
+    try {
+      final response = await _get('/api/config/category-chips?category=${Uri.encodeComponent(category)}');
+      final chips = response['chips'] as List? ?? [];
+      return chips.map((e) => e as String).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// List active PA systemd timers.
   Future<List<TimerInfo>> listTimers() async {
     final response = await _get('/api/timers');
