@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import '../config/avo_config.dart';
 import '../config/paths.dart';
 import '../services/jira_service.dart';
 import '../services/plan_service.dart';
@@ -3974,4 +3975,207 @@ class DbDumpCommand extends Command<void> {
         'cancelled': row.cancelled,
         'created': row.created,
       };
+}
+
+// ── Config Command ─────────────────────────────────────────────────────────
+
+/// Config management command group.
+class ConfigCommand extends Command<void> {
+  final AvoConfig _config;
+  final AvodahPaths _paths;
+
+  ConfigCommand(this._config, this._paths) {
+    addSubcommand(ConfigChipsCommand(_config, _paths));
+  }
+
+  @override
+  String get name => 'config';
+
+  @override
+  String get description => 'Configuration management';
+}
+
+/// Per-category comment chip presets for quick comments when stopping timers.
+class ConfigChipsCommand extends Command<void> {
+  final AvoConfig _config;
+  final AvodahPaths _paths;
+
+  ConfigChipsCommand(this._config, this._paths) {
+    addSubcommand(ConfigChipsListCommand(_config));
+    addSubcommand(ConfigChipsAddCommand(_config, _paths));
+    addSubcommand(ConfigChipsRemoveCommand(_config, _paths));
+  }
+
+  @override
+  String get name => 'chips';
+
+  @override
+  String get description => 'Manage per-category comment chip presets';
+}
+
+/// List chip presets.
+class ConfigChipsListCommand extends Command<void> {
+  final AvoConfig _config;
+
+  ConfigChipsListCommand(this._config);
+
+  @override
+  String get name => 'list';
+
+  @override
+  String get description => 'List chip presets';
+
+  @override
+  String get invocation => 'avo config chips list [--category <category>]';
+
+  @override
+  Future<void> run() async {
+    final category = argResults?['category'] as String?;
+
+    final chips = Map<String, List<String>>.from(_config.categoryChips);
+
+    if (chips.isEmpty) {
+      print('No chip presets configured.');
+      print('');
+      print(hint('avo config chips add <category> <chip>',
+          'to add a chip preset'));
+      return;
+    }
+
+    if (category != null) {
+      // List chips for specific category
+      final categoryChips = chips[category];
+      if (categoryChips == null || categoryChips.isEmpty) {
+        print('No chip presets for "$category".');
+        print('');
+        print('Available categories: ${chips.keys.join(", ")}');
+      } else {
+        print('Chips for "$category":');
+        for (final chip in categoryChips) {
+          print('  - $chip');
+        }
+      }
+    } else {
+      // List all chips
+      print('Chip Presets:');
+      print(separator());
+      final sortedCats = chips.keys.toList()..sort();
+      for (final cat in sortedCats) {
+        final catChips = chips[cat]!;
+        print('  $cat (${catChips.length}):');
+        for (final chip in catChips) {
+          print('    - $chip');
+        }
+        print('');
+      }
+    }
+  }
+}
+
+/// Add a chip preset.
+class ConfigChipsAddCommand extends Command<void> {
+  final AvoConfig _config;
+  final AvodahPaths _paths;
+
+  ConfigChipsAddCommand(this._config, this._paths);
+
+  @override
+  String get name => 'add';
+
+  @override
+  String get description => 'Add a chip preset to a category';
+
+  @override
+  String get invocation => 'avo config chips add <category> <chip>';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.length < 2) {
+      print('Missing arguments.');
+      print('');
+      print('  Usage: avo config chips add <category> <chip>');
+      print('');
+      print('  Example: avo config chips add Working standup');
+      return;
+    }
+
+    final category = args[0];
+    final chip = args[1];
+
+    final newChips = Map<String, List<String>>.from(_config.categoryChips);
+    final categoryChips = List<String>.from(newChips[category] ?? []);
+
+    if (categoryChips.contains(chip)) {
+      print('Chip "$chip" already exists in "$category".');
+      return;
+    }
+
+    categoryChips.add(chip);
+    newChips[category] = categoryChips;
+
+    final newConfig = AvoConfig(
+      categories: _config.categories,
+      syncPort: _config.syncPort,
+      syncInterval: _config.syncInterval,
+      categoryChips: newChips,
+    );
+
+    await newConfig.save(_paths);
+    print('Added chip "$chip" to "$category".');
+  }
+}
+
+/// Remove a chip preset.
+class ConfigChipsRemoveCommand extends Command<void> {
+  final AvoConfig _config;
+  final AvodahPaths _paths;
+
+  ConfigChipsRemoveCommand(this._config, this._paths);
+
+  @override
+  String get name => 'remove';
+
+  @override
+  String get description => 'Remove a chip preset from a category';
+
+  @override
+  String get invocation => 'avo config chips remove <category> <chip>';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.length < 2) {
+      print('Missing arguments.');
+      print('');
+      print('  Usage: avo config chips remove <category> <chip>');
+      print('');
+      print('  Example: avo config chips remove Working standup');
+      return;
+    }
+
+    final category = args[0];
+    final chip = args[1];
+
+    final newChips = Map<String, List<String>>.from(_config.categoryChips);
+    final categoryChips = List<String>.from(newChips[category] ?? []);
+
+    if (!categoryChips.contains(chip)) {
+      print('Chip "$chip" not found in "$category".');
+      return;
+    }
+
+    categoryChips.remove(chip);
+    newChips[category] = categoryChips;
+
+    final newConfig = AvoConfig(
+      categories: _config.categories,
+      syncPort: _config.syncPort,
+      syncInterval: _config.syncInterval,
+      categoryChips: newChips,
+    );
+
+    await newConfig.save(_paths);
+    print('Removed chip "$chip" from "$category".');
+  }
 }

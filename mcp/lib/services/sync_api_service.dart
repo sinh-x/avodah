@@ -61,7 +61,9 @@ class SyncApiService {
     final path = request.uri.path;
     final method = request.method;
 
-    if (path != '/api/sync/deltas' && path != '/api/config/categories') {
+    if (path != '/api/sync/deltas' &&
+        path != '/api/config/categories' &&
+        path != '/api/config/category-chips') {
       return false;
     }
 
@@ -83,6 +85,13 @@ class SyncApiService {
       if (path == '/api/config/categories') {
         if (method == 'GET') {
           await _handleGetCategories(request);
+        } else {
+          _jsonResponse(request, HttpStatus.methodNotAllowed,
+              {'error': 'Method not allowed'});
+        }
+      } else if (path == '/api/config/category-chips') {
+        if (method == 'GET') {
+          await _handleGetCategoryChips(request);
         } else {
           _jsonResponse(request, HttpStatus.methodNotAllowed,
               {'error': 'Method not allowed'});
@@ -173,6 +182,27 @@ class SyncApiService {
       ..sort();
 
     _jsonResponse(request, HttpStatus.ok, {'categories': allCategories});
+  }
+
+  /// GET /api/config/category-chips?category=Working
+  ///
+  /// Returns the list of chip presets for the specified category.
+  /// If no category is specified, returns all category chips as a map.
+  Future<void> _handleGetCategoryChips(HttpRequest request) async {
+    final category = request.uri.queryParameters['category'];
+
+    final chips = config?.categoryChips ?? {};
+
+    if (category != null) {
+      // Return chips for specific category
+      _jsonResponse(request, HttpStatus.ok, {
+        'category': category,
+        'chips': chips[category] ?? [],
+      });
+    } else {
+      // Return all chips
+      _jsonResponse(request, HttpStatus.ok, {'categoryChips': chips});
+    }
   }
 
   /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.
