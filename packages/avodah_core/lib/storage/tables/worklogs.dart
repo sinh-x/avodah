@@ -17,6 +17,9 @@ class WorklogEntries extends Table {
   // Optional comment/note
   TextColumn get comment => text().nullable()();
 
+  // Category for orphan worklogs (no task required)
+  TextColumn get category => text().nullable()();
+
   // External provider sync
   TextColumn get jiraWorklogId => text().nullable()();
   BoolColumn get jiraDirty => boolean().withDefault(const Constant(false))();

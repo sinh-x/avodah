@@ -33,6 +33,20 @@ void main() {
         expect(worklog.createdMs, greaterThan(0));
       });
 
+      test('create() defaults taskId to empty string for orphan worklogs', () {
+        final start = DateTime.now().subtract(const Duration(hours: 1));
+        final end = DateTime.now();
+
+        final worklog = WorklogDocument.create(
+          clock: clock,
+          start: start.millisecondsSinceEpoch,
+          end: end.millisecondsSinceEpoch,
+        );
+
+        expect(worklog.taskId, isEmpty);
+        expect(worklog.isOrphan, isTrue);
+      });
+
       test('fromTimer() creates from DateTime objects', () {
         final start = DateTime(2026, 2, 9, 10, 0);
         final end = DateTime(2026, 2, 9, 11, 30);
@@ -47,6 +61,20 @@ void main() {
         expect(worklog.startTime.hour, equals(10));
         expect(worklog.endTime.hour, equals(11));
         expect(worklog.duration.inMinutes, equals(90));
+      });
+
+      test('fromTimer() can create orphan worklog without taskId', () {
+        final start = DateTime(2026, 2, 9, 10, 0);
+        final end = DateTime(2026, 2, 9, 11, 30);
+
+        final worklog = WorklogDocument.fromTimer(
+          clock: clock,
+          start: start,
+          end: end,
+        );
+
+        expect(worklog.taskId, isEmpty);
+        expect(worklog.isOrphan, isTrue);
       });
 
       test('constructor creates empty document', () {
@@ -119,6 +147,81 @@ void main() {
         );
 
         expect(worklog.date, equals('2026-02-09'));
+      });
+    });
+
+    group('orphan worklogs', () {
+      test('isOrphan returns true when taskId is empty', () {
+        final worklog = WorklogDocument(id: 'wl-1', clock: clock);
+
+        expect(worklog.isOrphan, isTrue);
+      });
+
+      test('isOrphan returns false when taskId is set', () {
+        final worklog = WorklogDocument.create(
+          clock: clock,
+          taskId: 'task-1',
+          start: DateTime.now().millisecondsSinceEpoch - 3600000,
+          end: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        expect(worklog.isOrphan, isFalse);
+      });
+
+      test('orphan worklog can have category', () {
+        final worklog = WorklogDocument.create(
+          clock: clock,
+          start: DateTime.now().millisecondsSinceEpoch - 3600000,
+          end: DateTime.now().millisecondsSinceEpoch,
+          category: 'Working',
+        );
+
+        expect(worklog.isOrphan, isTrue);
+        expect(worklog.category, equals('Working'));
+      });
+    });
+
+    group('category', () {
+      test('category can be set on worklog', () {
+        final worklog = WorklogDocument.create(
+          clock: clock,
+          taskId: 'task-1',
+          start: DateTime.now().millisecondsSinceEpoch - 3600000,
+          end: DateTime.now().millisecondsSinceEpoch,
+          category: 'Learning',
+        );
+
+        expect(worklog.category, equals('Learning'));
+      });
+
+      test('category can be changed after creation', () {
+        final worklog = WorklogDocument.create(
+          clock: clock,
+          taskId: 'task-1',
+          start: DateTime.now().millisecondsSinceEpoch - 3600000,
+          end: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        expect(worklog.category, isNull);
+
+        worklog.category = 'Meetings';
+
+        expect(worklog.category, equals('Meetings'));
+      });
+
+      test('fromTimer() accepts category', () {
+        final start = DateTime(2026, 2, 9, 10, 0);
+        final end = DateTime(2026, 2, 9, 11, 30);
+
+        final worklog = WorklogDocument.fromTimer(
+          clock: clock,
+          taskId: 'task-1',
+          start: start,
+          end: end,
+          category: 'Working',
+        );
+
+        expect(worklog.category, equals('Working'));
       });
     });
 
@@ -204,6 +307,26 @@ void main() {
         expect(model.isSyncedToJira, isTrue);
         expect(model.isDeleted, isFalse);
         expect(model.formattedDuration, equals('1h 30m'));
+        expect(model.category, isNull);
+        expect(model.isOrphan, isFalse);
+      });
+
+      test('toModel includes category and isOrphan for orphan worklogs', () {
+        final start = DateTime(2026, 2, 9, 10, 0);
+        final end = DateTime(2026, 2, 9, 11, 30);
+
+        final worklog = WorklogDocument.fromTimer(
+          clock: clock,
+          start: start,
+          end: end,
+          category: 'Working',
+        );
+
+        final model = worklog.toModel();
+
+        expect(model.taskId, isEmpty);
+        expect(model.isOrphan, isTrue);
+        expect(model.category, equals('Working'));
       });
     });
   });

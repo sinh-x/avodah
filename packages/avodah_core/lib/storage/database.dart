@@ -42,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -104,6 +104,15 @@ class AppDatabase extends _$AppDatabase {
         if (from < 11) {
           // Add sync watermarks table for per-node HLC delta sync tracking
           await m.createTable(syncWatermarks);
+        }
+        if (from < 12) {
+          // v0.5.0: orphan worklogs — add category column to worklogEntries
+          // Guard: column may already exist if previous migration partially completed
+          try {
+            await m.addColumn(worklogEntries, worklogEntries.category);
+          } on Exception catch (_) {
+            // Column already exists
+          }
         }
       },
     );
