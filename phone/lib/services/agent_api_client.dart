@@ -416,6 +416,55 @@ class AgentApiClient {
     }
   }
 
+  /// Fetch all category chip presets.
+  ///
+  /// Calls GET /api/config/category-chips
+  /// Returns map of category -> list of chips; empty map on failure.
+  Future<Map<String, List<String>>> getAllCategoryChips() async {
+    try {
+      final response = await _get('/api/config/category-chips');
+      final chipsMap = response['categoryChips'] as Map<String, dynamic>? ?? {};
+      return chipsMap.map((key, value) =>
+          MapEntry(key, (value as List<dynamic>).map((e) => e as String).toList()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Add a chip preset to a category.
+  ///
+  /// Calls POST /api/config/category-chips with {"action": "add", "category": X, "chip": Y}
+  /// Returns true on success.
+  Future<bool> addCategoryChip(String category, String chip) async {
+    try {
+      await _post('/api/config/category-chips', body: {
+        'action': 'add',
+        'category': category,
+        'chip': chip,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Remove a chip preset from a category.
+  ///
+  /// Calls POST /api/config/category-chips with {"action": "remove", "category": X, "chip": Y}
+  /// Returns true on success.
+  Future<bool> removeCategoryChip(String category, String chip) async {
+    try {
+      await _post('/api/config/category-chips', body: {
+        'action': 'remove',
+        'category': category,
+        'chip': chip,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// List active PA systemd timers.
   Future<List<TimerInfo>> listTimers() async {
     final response = await _get('/api/timers');
