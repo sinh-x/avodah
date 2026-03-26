@@ -1967,7 +1967,7 @@ class WorklogListCommand extends WorklogSubcommand {
 
     List<WorklogDocument> worklogs;
     if (showOrphanOnly) {
-      worklogs = await worklogService.listOrphan();
+      worklogs = await worklogService.listOrphan(limit: limit);
     } else {
       worklogs = await worklogService.listRecent(limit: limit);
     }

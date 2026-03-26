@@ -99,9 +99,23 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     // If no CRDT state exists, initialize from Drift fields
     if (state.isEmpty) {
       doc._initializeFromDrift(timer);
+    } else {
+      // Backfill fields added in later schema versions (e.g. category in v12)
+      doc._backfillFromDrift(timer);
     }
 
     return doc;
+  }
+
+  /// Backfills fields from Drift columns when they are missing from CRDT
+  /// state. This handles fields added in later schema versions (e.g.
+  /// category in v12) for timers whose CRDT state was written before
+  /// those fields existed.
+  void _backfillFromDrift(TimerEntry timer) {
+    final keys = fieldKeys.toSet();
+    if (!keys.contains(TimerFields.category) && timer.category != null) {
+      setString(TimerFields.category, timer.category);
+    }
   }
 
   /// Initializes fields from Drift entity when no CRDT state exists.

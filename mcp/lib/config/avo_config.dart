@@ -106,6 +106,7 @@ class AvoConfig {
   Future<void> save(AvodahPaths paths) async {
     final configPath = p.join(paths.configDir, 'config.json');
     final file = File(configPath);
+    file.parent.createSync(recursive: true);
     await file.writeAsString(jsonEncode(toJson()));
   }
 }

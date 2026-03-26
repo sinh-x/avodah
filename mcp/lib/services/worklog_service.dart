@@ -274,14 +274,21 @@ class WorklogService {
   }
 
   /// Returns all non-deleted orphan worklogs (where taskId is empty).
-  Future<List<WorklogDocument>> listOrphan() async {
+  /// If [limit] is provided, returns at most that many entries.
+  Future<List<WorklogDocument>> listOrphan({int? limit}) async {
     final rows = await db.select(db.worklogEntries).get();
 
-    return rows
+    var docs = rows
         .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
         .where((doc) => !doc.isDeleted && doc.taskId.isEmpty)
         .toList()
       ..sort((a, b) => b.startMs.compareTo(a.startMs));
+
+    if (limit != null) {
+      docs = docs.take(limit).toList();
+    }
+
+    return docs;
   }
 
   /// Returns all non-deleted worklogs for a given category.
@@ -366,9 +373,11 @@ class WorklogService {
     final taskSummaries = byTask.entries.map((entry) {
       final totalMs = entry.value.fold<int>(0, (sum, w) => sum + w.durationMs);
       // Use taskId as title — the caller can resolve to a task name
+      // Fallback to '(no task)' for orphan worklogs with empty taskId
+      final taskTitle = entry.key.isEmpty ? '(no task)' : entry.key;
       return TaskTimeSummary(
         taskId: entry.key,
-        taskTitle: entry.key,
+        taskTitle: taskTitle,
         total: Duration(milliseconds: totalMs),
       );
     }).toList()

@@ -295,5 +295,263 @@ void main() {
       client.close();
       await server.close();
     });
+
+    test('POST /api/config/category-chips add success', () async {
+      final config = AvoConfig(
+        categoryChips: {
+          'Working': ['standup'],
+        },
+      );
+      syncApi = SyncApiService(db: db, clock: clock, config: config);
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
+      req.write(jsonEncode({
+        'action': 'add',
+        'category': 'Working',
+        'chip': 'code review',
+      }));
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.ok));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['success'], isTrue);
+      expect(json['action'], equals('added'));
+      expect(json['category'], equals('Working'));
+      expect(json['chip'], equals('code review'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('POST /api/config/category-chips remove success', () async {
+      final config = AvoConfig(
+        categoryChips: {
+          'Working': ['standup', 'debugging'],
+        },
+      );
+      syncApi = SyncApiService(db: db, clock: clock, config: config);
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
+      req.write(jsonEncode({
+        'action': 'remove',
+        'category': 'Working',
+        'chip': 'standup',
+      }));
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.ok));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['success'], isTrue);
+      expect(json['action'], equals('removed'));
+      expect(json['category'], equals('Working'));
+      expect(json['chip'], equals('standup'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('POST /api/config/category-chips missing action field returns 400', () async {
+      syncApi = SyncApiService(db: db, clock: clock, config: AvoConfig());
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
+      req.write(jsonEncode({
+        'category': 'Working',
+        'chip': 'standup',
+      }));
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.badRequest));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['error'], contains('Missing required fields'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('POST /api/config/category-chips empty chip returns 400', () async {
+      syncApi = SyncApiService(db: db, clock: clock, config: AvoConfig());
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
+      req.write(jsonEncode({
+        'action': 'add',
+        'category': 'Working',
+        'chip': '',
+      }));
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.badRequest));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['error'], contains('cannot be empty'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('POST /api/config/category-chips invalid action returns 400', () async {
+      syncApi = SyncApiService(db: db, clock: clock, config: AvoConfig());
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
+      req.write(jsonEncode({
+        'action': 'invalid_action',
+        'category': 'Working',
+        'chip': 'standup',
+      }));
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.badRequest));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['error'], contains('Invalid action'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('DELETE /api/config/category-chips success', () async {
+      final config = AvoConfig(
+        categoryChips: {
+          'Working': ['standup', 'debugging'],
+        },
+      );
+      syncApi = SyncApiService(db: db, clock: clock, config: config);
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      final req = await client.delete('127.0.0.1', port, '/api/config/category-chips?category=Working&chip=standup');
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.ok));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['success'], isTrue);
+      expect(json['category'], equals('Working'));
+      expect(json['chip'], equals('standup'));
+
+      client.close();
+      await server.close();
+    });
+
+    test('DELETE /api/config/category-chips missing params returns 400', () async {
+      syncApi = SyncApiService(db: db, clock: clock, config: AvoConfig());
+
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      server.listen((req) async {
+        final handled = await syncApi.handleRequest(req);
+        if (!handled) {
+          req.response
+            ..statusCode = HttpStatus.notFound
+            ..write('Not found')
+            ..close();
+        }
+      });
+
+      final port = server.port;
+      final client = HttpClient();
+      // Missing chip parameter
+      final req = await client.delete('127.0.0.1', port, '/api/config/category-chips?category=Working');
+      final resp = await req.close();
+
+      expect(resp.statusCode, equals(HttpStatus.badRequest));
+
+      final body = await resp.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      expect(json['error'], contains('Missing required query parameters'));
+
+      client.close();
+      await server.close();
+    });
   });
 }
