@@ -196,9 +196,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _startCategoryTimer(String category) async {
     final deltas = <Map<String, dynamic>>[];
 
-    // Stop current timer first (creates worklog)
+    // Stop current timer first (creates worklog) - with confirmation
     final snapshot = widget.dashboardProvider.snapshot;
     if (snapshot?.timer != null && snapshot!.timer!.isRunning) {
+      final taskTitle = snapshot.timer!.taskTitle;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Stop current timer?'),
+          content: Text(
+            'Stop current timer for $taskTitle? '
+            'A worklog will be saved with no comment.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Stop'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
       final result = await widget.writeService.stopTimerAndLog();
       final stoppedTimerDelta = await widget.writeService.getTimerDelta();
       if (stoppedTimerDelta != null) deltas.add(stoppedTimerDelta);

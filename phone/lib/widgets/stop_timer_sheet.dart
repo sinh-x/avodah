@@ -245,21 +245,11 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
               ],
               const SizedBox(height: 16),
 
-              // Chips section
-              if (!_loading && _chips.isNotEmpty) ...[
-                Text('Quick comments', style: theme.textTheme.labelMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: _chips.map((chip) {
-                    return ActionChip(
-                      label: Text(chip, style: theme.textTheme.bodySmall),
-                      onPressed: _saving ? null : () => _onChipTapped(chip),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
+              // Loading indicator
+              if (_loading) ...[
+                const SizedBox(height: 48),
+                const Center(child: CircularProgressIndicator()),
+                const SizedBox(height: 48),
               ],
 
               // Task picker
@@ -305,39 +295,56 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
                   ),
                 ),
                 const SizedBox(height: 16),
-              ],
 
-              // Worklog message
-              Text('Worklog message', style: theme.textTheme.labelMedium),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _messageController,
-                enabled: !_saving && !_loading,
-                minLines: 2,
-                maxLines: 5,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'What did you work on?',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+                // Worklog message
+                Text('Worklog message', style: theme.textTheme.labelMedium),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _messageController,
+                  enabled: !_saving && !_loading,
+                  minLines: 2,
+                  maxLines: 5,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'What did you work on?',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
-              ),
 
-              if (_selectedTaskId != null) ...[
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Mark task as done',
-                    style: theme.textTheme.bodyMedium,
+                if (_selectedTaskId != null) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Mark task as done',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    value: _markDone,
+                    onChanged:
+                        _saving ? null : (v) => setState(() => _markDone = v),
                   ),
-                  value: _markDone,
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _markDone = v),
-                ),
+                ],
+
+                // Chips section
+                if (_chips.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text('Quick comments', style: theme.textTheme.labelMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: _chips.map((chip) {
+                      return ActionChip(
+                        label: Text(chip, style: theme.textTheme.bodySmall),
+                        onPressed: _saving ? null : () => _onChipTapped(chip),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
 
               const SizedBox(height: 20),
@@ -378,6 +385,12 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
         await widget.writeService.updateTimerTask(null, null);
       }
       await widget.onSave(_messageController.text.trim(), _markDone, _selectedTaskId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
