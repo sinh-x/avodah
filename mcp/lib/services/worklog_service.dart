@@ -134,6 +134,7 @@ class WorklogService {
     required DateTime start,
     required Duration duration,
     String? comment,
+    String? category,
   }) async {
     final end = start.add(duration);
     final worklog = WorklogDocument.create(
@@ -142,6 +143,7 @@ class WorklogService {
       start: start.millisecondsSinceEpoch,
       end: end.millisecondsSinceEpoch,
       comment: comment,
+      category: category,
     );
     await _saveWorklog(worklog);
     return worklog;
@@ -272,7 +274,70 @@ class WorklogService {
       ..sort((a, b) => b.startMs.compareTo(a.startMs));
   }
 
+  /// Returns all non-deleted orphan worklogs (where taskId is empty).
+  Future<List<WorklogDocument>> listOrphan() async {
+    final rows = await db.select(db.worklogEntries).get();
+
+    return rows
+        .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
+        .where((doc) => !doc.isDeleted && doc.taskId.isEmpty)
+        .toList()
+      ..sort((a, b) => b.startMs.compareTo(a.startMs));
+  }
+
+  /// Returns all non-deleted worklogs for a given category.
+  Future<List<WorklogDocument>> listByCategory(String category) async {
+    final rows = await db.select(db.worklogEntries).get();
+
+    return rows
+        .map((row) => WorklogDocument.fromDrift(worklog: row, clock: clock))
+        .where((doc) => !doc.isDeleted && doc.category == category)
+        .toList()
+      ..sort((a, b) => b.startMs.compareTo(a.startMs));
+  }
+
+  /// Assigns an orphan worklog to a task.
+  ///
+  /// - Sets the worklog's taskId to the target task's ID
+  /// - Inherits the task's category if the worklog has no category
+  /// - Sets jiraDirty=true if the task has a Jira issue link
+  ///
+  /// Throws [WorklogNotFoundException] if no worklog matches.
+  /// Throws [AmbiguousWorklogIdException] if multiple worklogs match.
+  /// Throws [TaskNotFoundException] if no task matches.
+  /// Throws [AmbiguousTaskIdException] if multiple tasks match.
+  Future<WorklogDocument> assignToTask({
+    required String worklogIdOrPrefix,
+    required String taskIdOrPrefix,
+    required Future<TaskDocument> Function(String) getTask,
+  }) async {
+    final worklog = await show(worklogIdOrPrefix);
+
+    if (!worklog.isOrphan) {
+      throw WorklogNotAssignedException(
+          'Worklog ${worklog.id.substring(0, 8)} already has a task (${worklog.taskId.substring(0, 8)}). '
+          'Use edit to change its task instead.');
+    }
+
+    final task = await getTask(taskIdOrPrefix);
+
+    worklog.taskId = task.id;
+    // Inherit task's category if worklog has no category
+    if (worklog.category == null && task.category != null) {
+      worklog.category = task.category;
+    }
+    // Mark jiraDirty if task has Jira issue link
+    if (task.hasIssueLink) {
+      worklog.markJiraDirty();
+    }
+
+    worklog.updatedMs = DateTime.now().millisecondsSinceEpoch;
+    await _saveWorklog(worklog);
+    return worklog;
+  }
+
   /// Returns total logged time per task as a map of taskId → Duration.
+  /// Orphan worklogs are grouped under the empty-string key.
   Future<Map<String, Duration>> timeByTask() async {
     final rows = await db.select(db.worklogEntries).get();
     final result = <String, int>{};
@@ -343,4 +408,13 @@ class AmbiguousWorklogIdException implements Exception {
   String toString() =>
       'Multiple worklogs match "$prefix": ${matchingIds.map((id) => id.substring(0, 8)).join(', ')}. '
       'Use a longer prefix.';
+}
+
+/// Thrown when trying to assign a worklog that is not an orphan.
+class WorklogNotAssignedException implements Exception {
+  final String message;
+  WorklogNotAssignedException(this.message);
+
+  @override
+  String toString() => message;
 }

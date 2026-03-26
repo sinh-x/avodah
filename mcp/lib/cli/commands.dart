@@ -1927,13 +1927,14 @@ class WorklogCommand extends Command<void> {
     addSubcommand(WorklogEditCommand(worklogService, taskService, jiraService: jiraService));
     addSubcommand(WorklogListCommand(worklogService, taskService));
     addSubcommand(WorklogDeleteCommand(worklogService, taskService));
+    addSubcommand(WorklogAssignCommand(worklogService, taskService, jiraService: jiraService));
   }
 
   @override
   String get name => 'worklog';
 
   @override
-  String get description => 'Worklog management (add, edit, list, delete)';
+  String get description => 'Worklog management (add, edit, list, delete, assign)';
 }
 
 /// Worklog list subcommand (under `avo worklog list`).
@@ -1941,6 +1942,8 @@ class WorklogListCommand extends WorklogSubcommand {
   WorklogListCommand(super.worklogService, super.taskService) {
     argParser.addOption('count', abbr: 'n', help: 'Number of entries',
         defaultsTo: '10');
+    argParser.addFlag('orphan', abbr: 'o', help: 'List only orphan worklogs (no task)',
+        defaultsTo: false);
   }
 
   @override
@@ -1950,35 +1953,55 @@ class WorklogListCommand extends WorklogSubcommand {
   String get description => 'List recent worklogs';
 
   @override
-  String get invocation => 'avo worklog list [-n count]';
+  String get invocation => 'avo worklog list [-n count] [--orphan]';
 
   @override
-  String? get usageFooter => '\nShows the 10 most recent worklogs by default.';
+  String? get usageFooter => '\nShows the 10 most recent worklogs by default.\n'
+      'Use --orphan to list only orphan worklogs (no task assigned).';
 
   @override
   Future<void> run() async {
     final limit = int.tryParse(argResults?['count'] as String? ?? '10') ?? 10;
-    final worklogs = await worklogService.listRecent(limit: limit);
+    final showOrphanOnly = argResults?['orphan'] as bool? ?? false;
+
+    List<WorklogDocument> worklogs;
+    if (showOrphanOnly) {
+      worklogs = await worklogService.listOrphan();
+    } else {
+      worklogs = await worklogService.listRecent(limit: limit);
+    }
 
     if (worklogs.isEmpty) {
-      print('No worklogs yet.');
-      print('');
-      print(hint('avo worklog add', 'to log manually'));
+      if (showOrphanOnly) {
+        print('No orphan worklogs.');
+        print('');
+        print(hint('avo worklog add', 'to create an orphan worklog'));
+      } else {
+        print('No worklogs yet.');
+        print('');
+        print(hint('avo worklog add', 'to log manually'));
+      }
       return;
     }
 
-    print('Recent Worklogs (${worklogs.length}):');
+    final header = showOrphanOnly
+        ? 'Orphan Worklogs (${worklogs.length}):'
+        : 'Recent Worklogs (${worklogs.length}):';
+    print(header);
     print(separator());
     for (final w in worklogs) {
-      final title = await resolveTaskTitle(taskService, w.taskId);
+      final title = w.isOrphan
+          ? '(no task)'
+          : await resolveTaskTitle(taskService, w.taskId);
       final dur = formatDuration(Duration(milliseconds: w.durationMs));
       final startDate = formatRelativeDate(w.startTime);
       final startTime = formatTime(w.startTime);
       final syncIcon = w.jiraDirty ? ' [modified]' : w.isSyncedToJira ? ' [synced]' : '';
+      final categoryStr = w.category != null ? ' [${w.category}]' : '';
       final commentStr = w.comment != null && w.comment!.isNotEmpty
           ? '  "${w.comment}"'
           : '';
-      print('  ${w.id.substring(0, 8)}  $title  $dur  $startDate $startTime$syncIcon$commentStr');
+      print('  ${w.id.substring(0, 8)}  $title  $dur  $startDate $startTime$categoryStr$syncIcon$commentStr');
     }
   }
 }
@@ -2047,6 +2070,9 @@ class WorklogAddCommand extends WorklogSubcommand {
     argParser.addOption('start', abbr: 's', help: 'Start time (e.g. 9:00, 2026-02-15T09:00)');
     argParser.addOption('duration', abbr: 'd', help: 'Duration (e.g. 1h30m, 45m)');
     argParser.addOption('message', abbr: 'm', help: 'Description/comment');
+    argParser.addOption('category', abbr: 'c', help: 'Category (for orphan worklogs)');
+    argParser.addFlag('no-task', help: 'Create an orphan worklog (no task)',
+        negatable: false);
   }
 
   @override
@@ -2056,15 +2082,17 @@ class WorklogAddCommand extends WorklogSubcommand {
   String get description => 'Add a worklog with start time and duration';
 
   @override
-  String get invocation => 'avo worklog add [-t task] [-s start] [-d duration] [-m message]';
+  String get invocation => 'avo worklog add [-t task] [-s start] [-d duration] [-m message] [--no-task] [--category cat]';
 
   @override
   String? get usageFooter => '\nExamples:\n'
       '  avo worklog add -t a1b2 -s 9:00 -d 1h30m -m "morning work"\n'
-      '  avo worklog add                    # interactive mode\n'
+      '  avo worklog add --no-task -c Working -s 9:00 -d 1h  # orphan worklog\n'
+      '  avo worklog add --no-task          # interactive orphan mode\n'
       '\n'
       'Time formats: 9:00, 14:30, 2026-02-15T09:00, yesterday 14:00\n'
-      'Duration formats: 30m, 1h, 1h30m, 2h 15m';
+      'Duration formats: 30m, 1h, 1h30m, 2h 15m\n'
+      'Use --no-task to create orphan worklogs without a task.';
 
   @override
   Future<void> run() async {
@@ -2072,26 +2100,38 @@ class WorklogAddCommand extends WorklogSubcommand {
     final startInput = argResults?['start'] as String?;
     final durationInput = argResults?['duration'] as String?;
     var comment = argResults?['message'] as String?;
+    final categoryInput = argResults?['category'] as String?;
+    final noTask = argResults?['no-task'] as bool? ?? false;
 
-    // Also accept task as positional arg
+    // Also accept task as positional arg (but not when --no-task is set)
     final rest = argResults?.rest ?? [];
-    if (taskInput == null && rest.isNotEmpty) {
+    if (taskInput == null && !noTask && rest.isNotEmpty) {
       taskInput = rest.first;
     }
+
+    // Orphan worklog mode: --no-task flag is set
+    final isOrphan = noTask;
 
     // Determine if interactive mode is needed
     final interactive = taskInput == null || startInput == null || durationInput == null;
 
-    // Resolve task
-    String taskId;
+    // Resolve task (null for orphan)
+    String? taskId;
     String taskTitle;
-    if (taskInput == null) {
+    String? category;
+    if (isOrphan) {
+      // Orphan mode: no task, use category
+      taskId = '';
+      taskTitle = '(no task)';
+      category = categoryInput;
+    } else if (taskInput == null) {
       // Interactive task picker
       final tasks = await taskService.list();
       if (tasks.isEmpty) {
         print('No active tasks.');
         print('');
         print(hint('avo task add <title>', 'to create one'));
+        print(hint('avo worklog add --no-task', 'to create an orphan worklog'));
         return;
       }
 
@@ -2200,30 +2240,144 @@ class WorklogAddCommand extends WorklogSubcommand {
       }
     }
 
+    // Resolve category (for orphan worklogs in interactive mode)
+    if (category == null && interactive && isOrphan) {
+      final rl = TerminalReadline();
+      final input = rl.readLine('Category (optional, e.g. Working, Learning): ');
+      if (input != null && input.trim().isNotEmpty) {
+        category = input.trim();
+      }
+    }
+
     final worklog = await worklogService.createWorklog(
-      taskId: taskId,
+      taskId: taskId ?? '',
       start: start!,
       duration: duration!,
       comment: comment,
+      category: category,
     );
 
-    print('Logged ${formatDuration(duration)} on "$taskTitle"');
-    print(kvRow('Worklog:', worklog.id.substring(0, 8)));
-    print(kvRow('Start:', formatTime(start)));
-    print(kvRow('End:', formatTime(start.add(duration))));
-    if (comment != null) print(kvRow('Comment:', comment));
+    if (isOrphan) {
+      print('Logged ${formatDuration(duration)} (orphan - no task)');
+      print(kvRow('Worklog:', worklog.id.substring(0, 8)));
+      print(kvRow('Start:', formatTime(start)));
+      print(kvRow('End:', formatTime(start.add(duration))));
+      if (category != null) print(kvRow('Category:', category));
+      if (comment != null) print(kvRow('Comment:', comment));
+      print('');
+      print(hint('avo worklog assign ${worklog.id.substring(0, 8)} <task-id>', 'to assign to a task'));
+    } else {
+      print('Logged ${formatDuration(duration)} on "$taskTitle"');
+      print(kvRow('Worklog:', worklog.id.substring(0, 8)));
+      print(kvRow('Start:', formatTime(start)));
+      print(kvRow('End:', formatTime(start.add(duration))));
+      if (comment != null) print(kvRow('Comment:', comment));
 
-    // Auto-push worklog to Jira if service is available
-    if (jiraService != null) {
-      final pushed = await jiraService!.pushWorklog(worklog.id);
-      if (pushed) {
-        print(kvRow('Jira:', 'worklog synced'));
+      // Auto-push worklog to Jira if service is available
+      if (jiraService != null) {
+        final pushed = await jiraService!.pushWorklog(worklog.id);
+        if (pushed) {
+          print(kvRow('Jira:', 'worklog synced'));
+        }
       }
     }
 
     print('');
     print(hint('avo today', 'to see today\'s total'));
     print(hint('avo worklog edit ${worklog.id.substring(0, 8)}', 'to edit'));
+  }
+}
+
+/// Worklog assign subcommand (under `avo worklog assign`).
+/// Assigns an orphan worklog to a task.
+class WorklogAssignCommand extends WorklogSubcommand {
+  WorklogAssignCommand(super.worklogService, super.taskService,
+      {super.jiraService});
+
+  @override
+  String get name => 'assign';
+
+  @override
+  String get description => 'Assign an orphan worklog to a task';
+
+  @override
+  String get invocation => 'avo worklog assign <worklog-id> <task-id>';
+
+  @override
+  String? get usageFooter => '\nAssigns an orphan worklog to a task.\n'
+      'The worklog\'s category will be set from the task if the task has one.\n'
+      'If the task is Jira-linked, the worklog will be marked dirty for Jira sync.\n'
+      '\nExample:\n'
+      '  avo worklog assign abc123 def456\n'
+      '  avo worklog assign abc123 -t def456';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.length < 2) {
+      print('Missing arguments.');
+      print('');
+      print('  Usage: avo worklog assign <worklog-id> <task-id>');
+      print(hint('avo worklog list --orphan', 'to see orphan worklogs'));
+      print(hint('avo task list', 'to see available tasks'));
+      return;
+    }
+
+    final worklogIdInput = args[0];
+    var taskInput = args[1];
+
+    // Also accept task as --task option
+    final taskOption = argResults?['task'] as String?;
+    if (taskOption != null) {
+      taskInput = taskOption;
+    }
+
+    try {
+      final worklog = await worklogService.assignToTask(
+        worklogIdOrPrefix: worklogIdInput,
+        taskIdOrPrefix: taskInput,
+        getTask: taskService.show,
+      );
+
+      final taskTitle = await resolveTaskTitle(taskService, worklog.taskId);
+      print('Assigned worklog ${worklog.id.substring(0, 8)} to "$taskTitle"');
+      final worklogCategory = worklog.category;
+      if (worklogCategory != null) {
+        print(kvRow('Category:', worklogCategory));
+      }
+      if (worklog.jiraDirty) {
+        print(kvRow('Jira:', 'marked dirty for re-sync'));
+      }
+
+      print('');
+      print(hint('avo worklog edit ${worklog.id.substring(0, 8)}', 'to edit'));
+    } on WorklogNotFoundException {
+      print('No worklog found matching "$worklogIdInput".');
+      print('');
+      print(hint('avo worklog list --orphan', 'to see orphan worklogs'));
+    } on AmbiguousWorklogIdException catch (e) {
+      print('Multiple worklogs match "$worklogIdInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    } on WorklogNotAssignedException catch (e) {
+      print('Cannot assign: ${e.message}');
+      print('');
+      print(hint('avo worklog list', 'to see worklogs'));
+    } on TaskNotFoundException {
+      print('No task found matching "$taskInput".');
+      print('');
+      print(hint('avo task list', 'to see available tasks'));
+    } on AmbiguousTaskIdException catch (e) {
+      print('Multiple tasks match "$taskInput":');
+      for (final id in e.matchingIds) {
+        print('  ${id.substring(0, 8)}');
+      }
+      print('');
+      print(hintPlain('Use a longer prefix to be specific.'));
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/services/worklog_service.dart';
+import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:test/test.dart';
 
@@ -692,6 +693,327 @@ void main() {
 
       expect(info.count, equals(1));
       expect(info.total.inMinutes, equals(60));
+    });
+  });
+
+  group('listOrphan', () {
+    test('returns empty list when no worklogs', () async {
+      final orphans = await service.listOrphan();
+      expect(orphans, isEmpty);
+    });
+
+    test('returns only orphan worklogs', () async {
+      final now = DateTime.now();
+      // Orphan worklog (no task)
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        category: 'Working',
+      );
+      // Regular worklog (with task)
+      final regular = WorklogDocument.create(
+        clock: clock,
+        taskId: 'task-1',
+        start: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        end: now.millisecondsSinceEpoch,
+      );
+
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+      await db.into(db.worklogEntries).insert(regular.toDriftCompanion());
+
+      final orphans = await service.listOrphan();
+
+      expect(orphans, hasLength(1));
+      expect(orphans.first.isOrphan, isTrue);
+      expect(orphans.first.category, equals('Working'));
+    });
+
+    test('excludes deleted worklogs', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+      await service.deleteWorklog(orphan.id);
+
+      final orphans = await service.listOrphan();
+
+      expect(orphans, isEmpty);
+    });
+
+    test('returns most recent orphans first', () async {
+      final now = DateTime.now();
+      final orphan1 = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+      );
+      final orphan2 = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        end: now.millisecondsSinceEpoch,
+      );
+
+      await db.into(db.worklogEntries).insert(orphan1.toDriftCompanion());
+      await db.into(db.worklogEntries).insert(orphan2.toDriftCompanion());
+
+      final orphans = await service.listOrphan();
+
+      expect(orphans.first.id, equals(orphan2.id));
+    });
+  });
+
+  group('listByCategory', () {
+    test('returns empty list when no matching worklogs', () async {
+      final results = await service.listByCategory('Working');
+      expect(results, isEmpty);
+    });
+
+    test('filters worklogs by category', () async {
+      final now = DateTime.now();
+      final workingWl = WorklogDocument.create(
+        clock: clock,
+        taskId: 'task-1',
+        start: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        category: 'Working',
+      );
+      final learningWl = WorklogDocument.create(
+        clock: clock,
+        taskId: 'task-2',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        category: 'Learning',
+      );
+      final noCatWl = WorklogDocument.create(
+        clock: clock,
+        taskId: 'task-3',
+        start: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        end: now.millisecondsSinceEpoch,
+      );
+
+      await db.into(db.worklogEntries).insert(workingWl.toDriftCompanion());
+      await db.into(db.worklogEntries).insert(learningWl.toDriftCompanion());
+      await db.into(db.worklogEntries).insert(noCatWl.toDriftCompanion());
+
+      final working = await service.listByCategory('Working');
+      final learning = await service.listByCategory('Learning');
+
+      expect(working, hasLength(1));
+      expect(working.first.category, equals('Working'));
+      expect(learning, hasLength(1));
+      expect(learning.first.category, equals('Learning'));
+    });
+
+    test('excludes deleted worklogs', () async {
+      final now = DateTime.now();
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: 'task-1',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        category: 'Working',
+      );
+
+      await db.into(db.worklogEntries).insert(worklog.toDriftCompanion());
+      await service.deleteWorklog(worklog.id);
+
+      final results = await service.listByCategory('Working');
+
+      expect(results, isEmpty);
+    });
+  });
+
+  group('createWorklog with category', () {
+    test('creates worklog with category', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      final worklog = await service.createWorklog(
+        taskId: '',
+        start: start,
+        duration: const Duration(hours: 1),
+        category: 'Working',
+      );
+
+      expect(worklog.taskId, isEmpty);
+      expect(worklog.isOrphan, isTrue);
+      expect(worklog.category, equals('Working'));
+    });
+
+    test('persists category to database', () async {
+      final start = DateTime(2026, 2, 15, 9, 0);
+      await service.createWorklog(
+        taskId: '',
+        start: start,
+        duration: const Duration(hours: 1),
+        category: 'Learning',
+      );
+
+      final recent = await service.listRecent();
+      expect(recent.first.category, equals('Learning'));
+    });
+  });
+
+  group('assignToTask', () {
+    late TaskService taskService;
+
+    setUp(() {
+      taskService = TaskService(db: db, clock: clock);
+    });
+
+    test('assigns orphan worklog to task', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        category: 'Working',
+      );
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+
+      final task = await taskService.add(
+        title: 'Test Task',
+        category: 'Development',
+      );
+
+      final updated = await service.assignToTask(
+        worklogIdOrPrefix: orphan.id,
+        taskIdOrPrefix: task.id,
+        getTask: taskService.show,
+      );
+
+      expect(updated.taskId, equals(task.id));
+      expect(updated.isOrphan, isFalse);
+    });
+
+    test('inherits task category when worklog has no category', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+
+      final task = await taskService.add(
+        title: 'Test Task',
+        category: 'Development',
+      );
+
+      final updated = await service.assignToTask(
+        worklogIdOrPrefix: orphan.id,
+        taskIdOrPrefix: task.id,
+        getTask: taskService.show,
+      );
+
+      expect(updated.category, equals('Development'));
+    });
+
+    test('preserves worklog category when already set', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        category: 'Working',
+      );
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+
+      final task = await taskService.add(
+        title: 'Test Task',
+        category: 'Development',
+      );
+
+      final updated = await service.assignToTask(
+        worklogIdOrPrefix: orphan.id,
+        taskIdOrPrefix: task.id,
+        getTask: taskService.show,
+      );
+
+      // Worklog category should be preserved
+      expect(updated.category, equals('Working'));
+    });
+
+    test('marks jiraDirty when task has Jira issue link', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+
+      final task = await taskService.add(
+        title: 'Jira Task',
+        category: 'Development',
+      );
+      // Simulate Jira link
+      task.issueId = 'PROJ-123';
+      task.issueProviderId = 'jira';
+      await db.into(db.tasks).insertOnConflictUpdate(task.toDriftCompanion());
+
+      final updated = await service.assignToTask(
+        worklogIdOrPrefix: orphan.id,
+        taskIdOrPrefix: task.id,
+        getTask: taskService.show,
+      );
+
+      expect(updated.jiraDirty, isTrue);
+    });
+
+    test('throws WorklogNotAssignedException when worklog already has task',
+        () async {
+      final now = DateTime.now();
+      final worklog = WorklogDocument.create(
+        clock: clock,
+        taskId: 'existing-task',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+      await db.into(db.worklogEntries).insert(worklog.toDriftCompanion());
+
+      final task = await taskService.add(title: 'New Task');
+
+      expect(
+        () => service.assignToTask(
+          worklogIdOrPrefix: worklog.id,
+          taskIdOrPrefix: task.id,
+          getTask: taskService.show,
+        ),
+        throwsA(isA<WorklogNotAssignedException>()),
+      );
+    });
+
+    test('finds worklog by prefix', () async {
+      final now = DateTime.now();
+      final orphan = WorklogDocument.create(
+        clock: clock,
+        taskId: '',
+        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+      await db.into(db.worklogEntries).insert(orphan.toDriftCompanion());
+
+      final task = await taskService.add(title: 'Test Task');
+
+      final updated = await service.assignToTask(
+        worklogIdOrPrefix: orphan.id.substring(0, 8),
+        taskIdOrPrefix: task.id,
+        getTask: taskService.show,
+      );
+
+      expect(updated.taskId, equals(task.id));
     });
   });
 }
