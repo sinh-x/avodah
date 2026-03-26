@@ -194,20 +194,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _startCategoryTimer(String category) async {
-    final deltas = <Map<String, dynamic>>[];
+    try {
+      final deltas = <Map<String, dynamic>>[];
 
-    // Stop current timer first (creates worklog) - with confirmation
-    final snapshot = widget.dashboardProvider.snapshot;
-    if (snapshot?.timer != null && snapshot!.timer!.isRunning) {
-      final taskTitle = snapshot.timer!.taskTitle;
-      final confirmed = await showDialog<bool>(
+      // Stop current timer first (creates worklog) - with confirmation
+      final snapshot = widget.dashboardProvider.snapshot;
+      if (snapshot?.timer != null && snapshot!.timer!.isRunning) {
+        final taskTitle = snapshot.timer!.taskTitle;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Stop current timer?'),
+            content: Text(
+              'Stop current timer for $taskTitle? '
+              'A worklog will be saved with no comment.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Stop'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+
+        final result = await widget.writeService.stopTimerAndLog();
+        final stoppedTimerDelta = await widget.writeService.getTimerDelta();
+        if (stoppedTimerDelta != null) deltas.add(stoppedTimerDelta);
+        if (result.worklogId != null) {
+          final wlDelta =
+              await widget.writeService.getWorklogDelta(result.worklogId!);
+          if (wlDelta != null) deltas.add(wlDelta);
+        }
+      }
+
+      // Confirm before starting timer for category
+      if (!mounted) return;
+      final startConfirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Stop current timer?'),
-          content: Text(
-            'Stop current timer for $taskTitle? '
-            'A worklog will be saved with no comment.',
-          ),
+          title: const Text('Start timer?'),
+          content: Text('Start timer for $category?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -215,43 +247,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Stop'),
+              child: const Text('Start'),
             ),
           ],
         ),
       );
-      if (confirmed != true) return;
+      if (startConfirmed != true) return;
 
-      final result = await widget.writeService.stopTimerAndLog();
-      final stoppedTimerDelta = await widget.writeService.getTimerDelta();
-      if (stoppedTimerDelta != null) deltas.add(stoppedTimerDelta);
-      if (result.worklogId != null) {
-        final wlDelta =
-            await widget.writeService.getWorklogDelta(result.worklogId!);
-        if (wlDelta != null) deltas.add(wlDelta);
-      }
+      // Start timer with category (no task)
+      await widget.writeService.startTimer(
+        taskTitle: category,
+        taskId: null,
+        category: category,
+      );
+      final timerDelta = await widget.writeService.getTimerDelta();
+      if (timerDelta != null) deltas.add(timerDelta);
+
+      // Push all deltas (fire-and-forget)
+      if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
+
+      await widget.dashboardProvider.refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Timer started: $category'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
-
-    // Start timer with category (no task)
-    await widget.writeService.startTimer(
-      taskTitle: category,
-      taskId: null,
-      category: category,
-    );
-    final timerDelta = await widget.writeService.getTimerDelta();
-    if (timerDelta != null) deltas.add(timerDelta);
-
-    // Push all deltas (fire-and-forget)
-    if (deltas.isNotEmpty) widget.onPushDeltas?.call(deltas);
-
-    await widget.dashboardProvider.refresh();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Timer started: $category'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   Future<void> _onEditPlan() async {

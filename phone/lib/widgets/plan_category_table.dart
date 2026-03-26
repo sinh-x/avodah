@@ -149,7 +149,7 @@ class _CategoryRow extends StatelessWidget {
             : theme.colorScheme.outline;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         children: [
           InkWell(
@@ -175,6 +175,12 @@ class _CategoryRow extends StatelessWidget {
                         textAlign: TextAlign.end,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: deltaColor))),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.play_arrow,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
               ],
             ),
           ),

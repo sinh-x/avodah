@@ -341,10 +341,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : <String>[];
 
     if (chips.isEmpty) {
+      final theme = Theme.of(context);
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Text(
