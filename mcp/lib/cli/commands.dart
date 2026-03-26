@@ -2251,7 +2251,7 @@ class WorklogAddCommand extends WorklogSubcommand {
     }
 
     final worklog = await worklogService.createWorklog(
-      taskId: taskId ?? '',
+      taskId: taskId,
       start: start!,
       duration: duration!,
       comment: comment,
@@ -2293,7 +2293,9 @@ class WorklogAddCommand extends WorklogSubcommand {
 /// Assigns an orphan worklog to a task.
 class WorklogAssignCommand extends WorklogSubcommand {
   WorklogAssignCommand(super.worklogService, super.taskService,
-      {super.jiraService});
+      {super.jiraService}) {
+    argParser.addOption('task', abbr: 't', help: 'Task ID or prefix');
+  }
 
   @override
   String get name => 'assign';
@@ -4017,7 +4019,9 @@ class ConfigChipsCommand extends Command<void> {
 class ConfigChipsListCommand extends Command<void> {
   final AvoConfig _config;
 
-  ConfigChipsListCommand(this._config);
+  ConfigChipsListCommand(this._config) {
+    argParser.addOption('category', help: 'Filter by category');
+  }
 
   @override
   String get name => 'list';

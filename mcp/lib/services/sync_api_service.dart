@@ -47,7 +47,7 @@ class SyncApiService {
   final JiraService? jiraService;
 
   /// User config for categories, etc.
-  final AvoConfig? config;
+  AvoConfig? config;
 
   SyncApiService({
     required this.db,
@@ -254,6 +254,7 @@ class SyncApiService {
           categoryChips: newChips,
         );
         await newConfig.save(AvodahPaths());
+        config = newConfig;
         _jsonResponse(request, HttpStatus.ok, {
           'success': true,
           'action': 'added',
@@ -279,6 +280,7 @@ class SyncApiService {
           categoryChips: newChips,
         );
         await newConfig.save(AvodahPaths());
+        config = newConfig;
       }
       _jsonResponse(request, HttpStatus.ok, {
         'success': true,
@@ -324,6 +326,7 @@ class SyncApiService {
         categoryChips: newChips,
       );
       await newConfig.save(AvodahPaths());
+      config = newConfig;
     }
 
     _jsonResponse(request, HttpStatus.ok, {

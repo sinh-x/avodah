@@ -113,7 +113,6 @@ class WorklogService {
     String? comment,
   }) async {
     final now = DateTime.now();
-    final durationMs = durationMinutes * 60 * 1000;
     final start = now.subtract(Duration(minutes: durationMinutes));
 
     final worklog = WorklogDocument.create(

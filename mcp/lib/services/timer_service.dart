@@ -93,6 +93,7 @@ class TimerService {
     required String taskTitle,
     String? taskId,
     String? note,
+    String? category,
   }) async {
     final existing = await _loadActiveTimer();
     if (existing != null) {
@@ -106,6 +107,7 @@ class TimerService {
       taskTitle: taskTitle,
       taskId: resolvedTaskId,
       note: note,
+      category: category,
     );
 
     await _saveTimer(timer);
@@ -127,6 +129,7 @@ class TimerService {
     final startedAt = timer.startedAt!;
     final note = timer.note;
     final elapsed = timer.elapsed;
+    final category = timer.category;
 
     // Stop the timer (clears all fields)
     timer.stop();
@@ -140,6 +143,7 @@ class TimerService {
       start: startedAt,
       end: now,
       comment: comment ?? note,
+      category: category,
     );
 
     await _saveWorklog(worklog);

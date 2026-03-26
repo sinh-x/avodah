@@ -271,7 +271,7 @@ void main() {
       await server.close();
     });
 
-    test('POST /api/config/category-chips returns method not allowed', () async {
+    test('POST /api/config/category-chips returns service unavailable when no config', () async {
       syncApi = SyncApiService(db: db, clock: clock);
 
       final server = await HttpServer.bind('127.0.0.1', 0);
@@ -290,7 +290,7 @@ void main() {
       final req = await client.post('127.0.0.1', port, '/api/config/category-chips');
       final resp = await req.close();
 
-      expect(resp.statusCode, equals(HttpStatus.methodNotAllowed));
+      expect(resp.statusCode, equals(HttpStatus.serviceUnavailable));
 
       client.close();
       await server.close();
