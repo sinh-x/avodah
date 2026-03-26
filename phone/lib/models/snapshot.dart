@@ -48,6 +48,7 @@ class TimerSnapshot {
   final String elapsed;
   final DateTime? startedAt;
   final String? note;
+  final String? category;
 
   /// The snapshot timestamp — needed for live elapsed computation.
   DateTime? _snapshotTimestamp;
@@ -61,6 +62,7 @@ class TimerSnapshot {
     required this.elapsed,
     this.startedAt,
     this.note,
+    this.category,
   });
 
   /// Sets the snapshot timestamp for live elapsed computation.
@@ -88,6 +90,7 @@ class TimerSnapshot {
           ? DateTime.parse(json['startedAt'] as String)
           : null,
       note: json['note'] as String?,
+      category: json['category'] as String?,
     );
   }
 }

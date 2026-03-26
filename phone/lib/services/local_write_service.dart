@@ -10,6 +10,7 @@
 library;
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 /// Result of stopping a timer (includes the generated worklog if any).
@@ -34,12 +35,14 @@ class LocalWriteService {
   /// Starts the active timer for [taskId] / [taskTitle].
   ///
   /// If a timer is already running it is silently replaced (last-write-wins).
+  /// [category] is required for orphan timers (no task).
   Future<void> startTimer({
     required String taskTitle,
     String? taskId,
     String? projectId,
     String? projectTitle,
     String? note,
+    String? category,
   }) async {
     final doc = TimerDocument.start(
       clock: clock,
@@ -48,11 +51,35 @@ class LocalWriteService {
       projectId: projectId,
       projectTitle: projectTitle,
       note: note,
+      category: category,
     );
     await db
         .into(db.timerEntries)
         .insertOnConflictUpdate(doc.toDriftCompanion());
-    debugPrint('[LocalWrite] Timer started: "$taskTitle" (id: $taskId)');
+    debugPrint('[LocalWrite] Timer started: "$taskTitle" (id: $taskId, category: $category)');
+  }
+
+  /// Updates the active timer's taskId (for assigning a task before stopping).
+  ///
+  /// If [taskId] is provided, sets taskId and taskTitle from the task.
+  /// If [taskId] is null, clears the taskId (orphan timer).
+  Future<void> updateTimerTask(String? taskId, String? taskTitle) async {
+    final rows = await (db.select(db.timerEntries)
+          ..where((t) => t.id.equals(activeTimerId)))
+        .get();
+
+    if (rows.isEmpty) {
+      debugPrint('[LocalWrite] updateTimerTask: no active timer found');
+      return;
+    }
+
+    final doc = TimerDocument.fromDrift(timer: rows.first, clock: clock);
+    doc.taskId = taskId;
+    doc.taskTitle = taskTitle ?? '';
+    await db
+        .into(db.timerEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
+    debugPrint('[LocalWrite] Timer task updated: id=$taskId, title=$taskTitle');
   }
 
   /// Stops the active timer and creates a worklog entry for the session.
@@ -88,21 +115,25 @@ class LocalWriteService {
         .insertOnConflictUpdate(timerDoc.toDriftCompanion());
 
     // Create worklog if we have a valid task and duration
+    // Also create orphan worklog if we have a category (no task required)
     String? worklogId;
-    if (taskId != null && taskId.isNotEmpty && totalMs > 0 && startedAt != null) {
+    final timerCategory = timerDoc.category;
+    if ((taskId != null && taskId.isNotEmpty || timerCategory != null) &&
+        totalMs > 0 && startedAt != null) {
       final wlDoc = WorklogDocument.fromTimer(
         clock: clock,
         taskId: taskId,
         start: startedAt,
         end: now,
         comment: comment,
+        category: timerCategory,
       );
       await db
           .into(db.worklogEntries)
           .insertOnConflictUpdate(wlDoc.toDriftCompanion());
       worklogId = wlDoc.id;
       debugPrint(
-          '[LocalWrite] Worklog created: ${wlDoc.id} (${wlDoc.formattedDuration})');
+          '[LocalWrite] Worklog created: ${wlDoc.id} (${wlDoc.formattedDuration}, orphan: ${taskId == null || taskId.isEmpty})');
     }
 
     debugPrint('[LocalWrite] Timer stopped. Elapsed: ${totalMs}ms');
@@ -166,6 +197,51 @@ class LocalWriteService {
         .insertOnConflictUpdate(doc.toDriftCompanion());
     debugPrint('[LocalWrite] Manual worklog created: ${doc.id}');
     return doc.id;
+  }
+
+  /// Returns recent worklog comments (up to [limit] entries).
+  Future<List<String>> getRecentComments({int limit = 10}) async {
+    final rows = await (db.select(db.worklogEntries)
+          ..orderBy([(w) => OrderingTerm.desc(w.created)])
+          ..limit(limit))
+        .get();
+    final comments = <String>[];
+    for (final row in rows) {
+      final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      if (doc.comment != null && doc.comment!.isNotEmpty) {
+        comments.add(doc.comment!);
+      }
+    }
+    return comments;
+  }
+
+  /// Returns active tasks filtered by [category].
+  ///
+  /// Returns tasks where category matches (if category is non-null).
+  /// Excludes done tasks.
+  Future<List<Task>> getTasksByCategory(String? category) async {
+    final query = db.select(db.tasks);
+    final rows = await query.get();
+    final tasks = <Task>[];
+    for (final row in rows) {
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      if (doc.isDone || doc.isDeleted) continue;
+      if (category != null && category.isNotEmpty) {
+        if (doc.category == category) {
+          tasks.add(row);
+        }
+      }
+    }
+    return tasks;
+  }
+
+  /// Returns the set of task IDs in today's day plan.
+  Future<Set<String>> getTodayPlannedTaskIds() async {
+    final today = _today();
+    final rows = await (db.select(db.dayPlanTasks)
+          ..where((t) => t.day.equals(today)))
+        .get();
+    return rows.map((r) => r.taskId).toSet();
   }
 
   // ============================================================

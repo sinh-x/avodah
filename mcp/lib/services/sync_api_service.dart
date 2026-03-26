@@ -16,6 +16,7 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:drift/drift.dart' show Value;
 
 import '../config/avo_config.dart';
+import '../config/paths.dart';
 import 'jira_service.dart';
 
 /// Document type identifiers used in sync delta payloads.
@@ -46,7 +47,7 @@ class SyncApiService {
   final JiraService? jiraService;
 
   /// User config for categories, etc.
-  final AvoConfig? config;
+  AvoConfig? config;
 
   SyncApiService({
     required this.db,
@@ -61,14 +62,16 @@ class SyncApiService {
     final path = request.uri.path;
     final method = request.method;
 
-    if (path != '/api/sync/deltas' && path != '/api/config/categories') {
+    if (path != '/api/sync/deltas' &&
+        path != '/api/config/categories' &&
+        path != '/api/config/category-chips') {
       return false;
     }
 
     // CORS headers
     request.response.headers.add('Access-Control-Allow-Origin', '*');
     request.response.headers
-        .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     request.response.headers
         .add('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -83,6 +86,17 @@ class SyncApiService {
       if (path == '/api/config/categories') {
         if (method == 'GET') {
           await _handleGetCategories(request);
+        } else {
+          _jsonResponse(request, HttpStatus.methodNotAllowed,
+              {'error': 'Method not allowed'});
+        }
+      } else if (path == '/api/config/category-chips') {
+        if (method == 'GET') {
+          await _handleGetCategoryChips(request);
+        } else if (method == 'POST') {
+          await _handleUpdateCategoryChip(request);
+        } else if (method == 'DELETE') {
+          await _handleDeleteCategoryChip(request);
         } else {
           _jsonResponse(request, HttpStatus.methodNotAllowed,
               {'error': 'Method not allowed'});
@@ -173,6 +187,153 @@ class SyncApiService {
       ..sort();
 
     _jsonResponse(request, HttpStatus.ok, {'categories': allCategories});
+  }
+
+  /// GET /api/config/category-chips?category=Working
+  ///
+  /// Returns the list of chip presets for the specified category.
+  /// If no category is specified, returns all category chips as a map.
+  Future<void> _handleGetCategoryChips(HttpRequest request) async {
+    final category = request.uri.queryParameters['category'];
+
+    final chips = config?.categoryChips ?? {};
+
+    if (category != null) {
+      // Return chips for specific category
+      _jsonResponse(request, HttpStatus.ok, {
+        'category': category,
+        'chips': chips[category] ?? [],
+      });
+    } else {
+      // Return all chips
+      _jsonResponse(request, HttpStatus.ok, {'categoryChips': chips});
+    }
+  }
+
+  /// POST /api/config/category-chips
+  ///
+  /// Adds or removes a chip preset for a category.
+  /// Body: {"action": "add"|"remove", "category": "Working", "chip": "standup"}
+  Future<void> _handleUpdateCategoryChip(HttpRequest request) async {
+    if (config == null) {
+      _jsonResponse(request, HttpStatus.serviceUnavailable,
+          {'error': 'Config not available'});
+      return;
+    }
+
+    final body = await utf8.decoder.bind(request).join();
+    final json = jsonDecode(body) as Map<String, dynamic>;
+
+    final action = json['action'] as String?;
+    final category = json['category'] as String?;
+    final chip = json['chip'] as String?;
+
+    if (action == null || category == null || chip == null) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Missing required fields: action, category, chip'});
+      return;
+    }
+
+    if (chip.isEmpty) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Chip text cannot be empty'});
+      return;
+    }
+
+    final newChips = Map<String, List<String>>.from(config!.categoryChips);
+    final categoryChips = List<String>.from(newChips[category] ?? []);
+
+    if (action == 'add') {
+      if (!categoryChips.contains(chip)) {
+        categoryChips.add(chip);
+        newChips[category] = categoryChips;
+        final newConfig = AvoConfig(
+          categories: config!.categories,
+          syncPort: config!.syncPort,
+          syncInterval: config!.syncInterval,
+          categoryChips: newChips,
+        );
+        await newConfig.save(AvodahPaths());
+        config = newConfig;
+        _jsonResponse(request, HttpStatus.ok, {
+          'success': true,
+          'action': 'added',
+          'category': category,
+          'chip': chip,
+        });
+      } else {
+        _jsonResponse(request, HttpStatus.ok, {
+          'success': true,
+          'action': 'already_exists',
+          'category': category,
+          'chip': chip,
+        });
+      }
+    } else if (action == 'remove') {
+      if (categoryChips.contains(chip)) {
+        categoryChips.remove(chip);
+        newChips[category] = categoryChips;
+        final newConfig = AvoConfig(
+          categories: config!.categories,
+          syncPort: config!.syncPort,
+          syncInterval: config!.syncInterval,
+          categoryChips: newChips,
+        );
+        await newConfig.save(AvodahPaths());
+        config = newConfig;
+      }
+      _jsonResponse(request, HttpStatus.ok, {
+        'success': true,
+        'action': 'removed',
+        'category': category,
+        'chip': chip,
+      });
+    } else {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Invalid action. Use "add" or "remove"'});
+    }
+  }
+
+  /// DELETE /api/config/category-chips?category=Working&chip=standup
+  ///
+  /// Removes a chip preset from a category.
+  Future<void> _handleDeleteCategoryChip(HttpRequest request) async {
+    if (config == null) {
+      _jsonResponse(request, HttpStatus.serviceUnavailable,
+          {'error': 'Config not available'});
+      return;
+    }
+
+    final category = request.uri.queryParameters['category'];
+    final chip = request.uri.queryParameters['chip'];
+
+    if (category == null || chip == null) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Missing required query parameters: category, chip'});
+      return;
+    }
+
+    final newChips = Map<String, List<String>>.from(config!.categoryChips);
+    final categoryChips = List<String>.from(newChips[category] ?? []);
+
+    if (categoryChips.contains(chip)) {
+      categoryChips.remove(chip);
+      newChips[category] = categoryChips;
+      final newConfig = AvoConfig(
+        categories: config!.categories,
+        syncPort: config!.syncPort,
+        syncInterval: config!.syncInterval,
+        categoryChips: newChips,
+      );
+      await newConfig.save(AvodahPaths());
+      config = newConfig;
+    }
+
+    _jsonResponse(request, HttpStatus.ok, {
+      'success': true,
+      'category': category,
+      'chip': chip,
+    });
   }
 
   /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.

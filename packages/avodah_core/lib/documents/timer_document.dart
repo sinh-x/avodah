@@ -25,6 +25,7 @@ class TimerFields {
   static const String pausedAt = 'pausedAt';
   static const String accumulatedMs = 'accumulatedMs';
   static const String note = 'note';
+  static const String category = 'category';
 }
 
 /// A CRDT-backed timer document.
@@ -50,6 +51,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     String? projectId,
     String? projectTitle,
     String? note,
+    String? category,
   }) {
     final doc = TimerDocument(
       id: activeTimerId,
@@ -60,6 +62,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     doc.projectId = projectId;
     doc.projectTitle = projectTitle;
     doc.note = note;
+    doc.category = category;
     doc.startedAtMs = DateTime.now().millisecondsSinceEpoch;
     doc.isRunning = true;
     doc.pausedAtMs = null;
@@ -96,9 +99,23 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     // If no CRDT state exists, initialize from Drift fields
     if (state.isEmpty) {
       doc._initializeFromDrift(timer);
+    } else {
+      // Backfill fields added in later schema versions (e.g. category in v12)
+      doc._backfillFromDrift(timer);
     }
 
     return doc;
+  }
+
+  /// Backfills fields from Drift columns when they are missing from CRDT
+  /// state. This handles fields added in later schema versions (e.g.
+  /// category in v12) for timers whose CRDT state was written before
+  /// those fields existed.
+  void _backfillFromDrift(TimerEntry timer) {
+    final keys = fieldKeys.toSet();
+    if (!keys.contains(TimerFields.category) && timer.category != null) {
+      setString(TimerFields.category, timer.category);
+    }
   }
 
   /// Initializes fields from Drift entity when no CRDT state exists.
@@ -112,6 +129,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     setInt(TimerFields.pausedAt, timer.pausedAt);
     setInt(TimerFields.accumulatedMs, timer.accumulatedMs);
     setString(TimerFields.note, timer.note);
+    setString(TimerFields.category, timer.category);
   }
 
   // ============================================================
@@ -138,6 +156,10 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
   /// Optional note about current work.
   String? get note => getString(TimerFields.note);
   set note(String? value) => setString(TimerFields.note, value);
+
+  /// Category for orphan timers (no task required).
+  String? get category => getString(TimerFields.category);
+  set category(String? value) => setString(TimerFields.category, value);
 
   // ============================================================
   // Timer State
@@ -251,6 +273,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
     projectId = null;
     projectTitle = null;
     note = null;
+    category = null;
 
     return totalMs;
   }
@@ -277,6 +300,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
       pausedAt: Value(pausedAtMs),
       accumulatedMs: Value(accumulatedMs),
       note: Value(note),
+      category: Value(category),
       crdtClock: Value(clock.lastTimestamp.pack()),
       crdtState: Value(toCrdtState()),
     );
@@ -296,6 +320,7 @@ class TimerDocument extends CrdtDocument<TimerDocument> {
       elapsed: elapsed,
       elapsedFormatted: elapsedFormatted,
       note: note,
+      category: category,
     );
   }
 
@@ -321,6 +346,7 @@ class TimerModel {
   final Duration elapsed;
   final String elapsedFormatted;
   final String? note;
+  final String? category;
 
   const TimerModel({
     required this.isRunning,
@@ -334,6 +360,7 @@ class TimerModel {
     required this.elapsed,
     required this.elapsedFormatted,
     this.note,
+    this.category,
   });
 
   @override

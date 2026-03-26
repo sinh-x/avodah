@@ -20,6 +20,11 @@ class AvoConfig {
   /// Interval in seconds between snapshot pushes to connected clients.
   final int syncInterval;
 
+  /// Per-category comment chip presets for quick comments when stopping timers.
+  /// Example: {'Working': ['standup', 'code review', 'debugging'],
+  ///           'Learning': ['reading', 'course']}
+  final Map<String, List<String>> categoryChips;
+
   static const defaultCategories = [
     'Learning',
     'Working',
@@ -32,6 +37,7 @@ class AvoConfig {
     this.categories = const [],
     this.syncPort = 9847,
     this.syncInterval = 30,
+    this.categoryChips = const {},
   });
 
   /// Effective categories list — user's if set, otherwise defaults.
@@ -64,10 +70,43 @@ class AvoConfig {
     final syncPort = (syncMap?['port'] as int?) ?? 9847;
     final syncInterval = (syncMap?['intervalSeconds'] as int?) ?? 30;
 
+    final chipsMap = json['categoryChips'] as Map<String, dynamic>?;
+    final categoryChips = <String, List<String>>{};
+    if (chipsMap != null) {
+      for (final entry in chipsMap.entries) {
+        final chips = (entry.value as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [];
+        categoryChips[entry.key] = chips;
+      }
+    }
+
     return AvoConfig(
       categories: categories,
       syncPort: syncPort,
       syncInterval: syncInterval,
+      categoryChips: categoryChips,
     );
+  }
+
+  /// Converts this config to a JSON-serializable map.
+  Map<String, dynamic> toJson() {
+    return {
+      'categories': categories,
+      'sync': {
+        'port': syncPort,
+        'intervalSeconds': syncInterval,
+      },
+      'categoryChips': categoryChips,
+    };
+  }
+
+  /// Saves this config to `~/.config/avodah/config.json`.
+  Future<void> save(AvodahPaths paths) async {
+    final configPath = p.join(paths.configDir, 'config.json');
+    final file = File(configPath);
+    file.parent.createSync(recursive: true);
+    await file.writeAsString(jsonEncode(toJson()));
   }
 }

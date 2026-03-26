@@ -21,6 +21,7 @@ class WorklogFields {
   static const String duration = 'duration';
   static const String date = 'date';
   static const String comment = 'comment';
+  static const String category = 'category';
   static const String jiraWorklogId = 'jiraWorklogId';
   static const String jiraDirty = 'jiraDirty';
   static const String created = 'created';
@@ -35,23 +36,26 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
   /// Creates a new worklog document with a generated UUID.
   ///
   /// [start] and [end] are Unix milliseconds.
+  /// [taskId] is optional — defaults to empty string for orphan worklogs.
   factory WorklogDocument.create({
     required HybridLogicalClock clock,
-    required String taskId,
+    String? taskId,
     required int start,
     required int end,
     String? comment,
+    String? category,
   }) {
     final doc = WorklogDocument(
       id: const Uuid().v4(),
       clock: clock,
     );
-    doc.taskId = taskId;
+    doc.taskId = taskId ?? '';
     doc.startMs = start;
     doc.endMs = end;
     doc.durationMs = end - start;
     doc.date = _dateFromMs(start);
     doc.comment = comment;
+    doc.category = category;
     final now = DateTime.now().millisecondsSinceEpoch;
     doc.createdMs = now;
     doc.updatedMs = now;
@@ -61,10 +65,11 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
   /// Creates a worklog from a timer session.
   factory WorklogDocument.fromTimer({
     required HybridLogicalClock clock,
-    required String taskId,
+    String? taskId,
     required DateTime start,
     required DateTime end,
     String? comment,
+    String? category,
   }) {
     return WorklogDocument.create(
       clock: clock,
@@ -72,6 +77,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       start: start.millisecondsSinceEpoch,
       end: end.millisecondsSinceEpoch,
       comment: comment,
+      category: category,
     );
   }
 
@@ -120,17 +126,21 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
     setInt(WorklogFields.duration, worklog.duration);
     setString(WorklogFields.date, worklog.date);
     setString(WorklogFields.comment, worklog.comment);
+    setString(WorklogFields.category, worklog.category);
     setString(WorklogFields.jiraWorklogId, worklog.jiraWorklogId);
     setBool(WorklogFields.jiraDirty, worklog.jiraDirty);
     setInt(WorklogFields.created, worklog.created);
     setInt(WorklogFields.updated, worklog.updated);
   }
 
-  /// Backfills fields added in later schema versions (e.g. jiraDirty in v10).
+  /// Backfills fields added in later schema versions (e.g. jiraDirty in v10, category in v12).
   void _backfillFromDrift(WorklogEntry worklog) {
     final keys = fieldKeys.toSet();
     if (!keys.contains(WorklogFields.jiraDirty) && worklog.jiraDirty) {
       setBool(WorklogFields.jiraDirty, worklog.jiraDirty);
+    }
+    if (!keys.contains(WorklogFields.category) && worklog.category != null) {
+      setString(WorklogFields.category, worklog.category);
     }
   }
 
@@ -166,6 +176,13 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
   /// Optional comment/note.
   String? get comment => getString(WorklogFields.comment);
   set comment(String? value) => setString(WorklogFields.comment, value);
+
+  /// Category for orphan worklogs (no task required).
+  String? get category => getString(WorklogFields.category);
+  set category(String? value) => setString(WorklogFields.category, value);
+
+  /// Whether this worklog is an orphan (no task assigned).
+  bool get isOrphan => taskId.isEmpty;
 
   /// Created timestamp (Unix ms).
   int get createdMs => getInt(WorklogFields.created) ?? 0;
@@ -266,6 +283,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       duration: Value(durationMs),
       date: Value(date),
       comment: Value(comment),
+      category: Value(category),
       jiraWorklogId: Value(jiraWorklogId),
       jiraDirty: Value(jiraDirty),
       created: Value(createdMs),
@@ -285,6 +303,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
       duration: duration,
       date: date,
       comment: comment,
+      category: category,
       isSyncedToJira: isSyncedToJira,
       jiraDirty: jiraDirty,
       isDeleted: isDeleted,
@@ -309,9 +328,13 @@ class WorklogModel {
   final Duration duration;
   final String date;
   final String? comment;
+  final String? category;
   final bool isSyncedToJira;
   final bool jiraDirty;
   final bool isDeleted;
+
+  /// Whether this worklog is an orphan (no task assigned).
+  bool get isOrphan => taskId.isEmpty;
 
   const WorklogModel({
     required this.id,
@@ -321,6 +344,7 @@ class WorklogModel {
     required this.duration,
     required this.date,
     this.comment,
+    this.category,
     required this.isSyncedToJira,
     this.jiraDirty = false,
     required this.isDeleted,

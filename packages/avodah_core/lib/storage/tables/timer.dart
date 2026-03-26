@@ -35,6 +35,9 @@ class TimerEntries extends Table {
   /// Optional note about current work.
   TextColumn get note => text().nullable()();
 
+  /// Category for orphan timers (no task required).
+  TextColumn get category => text().nullable()();
+
   // CRDT metadata
   TextColumn get crdtClock => text().withDefault(const Constant(''))();
   TextColumn get crdtState => text().withDefault(const Constant('{}'))();

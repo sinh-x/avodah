@@ -8,7 +8,15 @@ class PlanCategoryTable extends StatelessWidget {
   /// Called when the user taps the Edit button in the card header.
   final VoidCallback? onEditPlan;
 
-  const PlanCategoryTable({super.key, required this.plan, this.onEditPlan});
+  /// Called when the user taps a category row to start a timer.
+  final void Function(String category)? onCategoryTap;
+
+  const PlanCategoryTable({
+    super.key,
+    required this.plan,
+    this.onEditPlan,
+    this.onCategoryTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +98,10 @@ class PlanCategoryTable extends StatelessWidget {
             ),
 
             // Category rows
-            ...plan.categories.map((c) => _CategoryRow(category: c)),
+            ...plan.categories.map((c) => _CategoryRow(
+                  category: c,
+                  onTap: onCategoryTap != null ? () => onCategoryTap!(c.category) : null,
+                )),
 
             // Non-categorized
             if (plan.nonCategorized != null) ...[
@@ -124,8 +135,9 @@ class PlanCategoryTable extends StatelessWidget {
 
 class _CategoryRow extends StatelessWidget {
   final PlanCategorySnapshot category;
+  final VoidCallback? onTap;
 
-  const _CategoryRow({required this.category});
+  const _CategoryRow({required this.category, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -137,30 +149,40 @@ class _CategoryRow extends StatelessWidget {
             : theme.colorScheme.outline;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                  flex: 3,
-                  child: Text(category.category,
-                      style: theme.textTheme.bodyMedium)),
-              Expanded(
-                  child: Text(category.planned,
-                      textAlign: TextAlign.end,
-                      style: theme.textTheme.bodySmall)),
-              Expanded(
-                  child: Text(category.actual,
-                      textAlign: TextAlign.end,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w600))),
-              Expanded(
-                  child: Text(category.delta,
-                      textAlign: TextAlign.end,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: deltaColor))),
-            ],
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(4),
+            child: Row(
+              children: [
+                Expanded(
+                    flex: 3,
+                    child: Text(category.category,
+                        style: theme.textTheme.bodyMedium)),
+                Expanded(
+                    child: Text(category.planned,
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.bodySmall)),
+                Expanded(
+                    child: Text(category.actual,
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(fontWeight: FontWeight.w600))),
+                Expanded(
+                    child: Text(category.delta,
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: deltaColor))),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.play_arrow,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ),
           ),
           // Progress bar
           if (category.plannedMs > 0)

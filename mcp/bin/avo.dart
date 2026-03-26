@@ -106,7 +106,8 @@ Future<void> main(List<String> args) async {
           taskService: taskService,
           worklogService: worklogService))
       ..addCommand(JiraCommand(jiraService, paths))
-      ..addCommand(DbCommand(db: db, clock: clock, paths: paths));
+      ..addCommand(DbCommand(db: db, clock: clock, paths: paths))
+      ..addCommand(ConfigCommand(avoConfig, paths));
 
     // No args → run status + hint
     if (args.isEmpty) {
