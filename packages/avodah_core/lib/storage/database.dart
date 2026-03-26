@@ -106,10 +106,15 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(syncWatermarks);
         }
         if (from < 12) {
-          // v0.5.0: orphan worklogs — add category column to worklogEntries
+          // v0.5.0: orphan worklogs — add category column to worklogEntries and timerEntries
           // Guard: column may already exist if previous migration partially completed
           try {
             await m.addColumn(worklogEntries, worklogEntries.category);
+          } on Exception catch (_) {
+            // Column already exists
+          }
+          try {
+            await m.addColumn(timerEntries, timerEntries.category);
           } on Exception catch (_) {
             // Column already exists
           }
