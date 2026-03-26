@@ -42,6 +42,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   // Deploy state
   DeployRouting? _deployRouting;
+  DateTime? _deployRoutingFetchedAt;
   bool _fetchingRouting = false;
 
   // Edit state
@@ -146,12 +147,19 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     final errorColor = Theme.of(context).colorScheme.error;
     final client = widget.boardProvider.client;
 
-    // Fetch routing if not cached.
-    if (_deployRouting == null) {
+    // Fetch routing if not cached or stale (>5 min).
+    final routingStale = _deployRoutingFetchedAt != null &&
+        DateTime.now().difference(_deployRoutingFetchedAt!).inMinutes >= 5;
+    if (_deployRouting == null || routingStale) {
       setState(() => _fetchingRouting = true);
       try {
         final routing = await client.getDeployRouting();
-        if (mounted) setState(() => _deployRouting = routing);
+        if (mounted) {
+          setState(() {
+            _deployRouting = routing;
+            _deployRoutingFetchedAt = DateTime.now();
+          });
+        }
       } catch (e) {
         if (mounted) {
           setState(() => _fetchingRouting = false);
@@ -199,36 +207,75 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               repo: repo,
               ticket: ticket.id,
             );
-            if (mounted) {
-              final deployment = Deployment(
-                deploymentId: result.deploymentId,
-                team: result.team,
-                status: 'running',
-                startedAt: DateTime.now().toIso8601String(),
-              );
+            if (!mounted) return;
+            if (!result.started) {
               messenger.showSnackBar(SnackBar(
                 content: Text(
-                  result.deploymentId.isNotEmpty
-                      ? 'Deployed ${result.deploymentId}'
-                      : 'Deployment started',
+                  'Deploy failed: server did not start deployment'
+                  '${result.deploymentId.isNotEmpty ? ' (${result.deploymentId})' : ''}',
                 ),
-                duration: const Duration(seconds: 8),
-                action: SnackBarAction(
-                  label: 'View',
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => ActivityTimelineScreen(
-                          deployment: deployment,
-                          client: client,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                backgroundColor: errorColor,
               ));
+              return;
             }
+            // Server may return empty deployment_id (ID generated async).
+            // Poll listDeployments to find the real deployment.
+            Deployment? deployment;
+            final beforeDeploy = DateTime.now().subtract(const Duration(seconds: 5));
+            for (var attempt = 0; attempt < 3; attempt++) {
+              await Future<void>.delayed(const Duration(seconds: 2));
+              if (!mounted) return;
+              try {
+                final deployments = await client.listDeployments();
+                // Match by exact ID if available, else by team + recent start.
+                if (result.deploymentId.isNotEmpty) {
+                  deployment = deployments.cast<Deployment?>().firstWhere(
+                        (d) => d!.deploymentId == result.deploymentId,
+                        orElse: () => null,
+                      );
+                } else {
+                  // Find most recent deployment for this team started after our trigger.
+                  final candidates = deployments.where((d) {
+                    if (d.team != team) return false;
+                    final started = DateTime.tryParse(d.startedAt);
+                    return started != null && started.isAfter(beforeDeploy);
+                  }).toList()
+                    ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+                  if (candidates.isNotEmpty) {
+                    deployment = candidates.first;
+                  }
+                }
+                if (deployment != null) break;
+              } catch (_) {
+                // Retry on next attempt.
+              }
+            }
+            if (!mounted) return;
+            final displayId = deployment?.deploymentId ?? result.deploymentId;
+            messenger.showSnackBar(SnackBar(
+              content: Text(
+                displayId.isNotEmpty
+                    ? 'Deployed $displayId'
+                    : 'Deployment launched',
+              ),
+              duration: const Duration(seconds: 8),
+              action: deployment != null
+                  ? SnackBarAction(
+                      label: 'View',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ActivityTimelineScreen(
+                              deployment: deployment!,
+                              client: client,
+                            ),
+                          ),
+                        );
+                      },
+                    )
+                  : null,
+            ));
           } catch (e) {
             if (mounted) {
               messenger.showSnackBar(SnackBar(
