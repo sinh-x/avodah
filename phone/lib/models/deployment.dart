@@ -11,6 +11,11 @@ class Deployment {
   final String? error;
   final int? exitCode;
   final String? logFile;
+  final Map<String, dynamic>? rating;
+  final String? primer;
+  final String? primerPath;
+  final String? provider;
+  final int? pid;
 
   const Deployment({
     required this.deploymentId,
@@ -24,6 +29,11 @@ class Deployment {
     this.error,
     this.exitCode,
     this.logFile,
+    this.rating,
+    this.primer,
+    this.primerPath,
+    this.provider,
+    this.pid,
   });
 
   factory Deployment.fromJson(Map<String, dynamic> json) {
@@ -40,6 +50,11 @@ class Deployment {
       error: json['error'] as String?,
       exitCode: json['exit_code'] as int?,
       logFile: json['log_file'] as String?,
+      rating: json['rating'] as Map<String, dynamic>?,
+      primer: json['primer'] as String?,
+      primerPath: json['primer_path'] as String?,
+      provider: json['provider'] as String?,
+      pid: json['pid'] as int?,
     );
   }
 
