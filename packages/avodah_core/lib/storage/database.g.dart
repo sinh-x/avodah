@@ -3661,6 +3661,17 @@ class $WorklogEntriesTable extends WorklogEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _jiraWorklogIdMeta = const VerificationMeta(
     'jiraWorklogId',
   );
@@ -3742,6 +3753,7 @@ class $WorklogEntriesTable extends WorklogEntries
     duration,
     date,
     comment,
+    category,
     jiraWorklogId,
     jiraDirty,
     created,
@@ -3810,6 +3822,12 @@ class $WorklogEntriesTable extends WorklogEntries
       context.handle(
         _commentMeta,
         comment.isAcceptableOrUnknown(data['comment']!, _commentMeta),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
       );
     }
     if (data.containsKey('jira_worklog_id')) {
@@ -3892,6 +3910,10 @@ class $WorklogEntriesTable extends WorklogEntries
         DriftSqlType.string,
         data['${effectivePrefix}comment'],
       ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      ),
       jiraWorklogId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}jira_worklog_id'],
@@ -3933,6 +3955,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
   final int duration;
   final String date;
   final String? comment;
+  final String? category;
   final String? jiraWorklogId;
   final bool jiraDirty;
   final int created;
@@ -3947,6 +3970,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     required this.duration,
     required this.date,
     this.comment,
+    this.category,
     this.jiraWorklogId,
     required this.jiraDirty,
     required this.created,
@@ -3965,6 +3989,9 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     map['date'] = Variable<String>(date);
     if (!nullToAbsent || comment != null) {
       map['comment'] = Variable<String>(comment);
+    }
+    if (!nullToAbsent || category != null) {
+      map['category'] = Variable<String>(category);
     }
     if (!nullToAbsent || jiraWorklogId != null) {
       map['jira_worklog_id'] = Variable<String>(jiraWorklogId);
@@ -3988,6 +4015,9 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       comment: comment == null && nullToAbsent
           ? const Value.absent()
           : Value(comment),
+      category: category == null && nullToAbsent
+          ? const Value.absent()
+          : Value(category),
       jiraWorklogId: jiraWorklogId == null && nullToAbsent
           ? const Value.absent()
           : Value(jiraWorklogId),
@@ -4012,6 +4042,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       duration: serializer.fromJson<int>(json['duration']),
       date: serializer.fromJson<String>(json['date']),
       comment: serializer.fromJson<String?>(json['comment']),
+      category: serializer.fromJson<String?>(json['category']),
       jiraWorklogId: serializer.fromJson<String?>(json['jiraWorklogId']),
       jiraDirty: serializer.fromJson<bool>(json['jiraDirty']),
       created: serializer.fromJson<int>(json['created']),
@@ -4031,6 +4062,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       'duration': serializer.toJson<int>(duration),
       'date': serializer.toJson<String>(date),
       'comment': serializer.toJson<String?>(comment),
+      'category': serializer.toJson<String?>(category),
       'jiraWorklogId': serializer.toJson<String?>(jiraWorklogId),
       'jiraDirty': serializer.toJson<bool>(jiraDirty),
       'created': serializer.toJson<int>(created),
@@ -4048,6 +4080,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     int? duration,
     String? date,
     Value<String?> comment = const Value.absent(),
+    Value<String?> category = const Value.absent(),
     Value<String?> jiraWorklogId = const Value.absent(),
     bool? jiraDirty,
     int? created,
@@ -4062,6 +4095,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     duration: duration ?? this.duration,
     date: date ?? this.date,
     comment: comment.present ? comment.value : this.comment,
+    category: category.present ? category.value : this.category,
     jiraWorklogId: jiraWorklogId.present
         ? jiraWorklogId.value
         : this.jiraWorklogId,
@@ -4080,6 +4114,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
       duration: data.duration.present ? data.duration.value : this.duration,
       date: data.date.present ? data.date.value : this.date,
       comment: data.comment.present ? data.comment.value : this.comment,
+      category: data.category.present ? data.category.value : this.category,
       jiraWorklogId: data.jiraWorklogId.present
           ? data.jiraWorklogId.value
           : this.jiraWorklogId,
@@ -4101,6 +4136,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
           ..write('duration: $duration, ')
           ..write('date: $date, ')
           ..write('comment: $comment, ')
+          ..write('category: $category, ')
           ..write('jiraWorklogId: $jiraWorklogId, ')
           ..write('jiraDirty: $jiraDirty, ')
           ..write('created: $created, ')
@@ -4120,6 +4156,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
     duration,
     date,
     comment,
+    category,
     jiraWorklogId,
     jiraDirty,
     created,
@@ -4138,6 +4175,7 @@ class WorklogEntry extends DataClass implements Insertable<WorklogEntry> {
           other.duration == this.duration &&
           other.date == this.date &&
           other.comment == this.comment &&
+          other.category == this.category &&
           other.jiraWorklogId == this.jiraWorklogId &&
           other.jiraDirty == this.jiraDirty &&
           other.created == this.created &&
@@ -4154,6 +4192,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
   final Value<int> duration;
   final Value<String> date;
   final Value<String?> comment;
+  final Value<String?> category;
   final Value<String?> jiraWorklogId;
   final Value<bool> jiraDirty;
   final Value<int> created;
@@ -4169,6 +4208,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     this.duration = const Value.absent(),
     this.date = const Value.absent(),
     this.comment = const Value.absent(),
+    this.category = const Value.absent(),
     this.jiraWorklogId = const Value.absent(),
     this.jiraDirty = const Value.absent(),
     this.created = const Value.absent(),
@@ -4185,6 +4225,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     required int duration,
     required String date,
     this.comment = const Value.absent(),
+    this.category = const Value.absent(),
     this.jiraWorklogId = const Value.absent(),
     this.jiraDirty = const Value.absent(),
     required int created,
@@ -4208,6 +4249,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     Expression<int>? duration,
     Expression<String>? date,
     Expression<String>? comment,
+    Expression<String>? category,
     Expression<String>? jiraWorklogId,
     Expression<bool>? jiraDirty,
     Expression<int>? created,
@@ -4224,6 +4266,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
       if (duration != null) 'duration': duration,
       if (date != null) 'date': date,
       if (comment != null) 'comment': comment,
+      if (category != null) 'category': category,
       if (jiraWorklogId != null) 'jira_worklog_id': jiraWorklogId,
       if (jiraDirty != null) 'jira_dirty': jiraDirty,
       if (created != null) 'created': created,
@@ -4242,6 +4285,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     Value<int>? duration,
     Value<String>? date,
     Value<String?>? comment,
+    Value<String?>? category,
     Value<String?>? jiraWorklogId,
     Value<bool>? jiraDirty,
     Value<int>? created,
@@ -4258,6 +4302,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
       duration: duration ?? this.duration,
       date: date ?? this.date,
       comment: comment ?? this.comment,
+      category: category ?? this.category,
       jiraWorklogId: jiraWorklogId ?? this.jiraWorklogId,
       jiraDirty: jiraDirty ?? this.jiraDirty,
       created: created ?? this.created,
@@ -4291,6 +4336,9 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
     }
     if (comment.present) {
       map['comment'] = Variable<String>(comment.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
     }
     if (jiraWorklogId.present) {
       map['jira_worklog_id'] = Variable<String>(jiraWorklogId.value);
@@ -4326,6 +4374,7 @@ class WorklogEntriesCompanion extends UpdateCompanion<WorklogEntry> {
           ..write('duration: $duration, ')
           ..write('date: $date, ')
           ..write('comment: $comment, ')
+          ..write('category: $category, ')
           ..write('jiraWorklogId: $jiraWorklogId, ')
           ..write('jiraDirty: $jiraDirty, ')
           ..write('created: $created, ')
@@ -5553,6 +5602,17 @@ class $TimerEntriesTable extends TimerEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _crdtClockMeta = const VerificationMeta(
     'crdtClock',
   );
@@ -5589,6 +5649,7 @@ class $TimerEntriesTable extends TimerEntries
     pausedAt,
     accumulatedMs,
     note,
+    category,
     crdtClock,
     crdtState,
   ];
@@ -5669,6 +5730,12 @@ class $TimerEntriesTable extends TimerEntries
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
     if (data.containsKey('crdt_clock')) {
       context.handle(
         _crdtClockMeta,
@@ -5730,6 +5797,10 @@ class $TimerEntriesTable extends TimerEntries
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      ),
       crdtClock: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}crdt_clock'],
@@ -5777,6 +5848,9 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
 
   /// Optional note about current work.
   final String? note;
+
+  /// Category for orphan timers (no task required).
+  final String? category;
   final String crdtClock;
   final String crdtState;
   const TimerEntry({
@@ -5790,6 +5864,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
     this.pausedAt,
     required this.accumulatedMs,
     this.note,
+    this.category,
     required this.crdtClock,
     required this.crdtState,
   });
@@ -5816,6 +5891,9 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    if (!nullToAbsent || category != null) {
+      map['category'] = Variable<String>(category);
+    }
     map['crdt_clock'] = Variable<String>(crdtClock);
     map['crdt_state'] = Variable<String>(crdtState);
     return map;
@@ -5841,6 +5919,9 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
           : Value(pausedAt),
       accumulatedMs: Value(accumulatedMs),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      category: category == null && nullToAbsent
+          ? const Value.absent()
+          : Value(category),
       crdtClock: Value(crdtClock),
       crdtState: Value(crdtState),
     );
@@ -5862,6 +5943,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
       pausedAt: serializer.fromJson<int?>(json['pausedAt']),
       accumulatedMs: serializer.fromJson<int>(json['accumulatedMs']),
       note: serializer.fromJson<String?>(json['note']),
+      category: serializer.fromJson<String?>(json['category']),
       crdtClock: serializer.fromJson<String>(json['crdtClock']),
       crdtState: serializer.fromJson<String>(json['crdtState']),
     );
@@ -5880,6 +5962,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
       'pausedAt': serializer.toJson<int?>(pausedAt),
       'accumulatedMs': serializer.toJson<int>(accumulatedMs),
       'note': serializer.toJson<String?>(note),
+      'category': serializer.toJson<String?>(category),
       'crdtClock': serializer.toJson<String>(crdtClock),
       'crdtState': serializer.toJson<String>(crdtState),
     };
@@ -5896,6 +5979,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
     Value<int?> pausedAt = const Value.absent(),
     int? accumulatedMs,
     Value<String?> note = const Value.absent(),
+    Value<String?> category = const Value.absent(),
     String? crdtClock,
     String? crdtState,
   }) => TimerEntry(
@@ -5909,6 +5993,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
     pausedAt: pausedAt.present ? pausedAt.value : this.pausedAt,
     accumulatedMs: accumulatedMs ?? this.accumulatedMs,
     note: note.present ? note.value : this.note,
+    category: category.present ? category.value : this.category,
     crdtClock: crdtClock ?? this.crdtClock,
     crdtState: crdtState ?? this.crdtState,
   );
@@ -5928,6 +6013,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
           ? data.accumulatedMs.value
           : this.accumulatedMs,
       note: data.note.present ? data.note.value : this.note,
+      category: data.category.present ? data.category.value : this.category,
       crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
       crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
     );
@@ -5946,6 +6032,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
           ..write('pausedAt: $pausedAt, ')
           ..write('accumulatedMs: $accumulatedMs, ')
           ..write('note: $note, ')
+          ..write('category: $category, ')
           ..write('crdtClock: $crdtClock, ')
           ..write('crdtState: $crdtState')
           ..write(')'))
@@ -5964,6 +6051,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
     pausedAt,
     accumulatedMs,
     note,
+    category,
     crdtClock,
     crdtState,
   );
@@ -5981,6 +6069,7 @@ class TimerEntry extends DataClass implements Insertable<TimerEntry> {
           other.pausedAt == this.pausedAt &&
           other.accumulatedMs == this.accumulatedMs &&
           other.note == this.note &&
+          other.category == this.category &&
           other.crdtClock == this.crdtClock &&
           other.crdtState == this.crdtState);
 }
@@ -5996,6 +6085,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
   final Value<int?> pausedAt;
   final Value<int> accumulatedMs;
   final Value<String?> note;
+  final Value<String?> category;
   final Value<String> crdtClock;
   final Value<String> crdtState;
   final Value<int> rowid;
@@ -6010,6 +6100,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
     this.pausedAt = const Value.absent(),
     this.accumulatedMs = const Value.absent(),
     this.note = const Value.absent(),
+    this.category = const Value.absent(),
     this.crdtClock = const Value.absent(),
     this.crdtState = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6025,6 +6116,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
     this.pausedAt = const Value.absent(),
     this.accumulatedMs = const Value.absent(),
     this.note = const Value.absent(),
+    this.category = const Value.absent(),
     this.crdtClock = const Value.absent(),
     this.crdtState = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6040,6 +6132,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
     Expression<int>? pausedAt,
     Expression<int>? accumulatedMs,
     Expression<String>? note,
+    Expression<String>? category,
     Expression<String>? crdtClock,
     Expression<String>? crdtState,
     Expression<int>? rowid,
@@ -6055,6 +6148,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
       if (pausedAt != null) 'paused_at': pausedAt,
       if (accumulatedMs != null) 'accumulated_ms': accumulatedMs,
       if (note != null) 'note': note,
+      if (category != null) 'category': category,
       if (crdtClock != null) 'crdt_clock': crdtClock,
       if (crdtState != null) 'crdt_state': crdtState,
       if (rowid != null) 'rowid': rowid,
@@ -6072,6 +6166,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
     Value<int?>? pausedAt,
     Value<int>? accumulatedMs,
     Value<String?>? note,
+    Value<String?>? category,
     Value<String>? crdtClock,
     Value<String>? crdtState,
     Value<int>? rowid,
@@ -6087,6 +6182,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
       pausedAt: pausedAt ?? this.pausedAt,
       accumulatedMs: accumulatedMs ?? this.accumulatedMs,
       note: note ?? this.note,
+      category: category ?? this.category,
       crdtClock: crdtClock ?? this.crdtClock,
       crdtState: crdtState ?? this.crdtState,
       rowid: rowid ?? this.rowid,
@@ -6126,6 +6222,9 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
     if (crdtClock.present) {
       map['crdt_clock'] = Variable<String>(crdtClock.value);
     }
@@ -6151,6 +6250,7 @@ class TimerEntriesCompanion extends UpdateCompanion<TimerEntry> {
           ..write('pausedAt: $pausedAt, ')
           ..write('accumulatedMs: $accumulatedMs, ')
           ..write('note: $note, ')
+          ..write('category: $category, ')
           ..write('crdtClock: $crdtClock, ')
           ..write('crdtState: $crdtState, ')
           ..write('rowid: $rowid')
@@ -9105,6 +9205,7 @@ typedef $$WorklogEntriesTableCreateCompanionBuilder =
       required int duration,
       required String date,
       Value<String?> comment,
+      Value<String?> category,
       Value<String?> jiraWorklogId,
       Value<bool> jiraDirty,
       required int created,
@@ -9122,6 +9223,7 @@ typedef $$WorklogEntriesTableUpdateCompanionBuilder =
       Value<int> duration,
       Value<String> date,
       Value<String?> comment,
+      Value<String?> category,
       Value<String?> jiraWorklogId,
       Value<bool> jiraDirty,
       Value<int> created,
@@ -9172,6 +9274,11 @@ class $$WorklogEntriesTableFilterComposer
 
   ColumnFilters<String> get comment => $composableBuilder(
     column: $table.comment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9250,6 +9357,11 @@ class $$WorklogEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get jiraWorklogId => $composableBuilder(
     column: $table.jiraWorklogId,
     builder: (column) => ColumnOrderings(column),
@@ -9310,6 +9422,9 @@ class $$WorklogEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get comment =>
       $composableBuilder(column: $table.comment, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
 
   GeneratedColumn<String> get jiraWorklogId => $composableBuilder(
     column: $table.jiraWorklogId,
@@ -9372,6 +9487,7 @@ class $$WorklogEntriesTableTableManager
                 Value<int> duration = const Value.absent(),
                 Value<String> date = const Value.absent(),
                 Value<String?> comment = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String?> jiraWorklogId = const Value.absent(),
                 Value<bool> jiraDirty = const Value.absent(),
                 Value<int> created = const Value.absent(),
@@ -9387,6 +9503,7 @@ class $$WorklogEntriesTableTableManager
                 duration: duration,
                 date: date,
                 comment: comment,
+                category: category,
                 jiraWorklogId: jiraWorklogId,
                 jiraDirty: jiraDirty,
                 created: created,
@@ -9404,6 +9521,7 @@ class $$WorklogEntriesTableTableManager
                 required int duration,
                 required String date,
                 Value<String?> comment = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String?> jiraWorklogId = const Value.absent(),
                 Value<bool> jiraDirty = const Value.absent(),
                 required int created,
@@ -9419,6 +9537,7 @@ class $$WorklogEntriesTableTableManager
                 duration: duration,
                 date: date,
                 comment: comment,
+                category: category,
                 jiraWorklogId: jiraWorklogId,
                 jiraDirty: jiraDirty,
                 created: created,
@@ -9956,6 +10075,7 @@ typedef $$TimerEntriesTableCreateCompanionBuilder =
       Value<int?> pausedAt,
       Value<int> accumulatedMs,
       Value<String?> note,
+      Value<String?> category,
       Value<String> crdtClock,
       Value<String> crdtState,
       Value<int> rowid,
@@ -9972,6 +10092,7 @@ typedef $$TimerEntriesTableUpdateCompanionBuilder =
       Value<int?> pausedAt,
       Value<int> accumulatedMs,
       Value<String?> note,
+      Value<String?> category,
       Value<String> crdtClock,
       Value<String> crdtState,
       Value<int> rowid,
@@ -10033,6 +10154,11 @@ class $$TimerEntriesTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10106,6 +10232,11 @@ class $$TimerEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get crdtClock => $composableBuilder(
     column: $table.crdtClock,
     builder: (column) => ColumnOrderings(column),
@@ -10160,6 +10291,9 @@ class $$TimerEntriesTableAnnotationComposer
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
 
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
   GeneratedColumn<String> get crdtClock =>
       $composableBuilder(column: $table.crdtClock, builder: (column) => column);
 
@@ -10208,6 +10342,7 @@ class $$TimerEntriesTableTableManager
                 Value<int?> pausedAt = const Value.absent(),
                 Value<int> accumulatedMs = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
                 Value<String> crdtState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -10222,6 +10357,7 @@ class $$TimerEntriesTableTableManager
                 pausedAt: pausedAt,
                 accumulatedMs: accumulatedMs,
                 note: note,
+                category: category,
                 crdtClock: crdtClock,
                 crdtState: crdtState,
                 rowid: rowid,
@@ -10238,6 +10374,7 @@ class $$TimerEntriesTableTableManager
                 Value<int?> pausedAt = const Value.absent(),
                 Value<int> accumulatedMs = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> category = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
                 Value<String> crdtState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -10252,6 +10389,7 @@ class $$TimerEntriesTableTableManager
                 pausedAt: pausedAt,
                 accumulatedMs: accumulatedMs,
                 note: note,
+                category: category,
                 crdtClock: crdtClock,
                 crdtState: crdtState,
                 rowid: rowid,
