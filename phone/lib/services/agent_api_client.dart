@@ -188,10 +188,21 @@ class AgentApiClient {
   }) async {
     final params = since != null ? '?since=${Uri.encodeComponent(since)}' : '';
     final response = await _get('/api/deployments/$id/activity$params');
-    final events = response['events'] as List;
+    // New servers return 'activity_events'; older servers return 'events'.
+    final events = (response['activity_events'] ?? response['events']) as List;
     return events
         .map((e) => ActivityEvent.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Fetch detailed deployment info including all metadata + activity events.
+  ///
+  /// Calls GET /api/deployments/<id> which returns a merged object with
+  /// full deployment metadata and the activity_events array.
+  Future<Deployment> getDeploymentDetail(String id) async {
+    final response = await _get('/api/deployments/$id');
+    // The response is the deployment object directly (not wrapped in a key).
+    return Deployment.fromJson(response);
   }
 
   // --- Teams ---
