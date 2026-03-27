@@ -19,6 +19,7 @@ import 'services/review_provider.dart';
 import 'services/team_browser_provider.dart';
 import 'settings/settings_screen.dart';
 import 'storage/database.dart';
+import 'widgets/connection_indicator.dart';
 
 void main() {
   runApp(const AvodahViewerApp());
@@ -242,7 +243,7 @@ class _HomeShellState extends State<_HomeShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          KanbanBoardScreen(boardProvider: widget.boardProvider),
+          KanbanBoardScreen(boardProvider: widget.boardProvider, dashboardProvider: widget.dashboardProvider),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
@@ -253,6 +254,13 @@ class _HomeShellState extends State<_HomeShell> {
             appBar: AppBar(
               title: const Text('Agent Review'),
               actions: [
+                ValueListenableBuilder<SyncConnectionState>(
+                  valueListenable: widget.dashboardProvider.connectionState,
+                  builder: (_, state, __) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: ConnectionIndicator(state: state),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.settings),
                   onPressed: () => Navigator.push(
@@ -272,6 +280,21 @@ class _HomeShellState extends State<_HomeShell> {
             appBar: AppBar(
               title: const Text('Deployments'),
               actions: [
+                ValueListenableBuilder<SyncConnectionState>(
+                  valueListenable: widget.dashboardProvider.connectionState,
+                  builder: (_, state, __) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: ConnectionIndicator(state: state),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SettingsScreen()),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () => widget.deploymentProvider.refresh(),
@@ -287,6 +310,21 @@ class _HomeShellState extends State<_HomeShell> {
             appBar: AppBar(
               title: const Text('Teams'),
               actions: [
+                ValueListenableBuilder<SyncConnectionState>(
+                  valueListenable: widget.dashboardProvider.connectionState,
+                  builder: (_, state, __) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: ConnectionIndicator(state: state),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SettingsScreen()),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.timer_outlined),
                   tooltip: 'PA Timers',
