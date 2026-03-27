@@ -4146,12 +4146,7 @@ class ConfigChipsAddCommand extends Command<void> {
     categoryChips.add(chip);
     newChips[category] = categoryChips;
 
-    final newConfig = AvoConfig(
-      categories: _config.categories,
-      syncPort: _config.syncPort,
-      syncInterval: _config.syncInterval,
-      categoryChips: newChips,
-    );
+    final newConfig = _config.copyWith(categoryChips: newChips);
 
     await newConfig.save(_paths);
     print('Added chip "$chip" to "$category".');
@@ -4200,12 +4195,7 @@ class ConfigChipsRemoveCommand extends Command<void> {
     categoryChips.remove(chip);
     newChips[category] = categoryChips;
 
-    final newConfig = AvoConfig(
-      categories: _config.categories,
-      syncPort: _config.syncPort,
-      syncInterval: _config.syncInterval,
-      categoryChips: newChips,
-    );
+    final newConfig = _config.copyWith(categoryChips: newChips);
 
     await newConfig.save(_paths);
     print('Removed chip "$chip" from "$category".');

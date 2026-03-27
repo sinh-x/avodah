@@ -251,12 +251,7 @@ class SyncApiService {
       if (!categoryChips.contains(chip)) {
         categoryChips.add(chip);
         newChips[category] = categoryChips;
-        final newConfig = AvoConfig(
-          categories: config!.categories,
-          syncPort: config!.syncPort,
-          syncInterval: config!.syncInterval,
-          categoryChips: newChips,
-        );
+        final newConfig = config!.copyWith(categoryChips: newChips);
         await newConfig.save(paths ?? AvodahPaths());
         config = newConfig;
         _jsonResponse(request, HttpStatus.ok, {
@@ -277,12 +272,7 @@ class SyncApiService {
       if (categoryChips.contains(chip)) {
         categoryChips.remove(chip);
         newChips[category] = categoryChips;
-        final newConfig = AvoConfig(
-          categories: config!.categories,
-          syncPort: config!.syncPort,
-          syncInterval: config!.syncInterval,
-          categoryChips: newChips,
-        );
+        final newConfig = config!.copyWith(categoryChips: newChips);
         await newConfig.save(paths ?? AvodahPaths());
         config = newConfig;
       }
@@ -323,12 +313,7 @@ class SyncApiService {
     if (categoryChips.contains(chip)) {
       categoryChips.remove(chip);
       newChips[category] = categoryChips;
-      final newConfig = AvoConfig(
-        categories: config!.categories,
-        syncPort: config!.syncPort,
-        syncInterval: config!.syncInterval,
-        categoryChips: newChips,
-      );
+      final newConfig = config!.copyWith(categoryChips: newChips);
       await newConfig.save(paths ?? AvodahPaths());
       config = newConfig;
     }

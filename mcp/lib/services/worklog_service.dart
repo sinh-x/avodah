@@ -158,6 +158,7 @@ class WorklogService {
     DateTime? start,
     Duration? duration,
     String? comment,
+    String? category,
   }) async {
     final worklog = await show(idOrPrefix);
 
@@ -176,6 +177,10 @@ class WorklogService {
 
     if (comment != null) {
       worklog.comment = comment;
+    }
+
+    if (category != null) {
+      worklog.category = category;
     }
 
     if (worklog.isSyncedToJira) {

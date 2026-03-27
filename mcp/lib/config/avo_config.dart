@@ -109,4 +109,18 @@ class AvoConfig {
     file.parent.createSync(recursive: true);
     await file.writeAsString(jsonEncode(toJson()));
   }
+
+  /// Returns a new AvoConfig with the given fields replaced.
+  AvoConfig copyWith({
+    List<String>? categories,
+    int? syncPort,
+    int? syncInterval,
+    Map<String, List<String>>? categoryChips,
+  }) =>
+      AvoConfig(
+        categories: categories ?? this.categories,
+        syncPort: syncPort ?? this.syncPort,
+        syncInterval: syncInterval ?? this.syncInterval,
+        categoryChips: categoryChips ?? this.categoryChips,
+      );
 }
