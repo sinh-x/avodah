@@ -315,6 +315,11 @@ class _DeploymentTile extends StatelessWidget {
 
   Widget _buildSubtitle(ThemeData theme, Color statusColor) {
     final parts = <InlineSpan>[
+      if (deployment.ticketId != null)
+        TextSpan(
+          text: '${deployment.ticketId} \u00b7 ',
+          style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
       TextSpan(
         text: deployment.team,
         style: theme.textTheme.bodySmall,
@@ -348,8 +353,17 @@ class _DeploymentTile extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
     );
 
+    // For running deployments, show objective; for completed, show summary.
+    final objective = deployment.isRunning ? deployment.objective : null;
     final summary = deployment.summary;
-    if (summary == null || summary.isEmpty) return firstLine;
+
+    if ((objective == null || objective.isEmpty) &&
+        (summary == null || summary.isEmpty)) {
+      return firstLine;
+    }
+
+    final secondLine = deployment.isRunning ? objective : summary;
+    if (secondLine == null || secondLine.isEmpty) return firstLine;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,7 +371,7 @@ class _DeploymentTile extends StatelessWidget {
       children: [
         firstLine,
         Text(
-          summary,
+          secondLine,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodySmall

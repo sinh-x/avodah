@@ -16,6 +16,9 @@ class Deployment {
   final String? primerPath;
   final String? provider;
   final int? pid;
+  final String? ticketId;
+  final String? objective;
+  final String? repo;
 
   const Deployment({
     required this.deploymentId,
@@ -34,6 +37,9 @@ class Deployment {
     this.primerPath,
     this.provider,
     this.pid,
+    this.ticketId,
+    this.objective,
+    this.repo,
   });
 
   factory Deployment.fromJson(Map<String, dynamic> json) {
@@ -55,6 +61,9 @@ class Deployment {
       primerPath: json['primer_path'] as String?,
       provider: json['provider'] as String?,
       pid: json['pid'] as int?,
+      ticketId: json['ticket_id'] as String?,
+      objective: json['objective'] as String?,
+      repo: json['repo'] as String?,
     );
   }
 
