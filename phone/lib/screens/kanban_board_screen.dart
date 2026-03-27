@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../models/ticket.dart';
 import '../services/board_provider.dart';
+import '../services/local_dashboard_provider.dart';
 import '../widgets/board_column.dart';
 import '../widgets/bulletin_banner.dart';
+import '../widgets/connection_indicator.dart';
 import '../widgets/ticket_card.dart';
+import '../services/crdt_sync_service.dart';
+import '../settings/settings_screen.dart';
 import 'create_bulletin_screen.dart';
 import 'create_ticket_screen.dart';
 import 'ticket_detail_screen.dart';
@@ -24,8 +28,9 @@ import 'ticket_detail_screen.dart';
 /// - AppBar overflow menu includes "Create Bulletin" → [CreateBulletinScreen]
 class KanbanBoardScreen extends StatefulWidget {
   final BoardProvider boardProvider;
+  final LocalDashboardProvider dashboardProvider;
 
-  const KanbanBoardScreen({super.key, required this.boardProvider});
+  const KanbanBoardScreen({super.key, required this.boardProvider, required this.dashboardProvider});
 
   @override
   State<KanbanBoardScreen> createState() => _KanbanBoardScreenState();
@@ -105,6 +110,20 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
       appBar: AppBar(
         title: const Text('Kanban Board'),
         actions: [
+          ValueListenableBuilder<SyncConnectionState>(
+            valueListenable: widget.dashboardProvider.connectionState,
+            builder: (_, state, __) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ConnectionIndicator(state: state),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
           IconButton(
             icon: Icon(
               provider.showTerminal

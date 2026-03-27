@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:avodah_core/version.dart';
 import '../services/agent_api_client.dart';
 
 const kServerUrlKey = 'sync_server_url';
@@ -330,6 +331,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : _buildChipsList(),
             ),
           ],
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About'),
+            subtitle: Text('Avodah v$avodahVersion'),
+          ),
           const SizedBox(height: 32),
         ],
       ),
