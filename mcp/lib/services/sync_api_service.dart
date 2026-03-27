@@ -49,12 +49,16 @@ class SyncApiService {
   /// User config for categories, etc.
   AvoConfig? config;
 
+  /// Paths for config storage (injected to avoid read-only default path on NixOS).
+  final AvodahPaths? paths;
+
   SyncApiService({
     required this.db,
     required this.clock,
     this.onDeltasMerged,
     this.jiraService,
     this.config,
+    this.paths,
   });
 
   /// Routes a sync API request. Returns true if handled.
@@ -253,7 +257,7 @@ class SyncApiService {
           syncInterval: config!.syncInterval,
           categoryChips: newChips,
         );
-        await newConfig.save(AvodahPaths());
+        await newConfig.save(paths ?? AvodahPaths());
         config = newConfig;
         _jsonResponse(request, HttpStatus.ok, {
           'success': true,
@@ -279,7 +283,7 @@ class SyncApiService {
           syncInterval: config!.syncInterval,
           categoryChips: newChips,
         );
-        await newConfig.save(AvodahPaths());
+        await newConfig.save(paths ?? AvodahPaths());
         config = newConfig;
       }
       _jsonResponse(request, HttpStatus.ok, {
@@ -325,7 +329,7 @@ class SyncApiService {
         syncInterval: config!.syncInterval,
         categoryChips: newChips,
       );
-      await newConfig.save(AvodahPaths());
+      await newConfig.save(paths ?? AvodahPaths());
       config = newConfig;
     }
 

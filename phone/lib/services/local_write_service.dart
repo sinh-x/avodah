@@ -108,6 +108,9 @@ class LocalWriteService {
     final totalMs = timerDoc.elapsed.inMilliseconds;
     final now = DateTime.now();
 
+    // Capture category BEFORE stop() clears it
+    final timerCategory = timerDoc.category;
+
     // Stop the timer (resets all fields via CRDT)
     timerDoc.stop();
     await db
@@ -117,7 +120,6 @@ class LocalWriteService {
     // Create worklog if we have a valid task and duration
     // Also create orphan worklog if we have a category (no task required)
     String? worklogId;
-    final timerCategory = timerDoc.category;
     if ((taskId != null && taskId.isNotEmpty || timerCategory != null) &&
         totalMs > 0 && startedAt != null) {
       final wlDoc = WorklogDocument.fromTimer(

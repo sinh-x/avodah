@@ -67,6 +67,7 @@ Future<void> main(List<String> args) async {
     clock: clock,
     jiraService: jiraService,
     config: config,
+    paths: paths,
   );
 
   // Start HTTP server
