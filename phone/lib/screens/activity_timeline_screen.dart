@@ -310,8 +310,11 @@ class _DeploymentHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
-          // PID + Provider row
-          if (deployment.pid != null || deployment.provider != null) ...[
+          // PID + Provider + ticketId + repo row
+          if (deployment.pid != null ||
+              deployment.provider != null ||
+              deployment.ticketId != null ||
+              deployment.repo != null) ...[
             const SizedBox(height: 6),
             Wrap(
               spacing: 12,
@@ -329,6 +332,18 @@ class _DeploymentHeader extends StatelessWidget {
                     label: deployment.provider!,
                     theme: theme,
                   ),
+                if (deployment.ticketId != null)
+                  _InfoChip(
+                    icon: Icons.confirmation_number_outlined,
+                    label: deployment.ticketId!,
+                    theme: theme,
+                  ),
+                if (deployment.repo != null)
+                  _InfoChip(
+                    icon: Icons.folder_outlined,
+                    label: deployment.repo!,
+                    theme: theme,
+                  ),
               ],
             ),
           ],
@@ -337,6 +352,17 @@ class _DeploymentHeader extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               deployment.summary!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          // Objective (running deployments)
+          if (deployment.objective != null && deployment.objective!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              deployment.objective!,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               maxLines: 2,
