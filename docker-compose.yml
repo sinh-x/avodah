@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     network_mode: host
     volumes:
-      # Config dir (read-only — node-id, config.toml, Jira credentials)
-      - ${AVODAH_CONFIG:-~/.config/avodah}:/config:ro
+      # Config dir (read-write — config.json is mutated by chip save API)
+      - ${AVODAH_CONFIG:-~/.config/avodah}:/config
       # Data dir (read-write — SQLite database)
       - ${AVODAH_DATA:-~/.local/share/avodah}:/data
     environment:
