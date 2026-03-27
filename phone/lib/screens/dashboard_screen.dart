@@ -401,6 +401,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Plan vs Actual
           PlanCategoryTable(
             plan: s.plan,
+            activeCategory: s.timer?.category,
             onEditPlan: _onEditPlan,
             onCategoryTap: _startCategoryTimer,
           ),
