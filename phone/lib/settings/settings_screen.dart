@@ -59,6 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadUrl();
+    _loadChips();
   }
 
   Future<void> _loadUrl() async {

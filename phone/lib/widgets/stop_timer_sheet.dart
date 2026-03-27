@@ -66,7 +66,8 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
   bool _saving = false;
   bool _loading = true;
   String? _selectedTaskId;
-  List<String> _chips = [];
+  List<String> _presetChips = [];
+  List<String> _recentChips = [];
   List<_TaskOption> _taskOptions = [];
   String? _selectedTaskTitle;
 
@@ -92,24 +93,25 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
       _messageController.text.trim().isNotEmpty && !_saving;
 
   Future<void> _loadData() async {
-    // Load chips from recent comments
-    final recentComments = await widget.writeService.getRecentComments(limit: 10);
-    final allChips = <String>{...recentComments};
+    // F8: Load recent comments filtered by category (separate from presets)
+    final recentComments = await widget.writeService.getRecentComments(
+      category: widget.category,
+      limit: 10,
+    );
 
-    // Load category presets from API
+    // F7: Load category presets from API (separate from recents)
+    final presetChips = <String>[];
     if (widget.category != null && widget.apiClient != null) {
-      final categoryChips = await widget.apiClient!.getCategoryChips(widget.category!);
-      allChips.addAll(categoryChips);
+      presetChips.addAll(await widget.apiClient!.getCategoryChips(widget.category!));
     }
 
-    // Load task options
+    // F4+F5: Load task options — orphan + current task + today's planned tasks only
     final plannedIds = await widget.writeService.getTodayPlannedTaskIds();
-    final categoryTasks = await widget.writeService.getTasksByCategory(widget.category);
     final allTasks = await _getAllActiveTasks();
 
     final options = <_TaskOption>[];
 
-    // "No task" option (orphan)
+    // "No task" option (orphan) — always first
     options.add(_TaskOption(
       id: null,
       title: 'No task (orphan)',
@@ -117,9 +119,25 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
       isOrphan: true,
     ));
 
-    // Planned tasks in today's plan
+    // F4: Current task at top (if set and not already in options)
+    _TaskOption? currentTaskOption;
+    if (_selectedTaskId != null) {
+      final currentTaskRow = allTasks.where((t) => t.id == _selectedTaskId).firstOrNull;
+      if (currentTaskRow != null) {
+        final doc = TaskDocument.fromDrift(task: currentTaskRow, clock: widget.writeService.clock);
+        currentTaskOption = _TaskOption(
+          id: currentTaskRow.id,
+          title: doc.title,
+          isPlanned: plannedIds.contains(currentTaskRow.id),
+          isOrphan: false,
+        );
+        options.add(currentTaskOption);
+      }
+    }
+
+    // F5: Today's planned tasks (excluding orphan and already-added current task)
     for (final task in allTasks) {
-      if (plannedIds.contains(task.id)) {
+      if (plannedIds.contains(task.id) && task.id != _selectedTaskId) {
         final doc = TaskDocument.fromDrift(task: task, clock: widget.writeService.clock);
         options.add(_TaskOption(
           id: task.id,
@@ -130,36 +148,10 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
       }
     }
 
-    // Category tasks (non-planned)
-    for (final task in categoryTasks) {
-      if (!plannedIds.contains(task.id)) {
-        final doc = TaskDocument.fromDrift(task: task, clock: widget.writeService.clock);
-        options.add(_TaskOption(
-          id: task.id,
-          title: doc.title,
-          isPlanned: false,
-          isOrphan: false,
-        ));
-      }
-    }
-
-    // Other active tasks not in this category
-    for (final task in allTasks) {
-      final doc = TaskDocument.fromDrift(task: task, clock: widget.writeService.clock);
-      final isInOptions = options.any((o) => o.id == task.id);
-      if (!isInOptions && !doc.isDone && !doc.isDeleted) {
-        options.add(_TaskOption(
-          id: task.id,
-          title: doc.title,
-          isPlanned: false,
-          isOrphan: false,
-        ));
-      }
-    }
-
     if (mounted) {
       setState(() {
-        _chips = allChips.toList();
+        _presetChips = presetChips;
+        _recentChips = recentComments;
         _taskOptions = options;
         _loading = false;
         // Set initial selection to current task or orphan
@@ -268,17 +260,21 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
                     itemBuilder: (ctx, index) {
                       final option = _taskOptions[index];
                       final isSelected = _selectedTaskId == option.id;
+                      final isCurrentTask = isSelected && option.id == widget.taskId;
                       return ListTile(
                         dense: true,
                         leading: option.isOrphan
                             ? const Icon(Icons.block, size: 20)
-                            : (option.isPlanned
-                                ? const Icon(Icons.check_circle_outline, size: 20)
-                                : const Icon(Icons.radio_button_unchecked, size: 20)),
+                            : (isCurrentTask
+                                ? Icon(Icons.timer, size: 20, color: theme.colorScheme.primary)
+                                : (option.isPlanned
+                                    ? const Icon(Icons.check_circle_outline, size: 20)
+                                    : const Icon(Icons.radio_button_unchecked, size: 20))),
                         title: Text(
                           option.title,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: isSelected ? FontWeight.bold : null,
+                            color: isCurrentTask ? theme.colorScheme.primary : null,
                           ),
                         ),
                         subtitle: option.isOrphan
@@ -294,6 +290,19 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
                     },
                   ),
                 ),
+                // F6: Hint text when no planned tasks
+                if (_taskOptions.length <= 1) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'No tasks planned for today',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Worklog message
@@ -329,21 +338,40 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
                   ),
                 ],
 
-                // Chips section
-                if (_chips.isNotEmpty) ...[
+                // Chips section — F7: presets above recents, F8: recents filtered by category
+                if (_presetChips.isNotEmpty || _recentChips.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text('Quick comments', style: theme.textTheme.labelMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: _chips.map((chip) {
-                      return ActionChip(
-                        label: Text(chip, style: theme.textTheme.bodySmall),
-                        onPressed: _saving ? null : () => _onChipTapped(chip),
-                      );
-                    }).toList(),
-                  ),
+                  // Presets section (config presets for timer's category)
+                  if (_presetChips.isNotEmpty) ...[
+                    Text('Quick comments', style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: _presetChips.map((chip) {
+                        return ActionChip(
+                          label: Text(chip, style: theme.textTheme.bodySmall),
+                          onPressed: _saving ? null : () => _onChipTapped(chip),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  // Recent comments section (filtered by category)
+                  if (_recentChips.isNotEmpty) ...[
+                    if (_presetChips.isNotEmpty) const SizedBox(height: 12),
+                    Text('Recent', style: theme.textTheme.labelMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: _recentChips.map((chip) {
+                        return ActionChip(
+                          label: Text(chip, style: theme.textTheme.bodySmall),
+                          onPressed: _saving ? null : () => _onChipTapped(chip),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ],
 

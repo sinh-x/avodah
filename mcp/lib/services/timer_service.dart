@@ -89,8 +89,12 @@ class TimerService {
   /// If [taskId] is not provided, looks up an existing task by [taskTitle]
   /// or creates a new one. The timer and resulting worklog always use a
   /// real task UUID.
+  ///
+  /// Category-only orphan timers: when [category] is provided but
+  /// [taskId] and [taskTitle] are both null, skips task resolution and
+  /// creates an orphan timer with an empty taskId.
   Future<TimerDocument> start({
-    required String taskTitle,
+    String? taskTitle,
     String? taskId,
     String? note,
     String? category,
@@ -100,11 +104,17 @@ class TimerService {
       throw TimerAlreadyRunningException(existing);
     }
 
-    final resolvedTaskId = await _resolveOrCreateTask(taskTitle, taskId);
+    final String resolvedTaskId;
+    if (taskId == null && taskTitle == null && category != null) {
+      // Category-only orphan timer — no task resolution needed
+      resolvedTaskId = '';
+    } else {
+      resolvedTaskId = await _resolveOrCreateTask(taskTitle ?? '', taskId);
+    }
 
     final timer = TimerDocument.start(
       clock: clock,
-      taskTitle: taskTitle,
+      taskTitle: taskTitle ?? '',
       taskId: resolvedTaskId,
       note: note,
       category: category,

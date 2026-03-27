@@ -111,4 +111,67 @@ void main() {
       expect(rows, hasLength(2));
     });
   });
+
+  group('category-only orphan timer (AVO-018 F11)', () {
+    test('start with category only creates orphan timer with empty taskId', () async {
+      final timer = await service.start(category: 'Working');
+
+      expect(timer.taskId, equals(''));
+      expect(timer.taskTitle, equals(''));
+      expect(timer.category, equals('Working'));
+      expect(timer.isRunning, isTrue);
+    });
+
+    test('ghost task is NOT created for category-only start', () async {
+      await service.start(category: 'Working');
+
+      // Verify no task was created in the database
+      final rows = await db.select(db.tasks).get();
+      expect(rows, isEmpty);
+    });
+
+    test('stop creates worklog with correct category for orphan timer', () async {
+      final timer = await service.start(category: 'Working');
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final result = await service.stop();
+
+      expect(result.taskId, equals(''));
+      expect(result.worklogId, isNotEmpty);
+
+      // Verify worklog has the category
+      final worklogs = await db.select(db.worklogEntries).get();
+      expect(worklogs, hasLength(1));
+      final wl = WorklogDocument.fromDrift(worklog: worklogs.first, clock: clock);
+      expect(wl.category, equals('Working'));
+    });
+  });
+
+  group('start with category and task', () {
+    test('creates timer with both task and category', () async {
+      final timer = await service.start(
+        taskTitle: 'Some task',
+        category: 'Working',
+      );
+
+      expect(timer.taskId, isNotNull);
+      expect(timer.taskId, isNotEmpty);
+      expect(timer.taskTitle, equals('Some task'));
+      expect(timer.category, equals('Working'));
+      expect(timer.isRunning, isTrue);
+    });
+
+    test('does not create ghost task when taskId is provided with category', () async {
+      await service.start(
+        taskTitle: 'With explicit ID',
+        taskId: 'explicit-task-id',
+        category: 'Working',
+      );
+
+      // Should NOT create a task in the database
+      final rows = await db.select(db.tasks).get();
+      expect(rows, isEmpty);
+    });
+  });
 }
