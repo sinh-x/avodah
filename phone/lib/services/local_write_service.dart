@@ -202,19 +202,33 @@ class LocalWriteService {
   }
 
   /// Returns recent worklog comments (up to [limit] entries).
-  Future<List<String>> getRecentComments({int limit = 10}) async {
+  ///
+  /// If [category] is provided, only comments from worklogs with matching
+  /// category are returned. If the filtered results are fewer than 3,
+  /// falls back to unfiltered recent comments.
+  Future<List<String>> getRecentComments({String? category, int limit = 10}) async {
     final rows = await (db.select(db.worklogEntries)
           ..orderBy([(w) => OrderingTerm.desc(w.created)])
-          ..limit(limit))
+          ..limit(limit * 3)) // fetch more to allow for filtering
         .get();
     final comments = <String>[];
     for (final row in rows) {
       final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
       if (doc.comment != null && doc.comment!.isNotEmpty) {
-        comments.add(doc.comment!);
+        if (category != null && category.isNotEmpty) {
+          if (doc.category == category) {
+            comments.add(doc.comment!);
+          }
+        } else {
+          comments.add(doc.comment!);
+        }
       }
     }
-    return comments;
+    // Fall back to unfiltered if category filter returned too few
+    if (category != null && category.isNotEmpty && comments.length < 3) {
+      return getRecentComments(category: null, limit: limit);
+    }
+    return comments.take(limit).toList();
   }
 
   /// Returns active tasks filtered by [category].
