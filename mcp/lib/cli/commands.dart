@@ -37,6 +37,7 @@ class StartCommand extends TimerCommand {
 
   StartCommand(super.timerService, this.taskService, this.worklogService, {this.categories = const []}) {
     argParser.addOption('note', abbr: 'n', help: 'Note about current work');
+    argParser.addOption('category', abbr: 'c', help: 'Start a category-only orphan timer');
   }
 
   @override
@@ -60,11 +61,12 @@ class StartCommand extends TimerCommand {
     final input = args.isNotEmpty ? args.join(' ') : null;
 
     final note = argResults?['note'] as String?;
+    final category = argResults?['category'] as String?;
 
     String? taskId;
-    String taskTitle;
+    String? taskTitle;
 
-    if (input == null) {
+    if (input == null && category == null) {
       // Interactive picker mode
       final tasks = await taskService.list();
       if (tasks.isEmpty) {
@@ -108,11 +110,36 @@ class StartCommand extends TimerCommand {
 
       taskId = selected.id;
       taskTitle = selected.title;
+    } else if (input == null && category != null) {
+      // Category-only orphan timer — no task, category only
+      try {
+        final timer = await timerService.start(
+          taskTitle: '',
+          taskId: null,
+          note: note,
+          category: category,
+        );
+
+        print('Started category timer: $category');
+        print(kvRow('Started:', formatTime(timer.startedAt!)));
+        if (note != null) print(kvRow('Note:', note));
+        print('');
+        print(hint('avo stop', 'to log your time'));
+        print(hint('avo cancel', 'to discard'));
+        return;
+      } on TimerAlreadyRunningException catch (e) {
+        print('Timer already running: "${e.timer.taskTitle}"');
+        print(kvRow('Elapsed:', e.timer.elapsedFormatted));
+        print('');
+        print(hint('avo stop', 'to stop and log time'));
+        print(hint('avo cancel', 'to discard and start fresh'));
+        return;
+      }
     } else {
       taskTitle = input;
       // Try to resolve input as a task ID/prefix first
       try {
-        final task = await taskService.show(input);
+        final task = await taskService.show(input!);
         taskId = task.id;
         taskTitle = task.title;
       } on TaskNotFoundException {
@@ -145,6 +172,7 @@ class StartCommand extends TimerCommand {
         taskTitle: taskTitle,
         taskId: taskId,
         note: note,
+        category: category,
       );
 
       // Prompt for category after start if task was just created (title-based start)
