@@ -8,7 +8,6 @@ import '../services/agent_api_client.dart';
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';
-import '../widgets/planned_task_list.dart';
 import '../widgets/stop_timer_sheet.dart';
 import '../widgets/timer_status_bar.dart';
 import '../widgets/worklog_summary.dart';
@@ -404,17 +403,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             activeCategory: s.timer?.category,
             onEditPlan: _onEditPlan,
             onCategoryTap: _startCategoryTimer,
-          ),
-          const SizedBox(height: 8),
-
-          // Planned tasks
-          PlannedTaskList(
-            tasks: s.plannedTasks,
+            plannedTasks: s.plannedTasks,
             activeTimer: s.timer,
             onToggleDone: _toggleTaskDone,
             onStartTimer: _startTimer,
           ),
-          if (s.plannedTasks.isNotEmpty) const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
           // Worklog summary
           WorklogSummary(worklog: s.worklogSummary),
