@@ -227,13 +227,13 @@ class WorklogSummarySnapshot {
   final String date;
   final int totalMs;
   final String total;
-  final List<WorklogTaskSnapshot> tasks;
+  final List<WorklogCategorySnapshot> categories;
 
   const WorklogSummarySnapshot({
     required this.date,
     required this.totalMs,
     required this.total,
-    required this.tasks,
+    required this.categories,
   });
 
   factory WorklogSummarySnapshot.fromJson(Map<String, dynamic> json) {
@@ -241,7 +241,33 @@ class WorklogSummarySnapshot {
       date: json['date'] as String,
       totalMs: json['totalMs'] as int,
       total: json['total'] as String,
-      tasks: (json['tasks'] as List)
+      categories: (json['categories'] as List)
+          .map((e) =>
+              WorklogCategorySnapshot.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class WorklogCategorySnapshot {
+  final String category;
+  final int totalMs;
+  final String total;
+  final List<WorklogTaskSnapshot> entries;
+
+  const WorklogCategorySnapshot({
+    required this.category,
+    required this.totalMs,
+    required this.total,
+    required this.entries,
+  });
+
+  factory WorklogCategorySnapshot.fromJson(Map<String, dynamic> json) {
+    return WorklogCategorySnapshot(
+      category: json['category'] as String,
+      totalMs: json['totalMs'] as int,
+      total: json['total'] as String,
+      entries: (json['entries'] as List)
           .map(
               (e) => WorklogTaskSnapshot.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -254,12 +280,16 @@ class WorklogTaskSnapshot {
   final String title;
   final int totalMs;
   final String total;
+  final String? category;
+  final String? comment;
 
   const WorklogTaskSnapshot({
     required this.taskId,
     required this.title,
     required this.totalMs,
     required this.total,
+    this.category,
+    this.comment,
   });
 
   factory WorklogTaskSnapshot.fromJson(Map<String, dynamic> json) {
@@ -268,6 +298,8 @@ class WorklogTaskSnapshot {
       title: json['title'] as String,
       totalMs: json['totalMs'] as int,
       total: json['total'] as String,
+      category: json['category'] as String?,
+      comment: json['comment'] as String?,
     );
   }
 }

@@ -30,23 +30,31 @@ class WorklogSummary extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),
-            if (worklog.tasks.isNotEmpty) ...[
+            if (worklog.categories.isNotEmpty) ...[
               const Divider(),
-              ...worklog.tasks.map((t) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(t.title,
-                              style: theme.textTheme.bodySmall,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                        Text(t.total,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
-                      ],
+              ...worklog.categories.expand((cat) => [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 2),
+                      child: Text(cat.category,
+                          style: theme.textTheme.labelMedium
+                              ?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                     ),
-                  )),
+                    ...cat.entries.map((e) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(e.title,
+                                    style: theme.textTheme.bodySmall,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                              Text(e.total,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        )),
+                  ]),
             ],
           ],
         ),
