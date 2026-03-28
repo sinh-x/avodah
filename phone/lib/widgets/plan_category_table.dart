@@ -31,9 +31,38 @@ class PlanCategoryTable extends StatelessWidget {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('No plan set for today',
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(color: theme.colorScheme.outline)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with edit button (empty state)
+              Row(
+                children: [
+                  Icon(Icons.bar_chart, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Plan vs Actual',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  Text(
+                    '${plan.totalPlanned} planned / ${plan.totalActual} actual',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  ),
+                  if (onEditPlan != null) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      iconSize: 18,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Edit plan',
+                      onPressed: onEditPlan,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       );
     }
