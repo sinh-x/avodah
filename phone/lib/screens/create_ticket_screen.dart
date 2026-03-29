@@ -24,6 +24,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedType = 'task';
   String _selectedPriority = 'medium';
   String? _selectedEstimate;
+  String _selectedStatus = 'pending-implementation';
 
   final _titleController = TextEditingController();
   final _teamController = TextEditingController();
@@ -67,7 +68,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         'priority': _selectedPriority,
         'estimate': _selectedEstimate!,
         'doc_refs': [],
-        'status': 'idea',
+        'status': _selectedStatus,
       };
       final team = _teamController.text.trim();
       if (team.isNotEmpty) body['team'] = team;
@@ -136,7 +137,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   ? _selectedProject
                   : projects.first.key;
               return DropdownButtonFormField<String>(
-                value: validKey,
+                initialValue: validKey,
                 decoration: const InputDecoration(
                   labelText: 'Project',
                   border: OutlineInputBorder(),
@@ -168,7 +169,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
 
             // Type
             DropdownButtonFormField<String>(
-              value: _selectedType,
+              initialValue: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Type',
                 border: OutlineInputBorder(),
@@ -180,6 +181,26 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               onChanged: (t) {
                 if (t != null) setState(() => _selectedType = t);
               },
+            ),
+            const SizedBox(height: 16),
+
+            // Status — backlog (idea) vs active (pending-implementation)
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'pending-implementation',
+                  label: Text('Active'),
+                  icon: Icon(Icons.play_arrow),
+                ),
+                ButtonSegment(
+                  value: 'idea',
+                  label: Text('Backlog'),
+                  icon: Icon(Icons.inbox),
+                ),
+              ],
+              selected: {_selectedStatus},
+              onSelectionChanged: (s) =>
+                  setState(() => _selectedStatus = s.first),
             ),
             const SizedBox(height: 16),
 
@@ -199,7 +220,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedPriority,
+                    initialValue: _selectedPriority,
                     decoration: const InputDecoration(
                       labelText: 'Priority',
                       border: OutlineInputBorder(),
@@ -216,7 +237,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedEstimate,
+                    initialValue: _selectedEstimate,
                     decoration: const InputDecoration(
                       labelText: 'Estimate *',
                       border: OutlineInputBorder(),
