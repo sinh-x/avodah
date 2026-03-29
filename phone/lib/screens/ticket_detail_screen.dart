@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/deploy_routing.dart';
@@ -112,6 +113,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         _ticket = updated;
         _savingFields.remove(field);
       });
+      // NF5: announce to screen reader
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '${_fieldLabel(field)} saved',
+        Directionality.of(context),
+      );
       // Brief success feedback via snackbar
       messenger.showSnackBar(
         SnackBar(
@@ -842,28 +849,31 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           ),
           if (ticket.team != null || ticket.assignee != null) ...[
             const SizedBox(height: 10),
-            // Team row — tappable
+            // Team row — tappable (min 48dp tall for tap target)
             if (ticket.team != null)
-              _FieldSavingIndicator(
-                isSaving: _savingFields.contains('team'),
-                child: Semantics(
-                  label: 'Team: ${ticket.team}. Tap to change.',
-                  button: true,
-                  child: InkWell(
-                    onTap: _savingFields.contains('team')
-                        ? null
-                        : () => _openTeamSheet(ticket),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.group_outlined,
-                              size: 14, color: theme.colorScheme.outline),
-                          const SizedBox(width: 4),
-                          Text(ticket.team!, style: theme.textTheme.bodySmall),
-                        ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: _FieldSavingIndicator(
+                  isSaving: _savingFields.contains('team'),
+                  child: Semantics(
+                    label: 'Team: ${ticket.team}. Tap to change.',
+                    button: true,
+                    child: InkWell(
+                      onTap: _savingFields.contains('team')
+                          ? null
+                          : () => _openTeamSheet(ticket),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.group_outlined,
+                                size: 14, color: theme.colorScheme.outline),
+                            const SizedBox(width: 4),
+                            Text(ticket.team!, style: theme.textTheme.bodySmall),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -871,28 +881,31 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             if (ticket.team != null && ticket.assignee != null)
               const SizedBox(width: 16),
-            // Assignee row — tappable
+            // Assignee row — tappable (min 48dp tall for tap target)
             if (ticket.assignee != null)
-              _FieldSavingIndicator(
-                isSaving: _savingFields.contains('assignee'),
-                child: Semantics(
-                  label: 'Assignee: ${ticket.assignee}. Tap to change.',
-                  button: true,
-                  child: InkWell(
-                    onTap: _savingFields.contains('assignee')
-                        ? null
-                        : () => _openAssigneeSheet(ticket),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.person_outline,
-                              size: 14, color: theme.colorScheme.outline),
-                          const SizedBox(width: 4),
-                          _AssigneeText(assignee: ticket.assignee!),
-                        ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: _FieldSavingIndicator(
+                  isSaving: _savingFields.contains('assignee'),
+                  child: Semantics(
+                    label: 'Assignee: ${ticket.assignee}. Tap to change.',
+                    button: true,
+                    child: InkWell(
+                      onTap: _savingFields.contains('assignee')
+                          ? null
+                          : () => _openAssigneeSheet(ticket),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person_outline,
+                                size: 14, color: theme.colorScheme.outline),
+                            const SizedBox(width: 4),
+                            _AssigneeText(assignee: ticket.assignee!),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -970,12 +983,22 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             ),
           ),
-          if (ticket.comments.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _SectionLabel('Comments'),
-            const SizedBox(height: 6),
+          const SizedBox(height: 16),
+          _SectionLabel('Comments'),
+          const SizedBox(height: 6),
+          if (ticket.comments.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No comments yet.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
             ...ticket.comments.map((c) => _buildCommentItem(c)),
-          ],
           const SizedBox(height: 16),
           Text(
             'Created ${_formatDate(ticket.createdAt)}'
