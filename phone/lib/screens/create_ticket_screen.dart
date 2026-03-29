@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 
 /// Form for creating a new ticket.
@@ -65,6 +66,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         'type': _selectedType,
         'priority': _selectedPriority,
         'estimate': _selectedEstimate!,
+        'doc_refs': [],
+        'status': 'idea',
       };
       final team = _teamController.text.trim();
       if (team.isNotEmpty) body['team'] = team;
@@ -81,8 +84,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
+        final msg = e is AgentApiException ? e.message : '$e';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Create failed: $e')),
+          SnackBar(content: Text('Create failed: $msg')),
         );
       }
     }
@@ -132,7 +136,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                   ? _selectedProject
                   : projects.first.key;
               return DropdownButtonFormField<String>(
-                initialValue: validKey,
+                value: validKey,
                 decoration: const InputDecoration(
                   labelText: 'Project',
                   border: OutlineInputBorder(),
@@ -164,7 +168,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
 
             // Type
             DropdownButtonFormField<String>(
-              initialValue: _selectedType,
+              value: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Type',
                 border: OutlineInputBorder(),
@@ -195,7 +199,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _selectedPriority,
+                    value: _selectedPriority,
                     decoration: const InputDecoration(
                       labelText: 'Priority',
                       border: OutlineInputBorder(),
@@ -212,7 +216,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _selectedEstimate,
+                    value: _selectedEstimate,
                     decoration: const InputDecoration(
                       labelText: 'Estimate *',
                       border: OutlineInputBorder(),
