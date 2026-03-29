@@ -118,7 +118,7 @@ class LocalDashboardProvider extends ChangeNotifier {
       );
     }).toList();
 
-    final plan = _buildPlanSnapshot(planDocs, loggedByTask, taskById);
+    final plan = _buildPlanSnapshot(planDocs, worklogRows, taskById);
     final worklogSummary = _buildWorklogSummary(today, worklogRows, taskById);
 
     // Timer
@@ -203,7 +203,7 @@ class LocalDashboardProvider extends ChangeNotifier {
 
   PlanSnapshot _buildPlanSnapshot(
     List<DailyPlanDocument> planDocs,
-    Map<String, int> loggedByTask,
+    List<WorklogEntry> worklogRows,
     Map<String, Task> taskById,
   ) {
     // Category → planned ms
@@ -213,15 +213,31 @@ class LocalDashboardProvider extends ChangeNotifier {
           (plannedByCategory[doc.category] ?? 0) + doc.durationMs;
     }
 
-    // Category → actual ms (from worklogs via task category)
+    // Category resolution for worklogs (handles orphans)
+    String resolveCategory(WorklogEntry wl) {
+      final wlCat = wl.category;
+      if (wlCat != null && wlCat.isNotEmpty) {
+        return wlCat;
+      }
+      if (wl.taskId.isNotEmpty) {
+        final task = taskById[wl.taskId];
+        final taskCat = task?.category;
+        if (taskCat != null && taskCat.isNotEmpty) {
+          return taskCat;
+        }
+      }
+      return 'Uncategorized';
+    }
+
+    // Category → actual ms (from worklogs via resolved category)
     final actualByCategory = <String, int>{};
     var nonCategorizedMs = 0;
-    for (final entry in loggedByTask.entries) {
-      final cat = taskById[entry.key]?.category;
-      if (cat != null && cat.isNotEmpty) {
-        actualByCategory[cat] = (actualByCategory[cat] ?? 0) + entry.value;
+    for (final wl in worklogRows) {
+      final cat = resolveCategory(wl);
+      if (cat == 'Uncategorized') {
+        nonCategorizedMs += wl.duration;
       } else {
-        nonCategorizedMs += entry.value;
+        actualByCategory[cat] = (actualByCategory[cat] ?? 0) + wl.duration;
       }
     }
 
@@ -247,7 +263,7 @@ class LocalDashboardProvider extends ChangeNotifier {
     }).toList();
 
     final totalPlannedMs = plannedByCategory.values.fold(0, (a, b) => a + b);
-    final totalActualMs = loggedByTask.values.fold(0, (a, b) => a + b);
+    final totalActualMs = worklogRows.fold(0, (a, wl) => a + wl.duration);
 
     return PlanSnapshot(
       totalPlannedMs: totalPlannedMs,
@@ -273,27 +289,76 @@ class LocalDashboardProvider extends ChangeNotifier {
     List<WorklogEntry> worklogs,
     Map<String, Task> taskById,
   ) {
-    final totalByTask = <String, int>{};
-    for (final wl in worklogs) {
-      totalByTask[wl.taskId] = (totalByTask[wl.taskId] ?? 0) + wl.duration;
+    // Category resolution algorithm
+    String resolveCategoryForWorklog(WorklogEntry wl) {
+      final wlCat = wl.category;
+      if (wlCat != null && wlCat.isNotEmpty) {
+        return wlCat;
+      }
+      if (wl.taskId.isNotEmpty) {
+        final task = taskById[wl.taskId];
+        final taskCat = task?.category;
+        if (taskCat != null && taskCat.isNotEmpty) {
+          return taskCat;
+        }
+      }
+      return 'Uncategorized';
     }
 
-    final tasks = totalByTask.entries.map((e) {
-      return WorklogTaskSnapshot(
-        taskId: e.key,
-        title: taskById[e.key]?.title ?? e.key,
-        totalMs: e.value,
-        total: _fmt(Duration(milliseconds: e.value)),
+    // Entry label algorithm
+    String resolveLabelForWorklog(WorklogEntry wl) {
+      if (wl.taskId.isNotEmpty) {
+        return taskById[wl.taskId]?.title ?? wl.taskId;
+      }
+      final wlComment = wl.comment;
+      if (wlComment != null && wlComment.isNotEmpty) {
+        return wlComment;
+      }
+      return wl.id;
+    }
+
+    // Aggregate worklogs by resolved category
+    final byCategory = <String, List<WorklogEntry>>{};
+    for (final wl in worklogs) {
+      final cat = resolveCategoryForWorklog(wl);
+      byCategory.putIfAbsent(cat, () => []).add(wl);
+    }
+
+    // Build category snapshots with entry lists and totals
+    final categories = byCategory.entries.map((entry) {
+      final cat = entry.key;
+      final entries = entry.value;
+
+      final entrySnapshots = entries.map((wl) {
+        return WorklogTaskSnapshot(
+          taskId: wl.taskId,
+          title: resolveLabelForWorklog(wl),
+          totalMs: wl.duration,
+          total: _fmt(Duration(milliseconds: wl.duration)),
+          category: wl.category,
+          comment: wl.comment,
+        );
+      }).toList()
+        ..sort((a, b) => b.totalMs.compareTo(a.totalMs));
+
+      final catTotalMs = entrySnapshots.fold(0, (sum, e) => sum + e.totalMs);
+
+      return WorklogCategorySnapshot(
+        category: cat,
+        totalMs: catTotalMs,
+        total: _fmt(Duration(milliseconds: catTotalMs)),
+        entries: entrySnapshots,
       );
     }).toList()
       ..sort((a, b) => b.totalMs.compareTo(a.totalMs));
 
-    final totalMs = totalByTask.values.fold(0, (a, b) => a + b);
+    final totalMs = categories.fold(0, (sum, c) => sum + c.totalMs);
+
     return WorklogSummarySnapshot(
       date: today,
       totalMs: totalMs,
       total: _fmt(Duration(milliseconds: totalMs)),
-      tasks: tasks,
+      categories: categories,
     );
   }
 
