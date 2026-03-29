@@ -7,7 +7,10 @@ import '../models/ticket.dart';
 import '../screens/document_viewer_screen.dart';
 import '../services/board_provider.dart';
 import '../widgets/deploy_sheet.dart';
+import '../widgets/estimate_picker_sheet.dart';
+import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
+import '../widgets/text_input_sheet.dart';
 import 'activity_timeline_screen.dart';
 
 /// Full ticket detail view with read and edit modes.
@@ -36,8 +39,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   Ticket? _ticket;
   bool _loading = true;
   String? _error;
-  bool _editMode = false;
-  bool _saving = false;
   bool _submittingComment = false;
 
   // Deploy state
@@ -45,14 +46,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   DateTime? _deployRoutingFetchedAt;
   bool _fetchingRouting = false;
 
-  // Edit state
-  String _editStatus = '';
-  String _editPriority = 'medium';
-  String _editEstimate = 'S';
-  List<String> _editTags = [];
-  final _teamController = TextEditingController();
-  final _assigneeController = TextEditingController();
-  final _tagInputController = TextEditingController();
+  // Comment input
   final _commentController = TextEditingController();
 
   @override
@@ -63,9 +57,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   @override
   void dispose() {
-    _teamController.dispose();
-    _assigneeController.dispose();
-    _tagInputController.dispose();
     _commentController.dispose();
     super.dispose();
   }
@@ -94,50 +85,86 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
-  void _initEditFields(Ticket ticket) {
-    _editStatus = ticket.status;
-    _editPriority = ticket.priority;
-    _editEstimate = ticket.estimate ?? 'S';
-    _teamController.text = ticket.team ?? '';
-    _assigneeController.text = ticket.assignee ?? '';
-    _editTags = List.from(ticket.tags);
+  // Phase 1: open sheet handlers (save wiring comes in Phase 2)
+
+  void _openStatusPicker(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => StatusPickerSheet(
+        currentStatus: ticket.status,
+        onSelect: (newStatus) {
+          Navigator.pop(context);
+          // Phase 2: _saveField('status', newStatus);
+        },
+      ),
+    );
   }
 
-  void _toggleEditMode() {
-    if (_ticket == null) return;
-    setState(() {
-      _editMode = !_editMode;
-      if (_editMode) _initEditFields(_ticket!);
-    });
+  void _openPriorityPicker(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => PriorityPickerSheet(
+        currentPriority: ticket.priority,
+        onSelect: (newPriority) {
+          Navigator.pop(context);
+          // Phase 2: _saveField('priority', newPriority);
+        },
+      ),
+    );
   }
 
-  Future<void> _save() async {
-    if (_ticket == null) return;
-    setState(() => _saving = true);
-    try {
-      final updates = <String, dynamic>{
-        'status': _editStatus,
-        'priority': _editPriority,
-        'estimate': _editEstimate,
-        'tags': _editTags,
-      };
-      final team = _teamController.text.trim();
-      final assignee = _assigneeController.text.trim();
-      if (team.isNotEmpty) updates['team'] = team;
-      if (assignee.isNotEmpty) updates['assignee'] = assignee;
+  void _openEstimatePicker(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => EstimatePickerSheet(
+        currentEstimate: ticket.estimate ?? 'S',
+        onSelect: (newEstimate) {
+          Navigator.pop(context);
+          // Phase 2: _saveField('estimate', newEstimate);
+        },
+      ),
+    );
+  }
 
-      await widget.boardProvider.client.updateTicket(_ticket!.id, updates);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
-      }
-    }
+  void _openTeamSheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Team',
+        initialValue: ticket.team,
+        onConfirm: (value) {
+          // Phase 2: _saveField('team', value);
+        },
+      ),
+    );
+  }
+
+  void _openAssigneeSheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Assignee',
+        initialValue: ticket.assignee,
+        onConfirm: (value) {
+          // Phase 2: _saveField('assignee', value);
+        },
+      ),
+    );
+  }
+
+  void _openTagSheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _TagSheet(
+        tags: List.from(ticket.tags),
+        onConfirm: (tags) {
+          // Phase 2: _saveField('tags', tags);
+        },
+      ),
+    );
   }
 
   Future<void> _onDeploy() async {
@@ -543,28 +570,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 : IconButton(
                     icon: const Icon(Icons.rocket_launch_outlined),
                     tooltip: 'Deploy agent',
-                    onPressed: _editMode ? null : _onDeploy,
+                    onPressed: _onDeploy,
                   ),
-            IconButton(
-              icon: Icon(_editMode ? Icons.close : Icons.edit_outlined),
-              tooltip: _editMode ? 'Cancel edit' : 'Edit',
-              onPressed: _toggleEditMode,
-            ),
-            if (_editMode)
-              _saving
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.check),
-                      tooltip: 'Save',
-                      onPressed: _save,
-                    ),
           ],
         ],
       ),
@@ -595,7 +602,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       );
     }
     if (_ticket == null) return const SizedBox.shrink();
-    if (_editMode) return _buildEditView(context);
     return Column(
       children: [
         Expanded(child: _buildReadView(context)),
@@ -622,32 +628,88 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _StatusChip(status: ticket.status),
-              _PriorityChip(priority: ticket.priority),
+              // Status — tappable
+              Semantics(
+                label: 'Status: ${statusLabel(ticket.status)}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: () => _openStatusPicker(ticket),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _StatusChip(status: ticket.status),
+                ),
+              ),
+              // Priority — tappable
+              Semantics(
+                label: 'Priority: ${priorityLabel(ticket.priority)}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: () => _openPriorityPicker(ticket),
+                  borderRadius: BorderRadius.circular(12),
+                  child: _PriorityChip(priority: ticket.priority),
+                ),
+              ),
               if (ticket.type != null) _InfoChip(label: ticket.type!),
+              // Estimate — tappable
               if (ticket.estimate != null)
-                _InfoChip(label: ticket.estimate!),
+                Semantics(
+                  label: 'Estimate: ${ticket.estimate}. Tap to change.',
+                  button: true,
+                  child: InkWell(
+                    onTap: () => _openEstimatePicker(ticket),
+                    borderRadius: BorderRadius.circular(12),
+                    child: _InfoChip(label: ticket.estimate!),
+                  ),
+                ),
             ],
           ),
           if (ticket.team != null || ticket.assignee != null) ...[
             const SizedBox(height: 10),
-            Row(
-              children: [
-                if (ticket.team != null) ...[
-                  Icon(Icons.group_outlined,
-                      size: 14, color: theme.colorScheme.outline),
-                  const SizedBox(width: 4),
-                  Text(ticket.team!, style: theme.textTheme.bodySmall),
-                  const SizedBox(width: 16),
-                ],
-                if (ticket.assignee != null) ...[
-                  Icon(Icons.person_outline,
-                      size: 14, color: theme.colorScheme.outline),
-                  const SizedBox(width: 4),
-                  _AssigneeText(assignee: ticket.assignee!),
-                ],
-              ],
-            ),
+            // Team row — tappable
+            if (ticket.team != null)
+              Semantics(
+                label: 'Team: ${ticket.team}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: () => _openTeamSheet(ticket),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.group_outlined,
+                            size: 14, color: theme.colorScheme.outline),
+                        const SizedBox(width: 4),
+                        Text(ticket.team!, style: theme.textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (ticket.team != null && ticket.assignee != null)
+              const SizedBox(width: 16),
+            // Assignee row — tappable
+            if (ticket.assignee != null)
+              Semantics(
+                label: 'Assignee: ${ticket.assignee}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: () => _openAssigneeSheet(ticket),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.person_outline,
+                            size: 14, color: theme.colorScheme.outline),
+                        const SizedBox(width: 4),
+                        _AssigneeText(assignee: ticket.assignee!),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
           if (ticket.summary != null && ticket.summary!.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -681,23 +743,40 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             ),
           ],
-          if (ticket.tags.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _SectionLabel('Tags'),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: ticket.tags
-                  .map((tag) => Chip(
-                        label: Text(tag),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                      ))
-                  .toList(),
+          // Tags — tappable
+          Semantics(
+            label: 'Tags: ${ticket.tags.join(", ")}. Tap to change.',
+            button: true,
+            child: InkWell(
+              onTap: () => _openTagSheet(ticket),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (ticket.tags.isNotEmpty) ...[
+                      _SectionLabel('Tags'),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: ticket.tags
+                            .map((tag) => Chip(
+                                  label: Text(tag),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
           if (ticket.comments.isNotEmpty) ...[
             const SizedBox(height: 16),
             _SectionLabel('Comments'),
@@ -752,130 +831,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildEditView(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionLabel('Status'),
-          const SizedBox(height: 6),
-          GestureDetector(
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              builder: (_) => StatusPickerSheet(
-                currentStatus: _editStatus,
-                onSelect: (s) {
-                  Navigator.of(context).pop();
-                  setState(() => _editStatus = s);
-                },
-              ),
-            ),
-            child: _StatusChip(status: _editStatus),
-          ),
-          const SizedBox(height: 16),
-          _SectionLabel('Priority'),
-          const SizedBox(height: 6),
-          DropdownButton<String>(
-            value: _editPriority,
-            isDense: true,
-            items: ['critical', 'high', 'medium', 'low']
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (p) {
-              if (p != null) setState(() => _editPriority = p);
-            },
-          ),
-          const SizedBox(height: 16),
-          _SectionLabel('Estimate'),
-          const SizedBox(height: 6),
-          DropdownButton<String>(
-            value: _editEstimate,
-            isDense: true,
-            items: ['XS', 'S', 'M', 'L', 'XL']
-                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                .toList(),
-            onChanged: (e) {
-              if (e != null) setState(() => _editEstimate = e);
-            },
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _teamController,
-            decoration: const InputDecoration(
-              labelText: 'Team',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _assigneeController,
-            decoration: const InputDecoration(
-              labelText: 'Assignee',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _SectionLabel('Tags'),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              ..._editTags.map(
-                (tag) => Chip(
-                  label: Text(tag),
-                  onDeleted: () => setState(() => _editTags.remove(tag)),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                ),
-              ),
-              SizedBox(
-                width: 140,
-                height: 36,
-                child: TextField(
-                  controller: _tagInputController,
-                  decoration: const InputDecoration(
-                    hintText: 'Add tag…',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  ),
-                  onSubmitted: (tag) {
-                    final trimmed = tag.trim();
-                    if (trimmed.isNotEmpty && !_editTags.contains(trimmed)) {
-                      setState(() => _editTags.add(trimmed));
-                    }
-                    _tagInputController.clear();
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Changes'),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
       ),
     );
   }
@@ -1174,3 +1129,118 @@ class _CommentCard extends StatelessWidget {
     );
   }
 }
+
+/// Bottom sheet for managing ticket tags.
+///
+/// Shows existing tags as removable chips and an input field to add new tags.
+/// [onConfirm] is called with the final tag list when the user dismisses.
+///
+/// Usage:
+/// ```dart
+/// showModalBottomSheet<void>(
+///   context: context,
+///   builder: (_) => _TagSheet(
+///     tags: List.from(ticket.tags),
+///     onConfirm: (tags) { ... },
+///   ),
+/// );
+/// ```
+class _TagSheet extends StatefulWidget {
+  final List<String> tags;
+  final void Function(List<String> tags) onConfirm;
+
+  const _TagSheet({required this.tags, required this.onConfirm});
+
+  @override
+  State<_TagSheet> createState() => _TagSheetState();
+}
+
+class _TagSheetState extends State<_TagSheet> {
+  late List<String> _tags;
+  final _inputController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _tags = List.from(widget.tags);
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  void _addTag(String tag) {
+    final trimmed = tag.trim();
+    if (trimmed.isNotEmpty && !_tags.contains(trimmed)) {
+      setState(() => _tags.add(trimmed));
+    }
+    _inputController.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Tags',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                ..._tags.map(
+                  (tag) => Chip(
+                    label: Text(tag),
+                    onDeleted: () => setState(() => _tags.remove(tag)),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                SizedBox(
+                  width: 140,
+                  height: 36,
+                  child: TextField(
+                    controller: _inputController,
+                    decoration: const InputDecoration(
+                      hintText: 'Add tag…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    ),
+                    onSubmitted: _addTag,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onConfirm(_tags);
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
