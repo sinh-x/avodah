@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 
 /// Form for creating a new ticket.
@@ -23,6 +24,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedType = 'task';
   String _selectedPriority = 'medium';
   String? _selectedEstimate;
+  String _selectedStatus = 'pending-implementation';
 
   final _titleController = TextEditingController();
   final _teamController = TextEditingController();
@@ -65,6 +67,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         'type': _selectedType,
         'priority': _selectedPriority,
         'estimate': _selectedEstimate!,
+        'doc_refs': [],
+        'status': _selectedStatus,
       };
       final team = _teamController.text.trim();
       if (team.isNotEmpty) body['team'] = team;
@@ -81,8 +85,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
+        final msg = e is AgentApiException ? e.message : '$e';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Create failed: $e')),
+          SnackBar(content: Text('Create failed: $msg')),
         );
       }
     }
@@ -176,6 +181,26 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
               onChanged: (t) {
                 if (t != null) setState(() => _selectedType = t);
               },
+            ),
+            const SizedBox(height: 16),
+
+            // Status — backlog (idea) vs active (pending-implementation)
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'pending-implementation',
+                  label: Text('Active'),
+                  icon: Icon(Icons.play_arrow),
+                ),
+                ButtonSegment(
+                  value: 'idea',
+                  label: Text('Backlog'),
+                  icon: Icon(Icons.inbox),
+                ),
+              ],
+              selected: {_selectedStatus},
+              onSelectionChanged: (s) =>
+                  setState(() => _selectedStatus = s.first),
             ),
             const SizedBox(height: 16),
 
