@@ -178,9 +178,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     final routing = _deployRouting!;
     final paTeams = routing.toPaTeams();
 
-    // Auto-suggest team from ticket.assignee.
+    // Auto-suggest team: ticket.team first, then fall back to ticket.assignee.
     String? initialTeam;
-    if (ticket.assignee != null &&
+    if (ticket.team != null &&
+        paTeams.any((t) => t.name == ticket.team)) {
+      initialTeam = ticket.team;
+    } else if (ticket.assignee != null &&
         paTeams.any((t) => t.name == ticket.assignee)) {
       initialTeam = ticket.assignee;
     }
