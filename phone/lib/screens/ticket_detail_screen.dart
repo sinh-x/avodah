@@ -5,6 +5,7 @@ import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
 import '../models/ticket.dart';
 import '../screens/document_viewer_screen.dart';
+import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 import '../widgets/deploy_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
@@ -184,8 +185,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       initialTeam = ticket.assignee;
     }
 
-    // Pre-fill objective as "{id}: {title}" and repo from project.
-    final initialObjective = '${ticket.id}: ${ticket.title}';
+    // Pre-fill objective with ticket ID only (avoids validation issues with special chars in title).
+    final initialObjective = ticket.id;
     final initialRepo = ticket.project.isNotEmpty ? ticket.project : null;
 
     showModalBottomSheet<void>(
@@ -278,8 +279,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             ));
           } catch (e) {
             if (mounted) {
+              final message = e is AgentApiException ? e.message : 'Deploy failed: $e';
               messenger.showSnackBar(SnackBar(
-                content: Text('Deploy failed: $e'),
+                content: Text(message),
                 backgroundColor: errorColor,
               ));
             }
