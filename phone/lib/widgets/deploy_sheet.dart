@@ -63,6 +63,7 @@ class _DeploySheetState extends State<DeploySheet> {
   String? _selectedMode;
   String? _selectedRepo;
   bool _deploying = false;
+  bool _objectiveTouched = false;
   late final TextEditingController _objectiveController;
 
   @override
@@ -70,6 +71,7 @@ class _DeploySheetState extends State<DeploySheet> {
     super.initState();
     _objectiveController =
         TextEditingController(text: widget.initialObjective ?? '');
+    _objectiveController.addListener(_onObjectiveChanged);
 
     // Pre-select repo if provided and it exists in the list.
     if (widget.initialRepo != null &&
@@ -101,6 +103,27 @@ class _DeploySheetState extends State<DeploySheet> {
     if (paTeam != null && paTeam.deployModes.length == 1) {
       _selectedMode = paTeam.deployModes.first.id;
     }
+  }
+
+  void _onObjectiveChanged() {
+    if (!_objectiveTouched && _objectiveController.text.isNotEmpty) {
+      _objectiveTouched = true;
+    }
+    setState(() {});
+  }
+
+  /// Sanitize objective text: replace & with 'and', strip blocked chars.
+  String _sanitizeObjective(String raw) {
+    return raw
+        .replaceAll('&', 'and')
+        .replaceAll(RegExp(r'[`;|$\\><]'), '')
+        .trim();
+  }
+
+  /// Returns true if the objective text contains any blocked characters.
+  bool get _objectiveHasBlockedChars {
+    final text = _objectiveController.text;
+    return RegExp(r'[&`;|$\\><]').hasMatch(text);
   }
 
   PaTeam? _paTeamFor(String teamName) {
@@ -215,6 +238,9 @@ class _DeploySheetState extends State<DeploySheet> {
                       horizontal: 12,
                       vertical: 10,
                     ),
+                    errorText: _objectiveHasBlockedChars
+                        ? 'Invalid characters detected (will be auto-corrected on send)'
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -292,10 +318,11 @@ class _DeploySheetState extends State<DeploySheet> {
     if (!_canLaunch) return;
     setState(() => _deploying = true);
     try {
+      final sanitizedObjective = _sanitizeObjective(_objectiveController.text);
       await widget.onDeploy(
         _selectedTeam!,
         _selectedMode!,
-        _objectiveController.text.trim(),
+        sanitizedObjective,
         repo: _selectedRepo,
       );
     } finally {
