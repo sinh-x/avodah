@@ -213,9 +213,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             );
             if (!mounted) return;
             if (!result.started) {
+              final detail = result.reason.isNotEmpty
+                  ? result.reason
+                  : 'server did not start deployment';
               messenger.showSnackBar(SnackBar(
                 content: Text(
-                  'Deploy failed: server did not start deployment'
+                  'Deploy failed: $detail'
                   '${result.deploymentId.isNotEmpty ? ' (${result.deploymentId})' : ''}',
                 ),
                 backgroundColor: errorColor,
