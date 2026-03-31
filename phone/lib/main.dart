@@ -64,6 +64,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     // Write service for local CRDT mutations (timer, task, worklog)
     final writeService = LocalWriteService(db: db, clock: clock);
 
+    // One-time backfill: set category on worklogs from task-level timers
+    await writeService.backfillWorklogCategories();
+
     // Load stored server URL (already HTTP format)
     final httpBaseUrl = await SettingsScreen.loadServerUrl();
 

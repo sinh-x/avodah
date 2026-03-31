@@ -211,12 +211,30 @@ class LocalWriteService {
           ..orderBy([(w) => OrderingTerm.desc(w.created)])
           ..limit(limit * 3)) // fetch more to allow for filtering
         .get();
+
+    // Build task category lookup for worklogs missing their own category
+    var taskCategoryMap = <String, String>{};
+    if (category != null && category.isNotEmpty) {
+      final taskRows = await db.select(db.tasks).get();
+      for (final t in taskRows) {
+        final cat = TaskDocument.fromDrift(task: t, clock: clock).category;
+        if (cat != null && cat.isNotEmpty) taskCategoryMap[t.id] = cat;
+      }
+    }
+
     final comments = <String>[];
     for (final row in rows) {
       final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
       if (doc.comment != null && doc.comment!.isNotEmpty) {
         if (category != null && category.isNotEmpty) {
-          if (doc.category == category) {
+          // Match by worklog category, or fall back to task's category
+          final wlCategory = doc.category;
+          final tid = doc.taskId;
+          String? taskCategory;
+          if (tid.isNotEmpty) {
+            taskCategory = taskCategoryMap[tid];
+          }
+          if (wlCategory == category || taskCategory == category) {
             comments.add(doc.comment!);
           }
         } else {
@@ -403,6 +421,46 @@ class LocalWriteService {
     final doc = DayPlanTaskDocument.fromDrift(entry: rows.first, clock: clock);
     final json = doc.toJson();
     return {'type': 'dayPlanTask', 'id': json['id'], 'fields': json['fields']};
+  }
+
+  // ============================================================
+  // Migrations
+  // ============================================================
+
+  /// Backfills category on worklogs that have a taskId but no category.
+  ///
+  /// Older worklogs created by task-level timers had no category set.
+  /// This copies the task's category onto the worklog via CRDT so it
+  /// syncs correctly to the desktop.
+  Future<int> backfillWorklogCategories() async {
+    final worklogs = await db.select(db.worklogEntries).get();
+    final tasks = await db.select(db.tasks).get();
+    final taskCategoryMap = <String, String>{};
+    for (final t in tasks) {
+      final doc = TaskDocument.fromDrift(task: t, clock: clock);
+      final cat = doc.category;
+      if (cat != null && cat.isNotEmpty) taskCategoryMap[t.id] = cat;
+    }
+
+    var updated = 0;
+    for (final wl in worklogs) {
+      final doc = WorklogDocument.fromDrift(worklog: wl, clock: clock);
+      if (doc.taskId.isNotEmpty &&
+          (doc.category == null || doc.category!.isEmpty)) {
+        final cat = taskCategoryMap[doc.taskId];
+        if (cat != null) {
+          doc.category = cat;
+          await db
+              .into(db.worklogEntries)
+              .insertOnConflictUpdate(doc.toDriftCompanion());
+          updated++;
+        }
+      }
+    }
+    if (updated > 0) {
+      debugPrint('[LocalWrite] Backfilled category on $updated worklogs');
+    }
+    return updated;
   }
 
   // ============================================================

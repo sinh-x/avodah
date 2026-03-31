@@ -132,9 +132,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
+    // Look up task category from today's planned tasks
+    final taskCategory = widget.dashboardProvider.snapshot?.plannedTasks
+        .where((t) => t.taskId == taskId)
+        .firstOrNull
+        ?.category;
+
     await widget.writeService.startTimer(
       taskTitle: taskTitle,
       taskId: taskId,
+      category: taskCategory,
     );
     final timerDelta = await widget.writeService.getTimerDelta();
     if (timerDelta != null) deltas.add(timerDelta);
