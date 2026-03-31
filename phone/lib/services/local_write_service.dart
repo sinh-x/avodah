@@ -224,7 +224,14 @@ class LocalWriteService {
         }
       }
     }
-    return comments.take(limit).toList();
+    // Split multi-line comments, trim, filter empty, deduplicate
+    final seen = <String>{};
+    final chips = comments
+        .expand((c) => c.split('\n'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty && seen.add(s))
+        .toList();
+    return chips.take(limit).toList();
   }
 
   /// Returns active tasks filtered by [category].
