@@ -204,8 +204,8 @@ class LocalWriteService {
   /// Returns recent worklog comments (up to [limit] entries).
   ///
   /// If [category] is provided, only comments from worklogs with matching
-  /// category are returned. If the filtered results are fewer than 3,
-  /// falls back to unfiltered recent comments.
+  /// category are returned. Returns at most [limit] entries; may return
+  /// fewer if the category filter yields fewer results.
   Future<List<String>> getRecentComments({String? category, int limit = 10}) async {
     final rows = await (db.select(db.worklogEntries)
           ..orderBy([(w) => OrderingTerm.desc(w.created)])
@@ -223,10 +223,6 @@ class LocalWriteService {
           comments.add(doc.comment!);
         }
       }
-    }
-    // Fall back to unfiltered if category filter returned too few
-    if (category != null && category.isNotEmpty && comments.length < 3) {
-      return getRecentComments(category: null, limit: limit);
     }
     return comments.take(limit).toList();
   }
