@@ -424,6 +424,46 @@ class LocalWriteService {
   }
 
   // ============================================================
+  // Migrations
+  // ============================================================
+
+  /// Backfills category on worklogs that have a taskId but no category.
+  ///
+  /// Older worklogs created by task-level timers had no category set.
+  /// This copies the task's category onto the worklog via CRDT so it
+  /// syncs correctly to the desktop.
+  Future<int> backfillWorklogCategories() async {
+    final worklogs = await db.select(db.worklogEntries).get();
+    final tasks = await db.select(db.tasks).get();
+    final taskCategoryMap = <String, String>{};
+    for (final t in tasks) {
+      final doc = TaskDocument.fromDrift(task: t, clock: clock);
+      final cat = doc.category;
+      if (cat != null && cat.isNotEmpty) taskCategoryMap[t.id] = cat;
+    }
+
+    var updated = 0;
+    for (final wl in worklogs) {
+      final doc = WorklogDocument.fromDrift(worklog: wl, clock: clock);
+      if (doc.taskId.isNotEmpty &&
+          (doc.category == null || doc.category!.isEmpty)) {
+        final cat = taskCategoryMap[doc.taskId];
+        if (cat != null) {
+          doc.category = cat;
+          await db
+              .into(db.worklogEntries)
+              .insertOnConflictUpdate(doc.toDriftCompanion());
+          updated++;
+        }
+      }
+    }
+    if (updated > 0) {
+      debugPrint('[LocalWrite] Backfilled category on $updated worklogs');
+    }
+    return updated;
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
 
