@@ -136,9 +136,13 @@ class _StopTimerSheetState extends State<StopTimerSheet> {
     }
 
     // F5: Today's planned tasks (excluding orphan and already-added current task)
+    // Filter by category when set (ensures parity between category/task-level stop)
     for (final task in allTasks) {
       if (plannedIds.contains(task.id) && task.id != _selectedTaskId) {
         final doc = TaskDocument.fromDrift(task: task, clock: widget.writeService.clock);
+        if (widget.category != null && widget.category!.isNotEmpty && doc.category != widget.category) {
+          continue;
+        }
         options.add(_TaskOption(
           id: task.id,
           title: doc.title,
