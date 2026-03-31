@@ -211,12 +211,30 @@ class LocalWriteService {
           ..orderBy([(w) => OrderingTerm.desc(w.created)])
           ..limit(limit * 3)) // fetch more to allow for filtering
         .get();
+
+    // Build task category lookup for worklogs missing their own category
+    var taskCategoryMap = <String, String>{};
+    if (category != null && category.isNotEmpty) {
+      final taskRows = await db.select(db.tasks).get();
+      for (final t in taskRows) {
+        final cat = TaskDocument.fromDrift(task: t, clock: clock).category;
+        if (cat != null && cat.isNotEmpty) taskCategoryMap[t.id] = cat;
+      }
+    }
+
     final comments = <String>[];
     for (final row in rows) {
       final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
       if (doc.comment != null && doc.comment!.isNotEmpty) {
         if (category != null && category.isNotEmpty) {
-          if (doc.category == category) {
+          // Match by worklog category, or fall back to task's category
+          final wlCategory = doc.category;
+          final tid = doc.taskId;
+          String? taskCategory;
+          if (tid.isNotEmpty) {
+            taskCategory = taskCategoryMap[tid];
+          }
+          if (wlCategory == category || taskCategory == category) {
             comments.add(doc.comment!);
           }
         } else {
