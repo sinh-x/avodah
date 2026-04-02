@@ -1,0 +1,47 @@
+# Avodah Web UI — Docker multi-stage build
+#
+# Stage 1 (builder): Flutter SDK builds web assets
+# Stage 2 (serve): Caddy serves static files with COOP/COEP headers
+#
+# Build:
+#   docker build -f docker-web/Dockerfile.web -t avodah-web docker-web
+#
+# Run:
+#   docker compose up avodah-web
+
+# ──────────────────────────────────────────────────────────────
+# Stage 1: Build — Flutter web assets
+# ──────────────────────────────────────────────────────────────
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+
+WORKDIR /app
+
+# Copy all files from docker-web build context
+COPY . .
+
+# Enable web support
+RUN flutter config --enable-web || true
+
+# Resolve dependencies
+RUN flutter pub get
+
+# Build Flutter web release
+# --base-href=/ ensures assets load from root (required for Caddy file_server)
+RUN flutter build web --release --base-href=/
+
+# ──────────────────────────────────────────────────────────────
+# Stage 2: Serve — Caddy static file server
+# ──────────────────────────────────────────────────────────────
+FROM caddy:2-alpine
+
+# Copy Caddyfile configuration (included in build context)
+COPY Caddyfile /etc/caddy/Caddyfile
+
+# Copy Flutter web build artifacts from builder stage
+COPY --from=builder /app/build/web /srv
+
+# Default port (can be overridden via WEB_PORT env var)
+EXPOSE 8080
+
+# Caddy runs as root in Alpine container (required for binding low ports)
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

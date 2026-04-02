@@ -1,0 +1,16 @@
+targets:
+  $default:
+    builders:
+      freezed:
+        options:
+          # Generate copyWith with nullable parameters
+          copy_with: true
+          # Generate fromJson/toJson
+          from_json: true
+          to_json: true
+      json_serializable:
+        options:
+          # Use explicit_to_json for nested objects
+          explicit_to_json: true
+          # Include fields with null values in JSON
+          include_if_null: false
