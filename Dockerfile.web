@@ -1,0 +1,60 @@
+# Avodah Phone Viewer Web — Docker multi-stage build
+#
+# Stage 1 (builder): Flutter SDK builds web assets from phone/ directory
+# Stage 2 (serve): Caddy serves static files with COOP/COEP headers
+#
+# Build:
+#   docker build -f Dockerfile.web -t avodah-web .
+#
+# Run:
+#   docker compose up avodah-web
+
+# ──────────────────────────────────────────────────────────────
+# Stage 1: Build — Flutter web assets
+# ──────────────────────────────────────────────────────────────
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+
+WORKDIR /app
+
+# Allow Flutter to run as root inside Docker
+ENV CI=true
+
+# Copy entire repo to /app (needed because phone/ depends on ../packages/avodah_core)
+COPY . .
+
+# Enable web support
+RUN flutter config --enable-web || true
+
+# Work in phone/ directory for building
+WORKDIR /app/phone
+
+# Enable web platform for this project (phone/ was Android-only)
+RUN flutter create . --platforms web --project-name avodah_viewer --org com.sinhx 2>/dev/null || true
+
+# Resolve dependencies
+RUN flutter pub get
+
+# Download Drift WASM files into web/ (versions must match pubspec.lock)
+RUN curl -L -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
+    && curl -L -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
+
+# Build Flutter web release
+# --base-href=/ ensures assets load from root (required for Caddy file_server)
+RUN flutter build web --release --base-href=/
+
+# ──────────────────────────────────────────────────────────────
+# Stage 2: Serve — Caddy static file server
+# ──────────────────────────────────────────────────────────────
+FROM caddy:2-alpine
+
+# Copy Caddyfile configuration
+COPY Caddyfile /etc/caddy/Caddyfile
+
+# Copy Flutter web build artifacts from builder stage
+COPY --from=builder /app/phone/build/web /srv
+
+# Default port (can be overridden via WEB_PORT env var)
+EXPOSE 8080
+
+# Caddy runs as root in Alpine container (required for binding low ports)
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

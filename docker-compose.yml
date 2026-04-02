@@ -17,3 +17,18 @@ services:
       # Agent API URL — proxied to pa serve (same host, port 9848)
       - AGENT_API_URL=http://localhost:${AGENT_PORT:-9848}
     restart: unless-stopped
+
+  avodah-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    network_mode: host
+    ports:
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    environment:
+      - WEB_PORT=${WEB_PORT:-8080}
+      - SYNC_SERVER_HOST=localhost
+      - SYNC_SERVER_PORT=${SYNC_PORT:-9847}
+    depends_on:
+      - avodah-sync
+    restart: unless-stopped

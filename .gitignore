@@ -57,6 +57,9 @@ result-*
 # Compiled CLI binary
 mcp/bin/avo
 
+# Docker
+docker-compose.override.yml
+
 # Direnv
 .direnv/
 .claude/todos.md

@@ -5,13 +5,14 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../crdt/crdt.dart';
 import '../storage/database.dart';
+import 'jira_fs_stub.dart'
+    if (dart.library.io) 'jira_fs_native.dart';
 
 /// Field keys for JiraIntegrationDocument.
 class JiraIntegrationFields {
@@ -132,18 +133,9 @@ class JiraProfileConfig {
 
   /// Loads a JiraProfileConfig from a JSON file at [filePath].
   static Future<JiraProfileConfig> load(String filePath) async {
-    var path = filePath;
-    if (path.startsWith('~/')) {
-      final home = Platform.environment['HOME'] ?? '';
-      path = path.replaceFirst('~', home);
-    }
+    final path = expandHomePath(filePath);
 
-    final file = File(path);
-    if (!await file.exists()) {
-      throw FileSystemException('Config file not found', path);
-    }
-
-    final content = await file.readAsString();
+    final content = await readFileAsString(path);
     final json = jsonDecode(content) as Map<String, dynamic>;
     return JiraProfileConfig.fromJson(json);
   }
@@ -390,19 +382,10 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
     if (credentialsFilePath.isEmpty) return null;
 
     // Expand ~ to home directory
-    var path = credentialsFilePath;
-    if (path.startsWith('~/')) {
-      final home = Platform.environment['HOME'] ?? '';
-      path = path.replaceFirst('~', home);
-    }
-
-    final file = File(path);
-    if (!await file.exists()) {
-      return null;
-    }
+    final path = expandHomePath(credentialsFilePath);
 
     try {
-      final content = await file.readAsString();
+      final content = await readFileAsString(path);
       final json = jsonDecode(content) as Map<String, dynamic>;
 
       // Profile-based: load via JiraProfileConfig
@@ -423,13 +406,8 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   Future<bool> credentialsExist() async {
     if (credentialsFilePath.isEmpty) return false;
 
-    var path = credentialsFilePath;
-    if (path.startsWith('~/')) {
-      final home = Platform.environment['HOME'] ?? '';
-      path = path.replaceFirst('~', home);
-    }
-
-    return File(path).exists();
+    final path = expandHomePath(credentialsFilePath);
+    return fileExists(path);
   }
 
   // ============================================================
