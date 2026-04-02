@@ -20,7 +20,7 @@ services:
 
   avodah-web:
     build:
-      context: ./docker-web
+      context: .
       dockerfile: Dockerfile.web
     network_mode: host
     ports:

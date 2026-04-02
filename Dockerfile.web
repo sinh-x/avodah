@@ -1,10 +1,10 @@
-# Avodah Web UI — Docker multi-stage build
+# Avodah Phone Viewer Web — Docker multi-stage build
 #
-# Stage 1 (builder): Flutter SDK builds web assets
+# Stage 1 (builder): Flutter SDK builds web assets from phone/ directory
 # Stage 2 (serve): Caddy serves static files with COOP/COEP headers
 #
 # Build:
-#   docker build -f docker-web/Dockerfile.web -t avodah-web docker-web
+#   docker build -f Dockerfile.web -t avodah-web .
 #
 # Run:
 #   docker compose up avodah-web
@@ -16,11 +16,14 @@ FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
 WORKDIR /app
 
-# Copy all files from docker-web build context
+# Copy entire repo to /app (needed because phone/ depends on ../packages/avodah_core)
 COPY . .
 
 # Enable web support
 RUN flutter config --enable-web || true
+
+# Work in phone/ directory for building
+WORKDIR /app/phone
 
 # Resolve dependencies
 RUN flutter pub get
@@ -34,11 +37,11 @@ RUN flutter build web --release --base-href=/
 # ──────────────────────────────────────────────────────────────
 FROM caddy:2-alpine
 
-# Copy Caddyfile configuration (included in build context)
+# Copy Caddyfile configuration
 COPY Caddyfile /etc/caddy/Caddyfile
 
 # Copy Flutter web build artifacts from builder stage
-COPY --from=builder /app/build/web /srv
+COPY --from=builder /app/phone/build/web /srv
 
 # Default port (can be overridden via WEB_PORT env var)
 EXPOSE 8080
