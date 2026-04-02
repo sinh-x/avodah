@@ -10,14 +10,18 @@
 
 :{$WEB_PORT:-8080} {
     # Serve Flutter web static assets from /srv
-    file_server {
-        root /srv
-        browse off
-    }
+    root * /srv
+    file_server
 
     # Set COOP/COEP headers for OPFS (Required for Drift WasmDatabase)
     header Cross-Origin-Opener-Policy same-origin
     header Cross-Origin-Embedder-Policy require-corp
+
+    # WASM and JS MIME types (required for Drift WasmDatabase)
+    @wasm path *.wasm
+    header @wasm Content-Type application/wasm
+    @js path *.js
+    header @js Content-Type application/javascript
 
     # Security headers
     header X-Content-Type-Options nosniff

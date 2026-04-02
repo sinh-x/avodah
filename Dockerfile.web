@@ -34,6 +34,10 @@ RUN flutter create . --platforms web --project-name avodah_viewer --org com.sinh
 # Resolve dependencies
 RUN flutter pub get
 
+# Download Drift WASM files into web/ (versions must match pubspec.lock)
+RUN curl -L -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
+    && curl -L -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
+
 # Build Flutter web release
 # --base-href=/ ensures assets load from root (required for Caddy file_server)
 RUN flutter build web --release --base-href=/
