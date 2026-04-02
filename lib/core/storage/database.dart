@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+
+import 'database_stub.dart'
+    if (dart.library.io) 'database_native.dart'
+    if (dart.library.js_interop) 'database_web.dart' as impl;
 
 import 'tables/tasks.dart';
 import 'tables/subtasks.dart';
@@ -78,10 +77,6 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'avodah.db'));
-    return NativeDatabase.createInBackground(file);
-  });
+QueryExecutor _openConnection() {
+  return impl.openDatabase();
 }
