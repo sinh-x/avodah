@@ -235,8 +235,11 @@ class BoardProvider extends ChangeNotifier {
   BoardColumn _applySearch(BoardColumn col) {
     if (_searchQuery.isEmpty) return col;
     final query = _searchQuery.toLowerCase();
-    final filtered =
-        col.tickets.where((t) => t.title.toLowerCase().contains(query)).toList();
+    final filtered = col.tickets
+        .where((t) =>
+            t.title.toLowerCase().contains(query) ||
+            t.id.toLowerCase().contains(query))
+        .toList();
     return BoardColumn(
       status: col.status,
       tickets: filtered,
