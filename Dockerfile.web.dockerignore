@@ -1,0 +1,47 @@
+# Dockerfile.web.dockerignore — for the phone/ web build
+# Keep: phone/, packages/avodah_core/, Caddyfile, Dockerfile.web
+
+# Main Flutter desktop app (not needed for web build)
+lib/
+test/
+linux/
+web/
+result/
+
+# Sync server (not needed for web build)
+mcp/
+
+# Build artifacts
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+phone/build/
+phone/.dart_tool/
+
+# Development / IDE
+*.iml
+*.log
+.idea/
+.vscode/
+
+# Project files not needed in Docker build context
+completions/
+docs/
+tool/
+flake.lock
+flake.nix
+*.nix
+CHANGELOG.md
+README.md
+DOCKER.md
+
+# Docker files for sync server
+Dockerfile
+
+# Keep:
+#   phone/          — the Flutter web app source
+#   packages/       — local dependency (avodah_core)
+#   Caddyfile       — Caddy config (copied in Stage 2)
+#   pubspec.yaml    — root pubspec (needed for workspace resolution)

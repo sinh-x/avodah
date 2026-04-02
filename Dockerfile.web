@@ -16,6 +16,9 @@ FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
 WORKDIR /app
 
+# Allow Flutter to run as root inside Docker
+ENV CI=true
+
 # Copy entire repo to /app (needed because phone/ depends on ../packages/avodah_core)
 COPY . .
 
@@ -24,6 +27,9 @@ RUN flutter config --enable-web || true
 
 # Work in phone/ directory for building
 WORKDIR /app/phone
+
+# Enable web platform for this project (phone/ was Android-only)
+RUN flutter create . --platforms web --project-name avodah_viewer --org com.sinhx 2>/dev/null || true
 
 # Resolve dependencies
 RUN flutter pub get
