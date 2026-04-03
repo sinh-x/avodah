@@ -24,7 +24,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedType = 'task';
   String _selectedPriority = 'medium';
   String? _selectedEstimate;
-  String _selectedStatus = 'pending-implementation';
+  String _selectedStatus = 'requirement-review';
 
   final _titleController = TextEditingController();
   final _teamController = TextEditingController();
@@ -188,14 +188,19 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(
-                  value: 'pending-implementation',
-                  label: Text('Active'),
-                  icon: Icon(Icons.play_arrow),
-                ),
-                ButtonSegment(
                   value: 'idea',
                   label: Text('Backlog'),
                   icon: Icon(Icons.inbox),
+                ),
+                ButtonSegment(
+                  value: 'requirement-review',
+                  label: Text('Req Review'),
+                  icon: Icon(Icons.rate_review),
+                ),
+                ButtonSegment(
+                  value: 'pending-implementation',
+                  label: Text('Active'),
+                  icon: Icon(Icons.play_arrow),
                 ),
               ],
               selected: {_selectedStatus},
