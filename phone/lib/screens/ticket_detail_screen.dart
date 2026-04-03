@@ -12,6 +12,7 @@ import '../widgets/deploy_sheet.dart';
 import '../widgets/estimate_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
+import '../widgets/team_picker_sheet.dart';
 import '../widgets/text_input_sheet.dart';
 import 'activity_timeline_screen.dart';
 
@@ -304,11 +305,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => TextInputSheet(
-        label: 'Team',
-        initialValue: ticket.team,
-        onConfirm: (value) {
-          _saveField('team', value);
+      builder: (_) => TeamPickerSheet(
+        client: widget.boardProvider.client,
+        currentTeam: ticket.team,
+        onSelect: (team) {
+          _saveField('team', team);
         },
       ),
     );
@@ -909,35 +910,44 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           if (ticket.team != null || ticket.assignee != null) ...[
             const SizedBox(height: 10),
             // Team row — tappable (min 48dp tall for tap target)
-            if (ticket.team != null)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: _FieldSavingIndicator(
-                  isSaving: _savingFields.contains('team'),
-                  child: Semantics(
-                    label: 'Team: ${ticket.team}. Tap to change.',
-                    button: true,
-                    child: InkWell(
-                      onTap: _savingFields.contains('team')
-                          ? null
-                          : () => _openTeamSheet(ticket),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.group_outlined,
-                                size: 14, color: theme.colorScheme.outline),
-                            const SizedBox(width: 4),
-                            Text(ticket.team!, style: theme.textTheme.bodySmall),
-                          ],
-                        ),
+            // Always show (even when null) so user can set a team
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: _FieldSavingIndicator(
+                isSaving: _savingFields.contains('team'),
+                child: Semantics(
+                  label: ticket.team != null
+                      ? 'Team: ${ticket.team}. Tap to change.'
+                      : 'Team: not set. Tap to set.',
+                  button: true,
+                  child: InkWell(
+                    onTap: _savingFields.contains('team')
+                        ? null
+                        : () => _openTeamSheet(ticket),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.group_outlined,
+                              size: 14, color: theme.colorScheme.outline),
+                          const SizedBox(width: 4),
+                          Text(
+                            ticket.team ?? 'Set team',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: ticket.team != null
+                                  ? null
+                                  : theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
             if (ticket.team != null && ticket.assignee != null)
               const SizedBox(width: 16),
             // Assignee row — tappable (min 48dp tall for tap target)

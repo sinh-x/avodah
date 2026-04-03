@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/agent_team.dart';
 import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 
@@ -27,7 +28,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedStatus = 'requirement-review';
 
   final _titleController = TextEditingController();
-  final _teamController = TextEditingController();
+  String? _selectedTeam;
   final _summaryController = TextEditingController();
 
   static const _types = [
@@ -52,7 +53,6 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    _teamController.dispose();
     _summaryController.dispose();
     super.dispose();
   }
@@ -70,8 +70,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         'doc_refs': [],
         'status': _selectedStatus,
       };
-      final team = _teamController.text.trim();
-      if (team.isNotEmpty) body['team'] = team;
+      if (_selectedTeam != null && _selectedTeam!.isNotEmpty) {
+        body['team'] = _selectedTeam;
+      }
       final summary = _summaryController.text.trim();
       if (summary.isNotEmpty) body['summary'] = summary;
 
@@ -209,14 +210,52 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Team
-            TextField(
-              controller: _teamController,
-              decoration: const InputDecoration(
-                labelText: 'Team',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
+            // Team — dropdown populated from API
+            FutureBuilder<List<AgentTeam>>(
+              future: widget.boardProvider.client.listAgentTeams(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Team',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Loading teams…'),
+                      ],
+                    ),
+                  );
+                }
+                final teams = snapshot.data ?? [];
+                final items = <DropdownMenuItem<String?>>[
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None'),
+                  ),
+                  ...teams.map((t) => DropdownMenuItem<String?>(
+                        value: t.name,
+                        child: Text(t.name),
+                      )),
+                ];
+                return DropdownButtonFormField<String?>(
+                  initialValue: _selectedTeam,
+                  decoration: const InputDecoration(
+                    labelText: 'Team',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: items,
+                  onChanged: (v) => setState(() => _selectedTeam = v),
+                );
+              },
             ),
             const SizedBox(height: 16),
 
