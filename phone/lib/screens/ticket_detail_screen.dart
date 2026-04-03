@@ -176,6 +176,10 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         return 'Assignee';
       case 'tags':
         return 'Tags';
+      case 'title':
+        return 'Title';
+      case 'summary':
+        return 'Summary';
       default:
         return field;
     }
@@ -319,6 +323,34 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         initialValue: ticket.assignee,
         onConfirm: (value) {
           _saveField('assignee', value);
+        },
+      ),
+    );
+  }
+
+  void _openTitleSheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Title',
+        initialValue: ticket.title,
+        onConfirm: (value) {
+          _saveField('title', value);
+        },
+      ),
+    );
+  }
+
+  void _openSummarySheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Summary',
+        initialValue: ticket.summary,
+        onConfirm: (value) {
+          _saveField('summary', value);
         },
       ),
     );
@@ -795,10 +827,30 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            ticket.title,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
+          // Title — tappable (min 48dp tall for tap target)
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: _FieldSavingIndicator(
+              isSaving: _savingFields.contains('title'),
+              child: Semantics(
+                label: 'Title: ${ticket.title}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: _savingFields.contains('title')
+                      ? null
+                      : () => _openTitleSheet(ticket),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      ticket.title,
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -923,7 +975,28 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 16),
             _SectionLabel('Summary'),
             const SizedBox(height: 4),
-            Text(ticket.summary!, style: theme.textTheme.bodyMedium),
+            // Summary — tappable (min 48dp tall for tap target)
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: _FieldSavingIndicator(
+                isSaving: _savingFields.contains('summary'),
+                child: Semantics(
+                  label: 'Summary: ${ticket.summary}. Tap to change.',
+                  button: true,
+                  child: InkWell(
+                    onTap: _savingFields.contains('summary')
+                        ? null
+                        : () => _openSummarySheet(ticket),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(ticket.summary!,
+                          style: theme.textTheme.bodyMedium),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
           if (ticket.description != null &&
               ticket.description!.isNotEmpty) ...[
