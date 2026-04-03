@@ -169,16 +169,16 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const SizedBox(height: 16),
 
             // Title
-            TextFormField(
+            _NoSelectTextField(
               controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Title *',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
+              textCapitalization: TextCapitalization.sentences,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Title is required' : null,
-              textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 16),
 
@@ -329,7 +329,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const SizedBox(height: 12),
 
             // Freeform additional notes
-            TextFormField(
+            _NoSelectTextField(
               controller: _freeformSummaryController,
               decoration: const InputDecoration(
                 labelText: 'Additional notes (optional)',
@@ -531,6 +531,77 @@ class _TypePickerSheet extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A TextField that places cursor at tap position on single tap,
+/// without selecting text. Preserves double-tap word selection.
+///
+/// Works around flutter/flutter#98720, #105185 where single taps in
+/// TextFields can unexpectedly select words instead of placing cursor.
+class _NoSelectTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final InputDecoration? decoration;
+  final int? maxLines;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+  final TextCapitalization textCapitalization;
+  final FormFieldValidator<String>? validator;
+
+  const _NoSelectTextField({
+    required this.controller,
+    this.decoration,
+    this.maxLines,
+    this.onChanged,
+    this.autofocus = false,
+    this.textCapitalization = TextCapitalization.sentences,
+    this.validator,
+  });
+
+  @override
+  State<_NoSelectTextField> createState() => _NoSelectTextFieldState();
+}
+
+class _NoSelectTextFieldState extends State<_NoSelectTextField> {
+  Offset? _tapPosition;
+
+  void _handleTapDown(TapDownDetails details) {
+    _tapPosition = details.globalPosition;
+  }
+
+  void _handleTap() {
+    if (_tapPosition == null) return;
+    final renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(_tapPosition!);
+
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.controller.text),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(maxWidth: renderBox.size.width);
+
+    final textPosition = textPainter.getPositionForOffset(localPosition);
+    widget.controller.selection = TextSelection.collapsed(
+      offset: textPosition.offset,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _handleTapDown,
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: TextFormField(
+        controller: widget.controller,
+        autofocus: widget.autofocus,
+        maxLines: widget.maxLines,
+        decoration: widget.decoration,
+        onChanged: widget.onChanged,
+        textCapitalization: widget.textCapitalization,
+        validator: widget.validator,
       ),
     );
   }

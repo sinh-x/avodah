@@ -96,12 +96,12 @@ class GuidedSummaryFieldsState extends State<GuidedSummaryFields> {
   }
 
   Widget _buildTextField(GuidedField field) {
-    final controller = _controllers[field.templateKey];
+    final controller = _controllers[field.templateKey]!;
     final error = _errors[field.templateKey];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
+      child: _NoSelectTextField(
         controller: controller,
         decoration: InputDecoration(
           labelText: field.label + (field.required ? ' *' : ''),
@@ -170,6 +170,74 @@ class GuidedSummaryFieldsState extends State<GuidedSummaryFields> {
           else
             _buildTextField(field),
       ],
+    );
+  }
+}
+
+/// A TextField that places cursor at tap position on single tap,
+/// without selecting text. Preserves double-tap word selection.
+///
+/// Works around flutter/flutter#98720, #105185 where single taps in
+/// TextFields can unexpectedly select words instead of placing cursor.
+class _NoSelectTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final InputDecoration? decoration;
+  final int? maxLines;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+  final TextCapitalization textCapitalization;
+
+  const _NoSelectTextField({
+    required this.controller,
+    this.decoration,
+    this.maxLines,
+    this.onChanged,
+    this.autofocus = false,
+    this.textCapitalization = TextCapitalization.sentences,
+  });
+
+  @override
+  State<_NoSelectTextField> createState() => _NoSelectTextFieldState();
+}
+
+class _NoSelectTextFieldState extends State<_NoSelectTextField> {
+  Offset? _tapPosition;
+
+  void _handleTapDown(TapDownDetails details) {
+    _tapPosition = details.globalPosition;
+  }
+
+  void _handleTap() {
+    if (_tapPosition == null) return;
+    final renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(_tapPosition!);
+
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.controller.text),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(maxWidth: renderBox.size.width);
+
+    final textPosition = textPainter.getPositionForOffset(localPosition);
+    widget.controller.selection = TextSelection.collapsed(
+      offset: textPosition.offset,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _handleTapDown,
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: TextFormField(
+        controller: widget.controller,
+        autofocus: widget.autofocus,
+        maxLines: widget.maxLines,
+        decoration: widget.decoration,
+        onChanged: widget.onChanged,
+        textCapitalization: widget.textCapitalization,
+      ),
     );
   }
 }
