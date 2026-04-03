@@ -5,6 +5,7 @@ import '../models/agent_team.dart';
 import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 import '../widgets/guided_summary_fields.dart';
+import '../widgets/image_attachment_picker.dart';
 
 /// Form for creating a new ticket.
 ///
@@ -34,6 +35,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   final _freeformSummaryController = TextEditingController();
   final GlobalKey<GuidedSummaryFieldsState> _guidedFieldsKey =
       GlobalKey<GuidedSummaryFieldsState>();
+  final GlobalKey<ImageAttachmentPickerState> _imagePickerKey =
+      GlobalKey<ImageAttachmentPickerState>();
 
   static const _priorities = ['critical', 'high', 'medium', 'low'];
   static const _estimates = ['XS', 'S', 'M', 'L', 'XL'];
@@ -90,7 +93,28 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         body['summary'] = assembledSummary;
       }
 
-      await widget.boardProvider.client.createTicket(body);
+      // Create ticket first to get the ID
+      final ticket = await widget.boardProvider.client.createTicket(body);
+      final ticketId = ticket.id;
+
+      // Upload images if any selected
+      final imagePicker = _imagePickerKey.currentState;
+      final selectedImages = imagePicker?.selectedImages ?? [];
+      if (selectedImages.isNotEmpty) {
+        imagePicker?.setUploading(true);
+        try {
+          final docRefs = await imagePicker!.widget.onUpload(selectedImages, ticketId);
+          // Update ticket with attachment doc_refs
+          if (docRefs.isNotEmpty) {
+            await widget.boardProvider.client.updateTicket(ticketId, {
+              'doc_refs': [...ticket.docRefs, ...docRefs],
+            });
+          }
+        } finally {
+          imagePicker?.setUploading(false);
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ticket created')),
@@ -321,6 +345,43 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     GuidedSummaryFields(
                       key: _guidedFieldsKey,
                       selectedType: _selectedType,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Image attachments
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Attachments',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    ImageAttachmentPicker(
+                      key: _imagePickerKey,
+                      onUpload: (images, ticketId) async {
+                        final docRefs = <String>[];
+                        final picker = _imagePickerKey.currentState!;
+                        for (var i = 0; i < images.length; i++) {
+                          picker.setUploadProgress((i + 0.5) / images.length);
+                          final docRef = await widget.boardProvider.client
+                              .uploadAttachment(ticketId, images[i]);
+                          docRefs.add(docRef);
+                        }
+                        picker.setUploadProgress(1.0);
+                        return docRefs;
+                      },
+                      onUploadingChanged: (uploading) {
+                        setState(() {});
+                      },
                     ),
                   ],
                 ),
