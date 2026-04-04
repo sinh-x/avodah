@@ -654,6 +654,18 @@ class AgentApiClient {
     );
   }
 
+  /// Move a ticket to a different project.
+  ///
+  /// POST /api/tickets/:id/move body={'project': targetProject, 'actor': actor?} → {'ticket': {...}}
+  /// Returns the newly created ticket with its new ID.
+  Future<Ticket> moveTicket(String id, String targetProject, {String? actor}) async {
+    final encoded = Uri.encodeComponent(id);
+    final body = <String, dynamic>{'project': targetProject};
+    if (actor != null) body['actor'] = actor;
+    final response = await _post('/api/tickets/$encoded/move', body: body);
+    return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+  }
+
   /// Upload an image attachment to a ticket.
   ///
   /// POST /api/tickets/:id/attachments/upload with multipart form containing 'file' field.
