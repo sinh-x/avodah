@@ -12,6 +12,7 @@ Color statusColor(BuildContext context, String status) {
       return Colors.orange;
     case 'failed':
     case 'crashed':
+    case 'dead':
       return Colors.red;
     default:
       return Theme.of(context).colorScheme.outline;
@@ -30,6 +31,7 @@ IconData statusIcon(String status) {
       return Icons.warning_amber_outlined;
     case 'failed':
     case 'crashed':
+    case 'dead':
       return Icons.error_outline;
     default:
       return Icons.help_outline;
