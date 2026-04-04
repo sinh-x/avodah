@@ -12,6 +12,7 @@ import '../widgets/deploy_sheet.dart';
 import '../widgets/estimate_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
+import '../widgets/team_picker_sheet.dart';
 import '../widgets/text_input_sheet.dart';
 import 'activity_timeline_screen.dart';
 
@@ -176,6 +177,10 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         return 'Assignee';
       case 'tags':
         return 'Tags';
+      case 'title':
+        return 'Title';
+      case 'summary':
+        return 'Summary';
       default:
         return field;
     }
@@ -300,11 +305,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => TextInputSheet(
-        label: 'Team',
-        initialValue: ticket.team,
-        onConfirm: (value) {
-          _saveField('team', value);
+      builder: (_) => TeamPickerSheet(
+        client: widget.boardProvider.client,
+        currentTeam: ticket.team,
+        onSelect: (team) {
+          _saveField('team', team);
         },
       ),
     );
@@ -319,6 +324,34 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         initialValue: ticket.assignee,
         onConfirm: (value) {
           _saveField('assignee', value);
+        },
+      ),
+    );
+  }
+
+  void _openTitleSheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Title',
+        initialValue: ticket.title,
+        onConfirm: (value) {
+          _saveField('title', value);
+        },
+      ),
+    );
+  }
+
+  void _openSummarySheet(Ticket ticket) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TextInputSheet(
+        label: 'Summary',
+        initialValue: ticket.summary,
+        onConfirm: (value) {
+          _saveField('summary', value);
         },
       ),
     );
@@ -645,7 +678,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             Text('Edit Comment',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            TextField(
+            _NoSelectTextField(
               controller: editController,
               autofocus: true,
               maxLines: null,
@@ -795,10 +828,30 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            ticket.title,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
+          // Title — tappable (min 48dp tall for tap target)
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: _FieldSavingIndicator(
+              isSaving: _savingFields.contains('title'),
+              child: Semantics(
+                label: 'Title: ${ticket.title}. Tap to change.',
+                button: true,
+                child: InkWell(
+                  onTap: _savingFields.contains('title')
+                      ? null
+                      : () => _openTitleSheet(ticket),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      ticket.title,
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -857,35 +910,44 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           if (ticket.team != null || ticket.assignee != null) ...[
             const SizedBox(height: 10),
             // Team row — tappable (min 48dp tall for tap target)
-            if (ticket.team != null)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: _FieldSavingIndicator(
-                  isSaving: _savingFields.contains('team'),
-                  child: Semantics(
-                    label: 'Team: ${ticket.team}. Tap to change.',
-                    button: true,
-                    child: InkWell(
-                      onTap: _savingFields.contains('team')
-                          ? null
-                          : () => _openTeamSheet(ticket),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.group_outlined,
-                                size: 14, color: theme.colorScheme.outline),
-                            const SizedBox(width: 4),
-                            Text(ticket.team!, style: theme.textTheme.bodySmall),
-                          ],
-                        ),
+            // Always show (even when null) so user can set a team
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: _FieldSavingIndicator(
+                isSaving: _savingFields.contains('team'),
+                child: Semantics(
+                  label: ticket.team != null
+                      ? 'Team: ${ticket.team}. Tap to change.'
+                      : 'Team: not set. Tap to set.',
+                  button: true,
+                  child: InkWell(
+                    onTap: _savingFields.contains('team')
+                        ? null
+                        : () => _openTeamSheet(ticket),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.group_outlined,
+                              size: 14, color: theme.colorScheme.outline),
+                          const SizedBox(width: 4),
+                          Text(
+                            ticket.team ?? 'Set team',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: ticket.team != null
+                                  ? null
+                                  : theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
             if (ticket.team != null && ticket.assignee != null)
               const SizedBox(width: 16),
             // Assignee row — tappable (min 48dp tall for tap target)
@@ -923,7 +985,28 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             const SizedBox(height: 16),
             _SectionLabel('Summary'),
             const SizedBox(height: 4),
-            Text(ticket.summary!, style: theme.textTheme.bodyMedium),
+            // Summary — tappable (min 48dp tall for tap target)
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: _FieldSavingIndicator(
+                isSaving: _savingFields.contains('summary'),
+                child: Semantics(
+                  label: 'Summary: ${ticket.summary}. Tap to change.',
+                  button: true,
+                  child: InkWell(
+                    onTap: _savingFields.contains('summary')
+                        ? null
+                        : () => _openSummarySheet(ticket),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(ticket.summary!,
+                          style: theme.textTheme.bodyMedium),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
           if (ticket.description != null &&
               ticket.description!.isNotEmpty) ...[
@@ -1027,7 +1110,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
+              child: _NoSelectTextField(
                 controller: _commentController,
                 decoration: const InputDecoration(
                   hintText: 'Add a comment…',
@@ -1438,7 +1521,7 @@ class _TagSheetState extends State<_TagSheet> {
                 SizedBox(
                   width: 140,
                   height: 36,
-                  child: TextField(
+                  child: _NoSelectTextField(
                     controller: _inputController,
                     decoration: const InputDecoration(
                       hintText: 'Add tag…',
@@ -1494,6 +1577,74 @@ class _FieldSavingIndicator extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ],
+    );
+  }
+}
+
+/// A TextField that places cursor at tap position on single tap,
+/// without selecting text. Preserves double-tap word selection.
+///
+/// Works around flutter/flutter#98720, #105185 where single taps in
+/// TextFields can unexpectedly select words instead of placing cursor.
+class _NoSelectTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final InputDecoration? decoration;
+  final int? maxLines;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+  final bool autofocus;
+
+  const _NoSelectTextField({
+    required this.controller,
+    this.decoration,
+    this.maxLines,
+    this.textInputAction,
+    this.onSubmitted,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_NoSelectTextField> createState() => _NoSelectTextFieldState();
+}
+
+class _NoSelectTextFieldState extends State<_NoSelectTextField> {
+  Offset? _tapPosition;
+
+  void _handleTapDown(TapDownDetails details) {
+    _tapPosition = details.globalPosition;
+  }
+
+  void _handleTap() {
+    if (_tapPosition == null) return;
+    final renderBox = context.findRenderObject() as RenderBox;
+    final localPosition = renderBox.globalToLocal(_tapPosition!);
+
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.controller.text),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(maxWidth: renderBox.size.width);
+
+    final textPosition = textPainter.getPositionForOffset(localPosition);
+    widget.controller.selection = TextSelection.collapsed(
+      offset: textPosition.offset,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _handleTapDown,
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: TextField(
+        controller: widget.controller,
+        autofocus: widget.autofocus,
+        maxLines: widget.maxLines,
+        decoration: widget.decoration,
+        textInputAction: widget.textInputAction,
+        onSubmitted: widget.onSubmitted,
+      ),
     );
   }
 }

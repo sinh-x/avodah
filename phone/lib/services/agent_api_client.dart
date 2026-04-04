@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../models/activity_event.dart';
 import '../models/agent_team.dart';
@@ -651,6 +652,48 @@ class AgentApiClient {
       '/api/tickets/$encodedId/comments/$encodedComment',
       body: {'actor': actor},
     );
+  }
+
+  /// Upload an image attachment to a ticket.
+  ///
+  /// POST /api/tickets/:id/attachments/upload with multipart form containing 'file' field.
+  /// Returns the doc_ref string for the uploaded attachment.
+  Future<String> uploadAttachment(
+    String ticketId,
+    XFile image, {
+    void Function(double)? onProgress,
+  }) async {
+    final encodedId = Uri.encodeComponent(ticketId);
+    final uri = Uri.parse('$baseUrl/api/tickets/$encodedId/attachments/upload');
+
+    final request = http.MultipartRequest('POST', uri);
+
+    // Add the file
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        image.path,
+        filename: image.name,
+      ),
+    );
+
+    // Send and stream response
+    final streamed = await _client.send(request).timeout(
+      const Duration(minutes: 5),
+    );
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwApiException(response.statusCode, response.body);
+    }
+
+    // Parse response: {"docRef": "attachment:..."}
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final docRef = json['docRef'] as String?;
+    if (docRef == null || docRef.isEmpty) {
+      throw AgentApiException(500, 'No docRef in upload response: ${response.body}');
+    }
+    return docRef;
   }
 
   // --- Documents ---

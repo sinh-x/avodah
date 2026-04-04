@@ -13,6 +13,7 @@ dependencies:
   http: ^1.2.0
   flutter_markdown: ^0.7.0
   flutter_pdfview: ^1.4.4
+  image_picker: ^1.0.7
 
   # Local Database (Drift - SQLite)
   drift: ^2.22.1
