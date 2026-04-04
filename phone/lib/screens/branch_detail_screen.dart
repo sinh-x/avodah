@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_git_info.dart';
+import '../utils/date_helpers.dart';
 
 /// Read-only screen showing details of a single feature branch.
 ///
@@ -98,7 +99,7 @@ class BranchDetailScreen extends StatelessWidget {
                           size: 16, color: theme.colorScheme.outline),
                       const SizedBox(width: 8),
                       Text(
-                        _formatDate(commit.date),
+                        formatDateLong(commit.date),
                         style: theme.textTheme.bodyMedium,
                       ),
                     ],
@@ -134,20 +135,5 @@ class BranchDetailScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      final months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ];
-      final h = dt.hour.toString().padLeft(2, '0');
-      final m = dt.minute.toString().padLeft(2, '0');
-      return '${months[dt.month - 1]} ${dt.day}, ${dt.year} $h:$m';
-    } catch (_) {
-      return iso;
-    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/deployment.dart';
 import '../models/repo_git_info.dart';
 import '../services/agent_api_client.dart';
+import '../utils/date_helpers.dart';
 import '../utils/deploy_helpers.dart';
 import 'activity_timeline_screen.dart';
 import 'branch_detail_screen.dart';
@@ -176,21 +177,18 @@ class _RepoDetailScreenState extends State<RepoDetailScreen> {
             _GitInfoSection(gitInfo: gitInfo),
 
             // Feature Branches Section
-            if (gitInfo.featureBranches.isNotEmpty) ...[
-              _FeatureBranchesSection(
-                branches: gitInfo.featureBranches,
-                onBranchTap: (branch) => _navigateToBranch(context, branch),
-              ),
-            ],
+            _FeatureBranchesSection(
+              branches: gitInfo.featureBranches,
+              onBranchTap: (branch) => _navigateToBranch(context, branch),
+            ),
 
             // Deployments Section
-            if (runningDeployments.isNotEmpty || recentDeployments.isNotEmpty)
-              _DeploymentsSection(
-                runningDeployments: runningDeployments,
-                recentDeployments: recentDeployments,
-                onDeploymentTap: (deployment) =>
-                    _navigateToTimeline(context, deployment),
-              ),
+            _DeploymentsSection(
+              runningDeployments: runningDeployments,
+              recentDeployments: recentDeployments,
+              onDeploymentTap: (deployment) =>
+                  _navigateToTimeline(context, deployment),
+            ),
           ],
         ),
       ),
@@ -534,53 +532,61 @@ class _FeatureBranchesSection extends StatelessWidget {
             ],
           ),
         ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: branches.length,
-          itemBuilder: (context, index) {
-            final branch = branches[index];
-            final commit = branch.latestCommit;
-            return ListTile(
-              onTap: () => onBranchTap(branch),
-              leading: CircleAvatar(
-                backgroundColor:
-                    theme.colorScheme.secondaryContainer,
-                child: Icon(Icons.account_tree,
-                    size: 18, color: theme.colorScheme.onSecondaryContainer),
-              ),
-              title: Text(
-                branch.name,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              subtitle: Text(
-                '${commit.hashShort ?? commit.hash} · ${_formatDate(commit.date)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
+        if (branches.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_tree,
+                  size: 20,
                   color: theme.colorScheme.outline,
                 ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-            );
-          },
-        ),
+                const SizedBox(width: 8),
+                Text(
+                  'No active feature branches',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: branches.length,
+            itemBuilder: (context, index) {
+              final branch = branches[index];
+              final commit = branch.latestCommit;
+              return ListTile(
+                onTap: () => onBranchTap(branch),
+                leading: CircleAvatar(
+                  backgroundColor:
+                      theme.colorScheme.secondaryContainer,
+                  child: Icon(Icons.account_tree,
+                      size: 18, color: theme.colorScheme.onSecondaryContainer),
+                ),
+                title: Text(
+                  branch.name,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                subtitle: Text(
+                  '${commit.hashShort ?? commit.hash} · ${formatDateShort(commit.date)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+              );
+            },
+          ),
       ],
     );
-  }
-
-  String _formatDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      final months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ];
-      return '${months[dt.month - 1]} ${dt.day}';
-    } catch (_) {
-      return '';
-    }
   }
 }
 
@@ -599,6 +605,7 @@ class _DeploymentsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isEmpty = runningDeployments.isEmpty && recentDeployments.isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,52 +619,73 @@ class _DeploymentsSection extends StatelessWidget {
             ),
           ),
         ),
-
-        // Running deployments
-        if (runningDeployments.isNotEmpty) ...[
+        if (isEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                  ),
+                Icon(
+                  Icons.rocket_launch,
+                  size: 20,
+                  color: theme.colorScheme.outline,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Running',
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  'No deployments found',
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
                 ),
               ],
             ),
-          ),
-          ...runningDeployments.map((d) => _DeploymentTile(
-                deployment: d,
-                onTap: () => onDeploymentTap(d),
-              )),
-        ],
-
-        // Recent deployments
-        if (recentDeployments.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Text(
-              'Recent',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.outline,
+          )
+        else ...[
+          // Running deployments
+          if (runningDeployments.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Running',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          ...recentDeployments.map((d) => _DeploymentTile(
-                deployment: d,
-                onTap: () => onDeploymentTap(d),
-              )),
+            ...runningDeployments.map((d) => _DeploymentTile(
+                  deployment: d,
+                  onTap: () => onDeploymentTap(d),
+                )),
+          ],
+
+          // Recent deployments
+          if (recentDeployments.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text(
+                'Recent',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ),
+            ...recentDeployments.map((d) => _DeploymentTile(
+                  deployment: d,
+                  onTap: () => onDeploymentTap(d),
+                )),
+          ],
         ],
       ],
     );
@@ -691,7 +719,7 @@ class _DeploymentTile extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '${deployment.team} · ${deployment.status}',
+          '${deployment.team} · ${deployment.status} · ${formatRelativeTime(deployment.startedAt)}',
           style: theme.textTheme.bodySmall?.copyWith(color: color),
         ),
         trailing: Row(
