@@ -17,8 +17,9 @@ class UploadedImage {
 /// buttons, and provides upload progress tracking.
 class ImageAttachmentPicker extends StatefulWidget {
   /// Called when images are ready to be uploaded (after ticket is created).
-  /// Returns list of uploaded image doc_refs.
-  final Future<List<String>> Function(List<XFile> images, String ticketId)
+  /// Returns successes and failures separately to support partial upload handling.
+  final Future<({List<String> successes, List<String> failures})> Function(
+          List<XFile> images, String ticketId)
       onUpload;
 
   /// Whether uploads are currently in progress.

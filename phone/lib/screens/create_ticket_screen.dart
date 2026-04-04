@@ -103,12 +103,13 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       if (selectedImages.isNotEmpty) {
         imagePicker?.setUploading(true);
         try {
-          final docRefs = await imagePicker!.widget.onUpload(selectedImages, ticketId);
-          // Update ticket with attachment doc_refs
-          if (docRefs.isNotEmpty) {
-            await widget.boardProvider.client.updateTicket(ticketId, {
-              'doc_refs': [...ticket.docRefs, ...docRefs],
-            });
+          final (successes: _, failures: failures) =
+              await imagePicker!.widget.onUpload(selectedImages, ticketId);
+          if (failures.isNotEmpty && mounted) {
+            final names = failures.map((p) => p.split('/').last).join(', ');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to upload: $names')),
+            );
           }
         } finally {
           imagePicker?.setUploading(false);
@@ -368,16 +369,21 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     ImageAttachmentPicker(
                       key: _imagePickerKey,
                       onUpload: (images, ticketId) async {
-                        final docRefs = <String>[];
+                        final successes = <String>[];
+                        final failures = <String>[];
                         final picker = _imagePickerKey.currentState!;
                         for (var i = 0; i < images.length; i++) {
                           picker.setUploadProgress((i + 0.5) / images.length);
-                          final docRef = await widget.boardProvider.client
-                              .uploadAttachment(ticketId, images[i]);
-                          docRefs.add(docRef);
+                          try {
+                            final docRef = await widget.boardProvider.client
+                                .uploadAttachment(ticketId, images[i]);
+                            successes.add(docRef);
+                          } catch (_) {
+                            failures.add(images[i].path);
+                          }
                         }
                         picker.setUploadProgress(1.0);
-                        return docRefs;
+                        return (successes: successes, failures: failures);
                       },
                       onUploadingChanged: (uploading) {
                         setState(() {});
