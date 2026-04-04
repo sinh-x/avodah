@@ -14,6 +14,7 @@ import '../settings/settings_screen.dart';
 import 'create_bulletin_screen.dart';
 import 'create_ticket_screen.dart';
 import 'ticket_detail_screen.dart';
+import 'repo_detail_screen.dart';
 
 /// Main Kanban board screen.
 ///
@@ -220,6 +221,31 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                     if (p != null) provider.setProject(p);
                   },
                 ),
+              if (projectItems.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(
+                    Icons.info_outline,
+                    color: provider.selectedProject != null
+                        ? null
+                        : Colors.grey,
+                  ),
+                  tooltip: 'Project info',
+                  onPressed: provider.selectedProject != null
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RepoDetailScreen(
+                                repoKey: provider.selectedProject!,
+                                apiClient: provider.client,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                ),
+              ],
               if (teams.isNotEmpty) ...[
                 const SizedBox(width: 12),
                 FilterChip(
