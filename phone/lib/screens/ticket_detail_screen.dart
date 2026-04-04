@@ -527,6 +527,134 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  bool _isTerminalStatus(String status) {
+    return status == 'done' || status == 'rejected' || status == 'cancelled';
+  }
+
+  Future<void> _onMoveToProject() async {
+    if (_ticket == null) return;
+    final ticket = _ticket!;
+    final oldId = ticket.id;
+
+    // Show project picker bottom sheet.
+    final projects = widget.boardProvider.projects;
+    final otherProjects = projects.where((p) => p.key != ticket.project).toList();
+
+    if (otherProjects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other projects available')),
+      );
+      return;
+    }
+
+    final selectedProject = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(sheetCtx).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Select Target Project',
+                style: Theme.of(sheetCtx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+            const Divider(height: 1),
+            ...otherProjects.map(
+              (p) => ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(p.key),
+                onTap: () => Navigator.pop(sheetCtx, p.key),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (selectedProject == null || !mounted) return;
+
+    // Show confirmation dialog.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Move Ticket'),
+        content: Text(
+          'Move $oldId to project $selectedProject?\n'
+          'This will re-key the ticket.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Move'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // Perform the move.
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+
+    setState(() => _loading = true);
+
+    try {
+      final newTicket = await widget.boardProvider.client.moveTicket(
+        oldId,
+        selectedProject,
+      );
+      if (!mounted) return;
+      setState(() {
+        _ticket = newTicket;
+        _loading = false;
+      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Moved: $oldId → ${newTicket.id}'),
+        ),
+      );
+    } on AgentApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Move failed: ${e.message}'),
+          backgroundColor: errorColor,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Move failed: $e'),
+          backgroundColor: errorColor,
+        ),
+      );
+    }
+  }
+
   Future<void> _addComment() async {
     final content = _commentController.text.trim();
     if (content.isEmpty || _ticket == null) return;
@@ -783,6 +911,34 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                     tooltip: 'Deploy agent',
                     onPressed: _onDeploy,
                   ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'More actions',
+              onSelected: (value) {
+                if (value == 'move') {
+                  _onMoveToProject();
+                }
+              },
+              itemBuilder: (context) {
+                final ticket = _ticket!;
+                final items = <PopupMenuEntry<String>>[];
+                if (!_isTerminalStatus(ticket.status)) {
+                  items.add(
+                    const PopupMenuItem<String>(
+                      value: 'move',
+                      child: ListTile(
+                        leading: Icon(Icons.drive_file_move_outlined),
+                        title: Text('Move to Project'),
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  );
+                }
+                return items;
+              },
+            ),
           ],
         ],
       ),
