@@ -687,7 +687,7 @@ class AgentApiClient {
       _throwApiException(response.statusCode, response.body);
     }
 
-    // Parse response: {"docRef": "attachment:..."}
+    // Parse response: {"docRef": "attachments/<ticket-id>/<filename>"}
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     final docRef = json['docRef'] as String?;
     if (docRef == null || docRef.isEmpty) {
