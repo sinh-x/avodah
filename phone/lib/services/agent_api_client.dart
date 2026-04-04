@@ -9,6 +9,7 @@ import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
+import '../models/repo_git_info.dart';
 import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
 import '../models/review_item.dart';
@@ -482,6 +483,38 @@ class AgentApiClient {
     final timers = response['timers'] as List;
     return timers
         .map((e) => TimerInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  // --- Repo Detail ---
+
+  /// Fetch git info for a repository.
+  ///
+  /// GET /api/repos/:key/git-info → RepoGitInfo
+  Future<RepoGitInfo> getRepoGitInfo(String key) async {
+    final encoded = Uri.encodeComponent(key);
+    final response = await _get('/api/repos/$encoded/git-info');
+    return RepoGitInfo.fromJson(response);
+  }
+
+  /// Fetch deployments for a repository.
+  ///
+  /// GET /api/repos/:key/deployments?status=X&limit=Y → List<Deployment>
+  Future<List<Deployment>> getRepoDeployments(
+    String key, {
+    String? status,
+    int? limit,
+  }) async {
+    final params = <String, String>{};
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    if (limit != null) params['limit'] = '$limit';
+    final encoded = Uri.encodeComponent(key);
+    final query =
+        params.isNotEmpty ? '?${Uri(queryParameters: params).query}' : '';
+    final response = await _get('/api/repos/$encoded/deployments$query');
+    final deployments = response['deployments'] as List;
+    return deployments
+        .map((e) => Deployment.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
