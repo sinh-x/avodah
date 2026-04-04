@@ -6,6 +6,7 @@ import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
 import '../widgets/guided_summary_fields.dart';
 import '../widgets/image_attachment_picker.dart';
+import '../widgets/no_select_text_field.dart';
 
 /// Form for creating a new ticket.
 ///
@@ -41,10 +42,13 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   static const _priorities = ['critical', 'high', 'medium', 'low'];
   static const _estimates = ['XS', 'S', 'M', 'L', 'XL'];
 
+  late final Future<List<AgentTeam>> _teamsFuture;
+
   @override
   void initState() {
     super.initState();
     _selectedProject = widget.boardProvider.selectedProject;
+    _teamsFuture = widget.boardProvider.client.listAgentTeams();
   }
 
   @override
@@ -194,7 +198,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const SizedBox(height: 16),
 
             // Title
-            _NoSelectTextField(
+            NoSelectTextField(
               controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Title *',
@@ -241,7 +245,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
 
             // Team — dropdown populated from API
             FutureBuilder<List<AgentTeam>>(
-              future: widget.boardProvider.client.listAgentTeams(),
+              future: _teamsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return InputDecorator(
@@ -396,7 +400,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             const SizedBox(height: 12),
 
             // Freeform additional notes
-            _NoSelectTextField(
+            NoSelectTextField(
               controller: _freeformSummaryController,
               decoration: const InputDecoration(
                 labelText: 'Additional notes (optional)',
@@ -547,129 +551,10 @@ class _TypePickerSheet extends StatelessWidget {
               );
             }),
             const SizedBox(height: 8),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Show all types'),
-              subtitle: const Text('Includes agent types (review-request, work-report, fyi)'),
-              dense: true,
-              onTap: () {
-                Navigator.of(context).pop();
-                _showAllTypesPicker(context);
-              },
-            ),
           ],
         ),
       ),
     );
   }
-
-  void _showAllTypesPicker(BuildContext context) {
-    // Fallback: show original flat dropdown of all 8 types
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'All Types',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...['feature', 'bug', 'task', 'review-request', 'work-report', 'fyi', 'idea', 'question']
-                  .map((t) => ListTile(
-                        title: Text(t),
-                        onTap: () {
-                          Navigator.of(ctx).pop();
-                          // Map back to PhoneTicketType if possible
-                          final mapped = PhoneTicketType.values.where((p) => p.name == t).firstOrNull;
-                          if (mapped != null) {
-                            onChanged(mapped);
-                          }
-                        },
-                      )),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-/// A TextField that places cursor at tap position on single tap,
-/// without selecting text. Preserves double-tap word selection.
-///
-/// Works around flutter/flutter#98720, #105185 where single taps in
-/// TextFields can unexpectedly select words instead of placing cursor.
-class _NoSelectTextField extends StatefulWidget {
-  final TextEditingController controller;
-  final InputDecoration? decoration;
-  final int? maxLines;
-  final ValueChanged<String>? onChanged;
-  final bool autofocus;
-  final TextCapitalization textCapitalization;
-  final FormFieldValidator<String>? validator;
-
-  const _NoSelectTextField({
-    required this.controller,
-    this.decoration,
-    this.maxLines,
-    this.onChanged,
-    this.autofocus = false,
-    this.textCapitalization = TextCapitalization.sentences,
-    this.validator,
-  });
-
-  @override
-  State<_NoSelectTextField> createState() => _NoSelectTextFieldState();
-}
-
-class _NoSelectTextFieldState extends State<_NoSelectTextField> {
-  Offset? _tapPosition;
-
-  void _handleTapDown(TapDownDetails details) {
-    _tapPosition = details.globalPosition;
-  }
-
-  void _handleTap() {
-    if (_tapPosition == null) return;
-    final renderBox = context.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(_tapPosition!);
-
-    final textPainter = TextPainter(
-      text: TextSpan(text: widget.controller.text),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(maxWidth: renderBox.size.width);
-
-    final textPosition = textPainter.getPositionForOffset(localPosition);
-    widget.controller.selection = TextSelection.collapsed(
-      offset: textPosition.offset,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTap: _handleTap,
-      behavior: HitTestBehavior.opaque,
-      child: TextFormField(
-        controller: widget.controller,
-        autofocus: widget.autofocus,
-        maxLines: widget.maxLines,
-        decoration: widget.decoration,
-        onChanged: widget.onChanged,
-        textCapitalization: widget.textCapitalization,
-        validator: widget.validator,
-      ),
-    );
-  }
-}

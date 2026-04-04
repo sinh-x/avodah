@@ -199,7 +199,7 @@ class AgentApiClient {
 
   /// Fetch detailed deployment info including all metadata + activity events.
   ///
-  /// Calls GET /api/deployments/<id> which returns a merged object with
+  /// Calls GET /api/deployments/\<id> which returns a merged object with
   /// full deployment metadata and the activity_events array.
   Future<Deployment> getDeploymentDetail(String id) async {
     final response = await _get('/api/deployments/$id');
@@ -500,7 +500,7 @@ class AgentApiClient {
 
   /// Fetch deployments for a repository.
   ///
-  /// GET /api/repos/:key/deployments?status=X&limit=Y → List<Deployment>
+  /// GET /api/repos/\:key/deployments?status=X&limit=Y → List\<Deployment>
   Future<List<Deployment>> getRepoDeployments(
     String key, {
     String? status,

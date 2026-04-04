@@ -13,6 +13,7 @@ import '../widgets/estimate_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
 import '../widgets/team_picker_sheet.dart';
+import '../widgets/no_select_text_field.dart';
 import '../widgets/text_input_sheet.dart';
 import 'activity_timeline_screen.dart';
 
@@ -678,7 +679,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             Text('Edit Comment',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            _NoSelectTextField(
+            NoSelectTextFieldRaw(
               controller: editController,
               autofocus: true,
               maxLines: null,
@@ -907,8 +908,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 ),
             ],
           ),
-          if (ticket.team != null || ticket.assignee != null) ...[
-            const SizedBox(height: 10),
+          const SizedBox(height: 10),
             // Team row — tappable (min 48dp tall for tap target)
             // Always show (even when null) so user can set a team
             ConstrainedBox(
@@ -980,7 +980,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   ),
                 ),
               ),
-          ],
           if (ticket.summary != null && ticket.summary!.isNotEmpty) ...[
             const SizedBox(height: 16),
             _SectionLabel('Summary'),
@@ -1110,7 +1109,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         child: Row(
           children: [
             Expanded(
-              child: _NoSelectTextField(
+              child: NoSelectTextFieldRaw(
                 controller: _commentController,
                 decoration: const InputDecoration(
                   hintText: 'Add a comment…',
@@ -1521,7 +1520,7 @@ class _TagSheetState extends State<_TagSheet> {
                 SizedBox(
                   width: 140,
                   height: 36,
-                  child: _NoSelectTextField(
+                  child: NoSelectTextFieldRaw(
                     controller: _inputController,
                     decoration: const InputDecoration(
                       hintText: 'Add tag…',
@@ -1577,74 +1576,6 @@ class _FieldSavingIndicator extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ],
-    );
-  }
-}
-
-/// A TextField that places cursor at tap position on single tap,
-/// without selecting text. Preserves double-tap word selection.
-///
-/// Works around flutter/flutter#98720, #105185 where single taps in
-/// TextFields can unexpectedly select words instead of placing cursor.
-class _NoSelectTextField extends StatefulWidget {
-  final TextEditingController controller;
-  final InputDecoration? decoration;
-  final int? maxLines;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onSubmitted;
-  final bool autofocus;
-
-  const _NoSelectTextField({
-    required this.controller,
-    this.decoration,
-    this.maxLines,
-    this.textInputAction,
-    this.onSubmitted,
-    this.autofocus = false,
-  });
-
-  @override
-  State<_NoSelectTextField> createState() => _NoSelectTextFieldState();
-}
-
-class _NoSelectTextFieldState extends State<_NoSelectTextField> {
-  Offset? _tapPosition;
-
-  void _handleTapDown(TapDownDetails details) {
-    _tapPosition = details.globalPosition;
-  }
-
-  void _handleTap() {
-    if (_tapPosition == null) return;
-    final renderBox = context.findRenderObject() as RenderBox;
-    final localPosition = renderBox.globalToLocal(_tapPosition!);
-
-    final textPainter = TextPainter(
-      text: TextSpan(text: widget.controller.text),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(maxWidth: renderBox.size.width);
-
-    final textPosition = textPainter.getPositionForOffset(localPosition);
-    widget.controller.selection = TextSelection.collapsed(
-      offset: textPosition.offset,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTap: _handleTap,
-      behavior: HitTestBehavior.opaque,
-      child: TextField(
-        controller: widget.controller,
-        autofocus: widget.autofocus,
-        maxLines: widget.maxLines,
-        decoration: widget.decoration,
-        textInputAction: widget.textInputAction,
-        onSubmitted: widget.onSubmitted,
-      ),
     );
   }
 }
