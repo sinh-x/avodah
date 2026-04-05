@@ -35,8 +35,18 @@ class RepoGitInfo {
           const [],
       workingDirectory: WorkingDirectoryStatus.fromJson(
           json['working_directory'] as Map<String, dynamic>),
-      errors: (json['errors'] as List?)?.cast<String>() ?? const [],
+      errors: _parseErrors(json['errors']),
     );
+  }
+
+  static List<String> _parseErrors(dynamic raw) {
+    if (raw is Map) {
+      return raw.values.whereType<String>().toList();
+    }
+    if (raw is List) {
+      return raw.whereType<String>().toList();
+    }
+    return const [];
   }
 }
 
