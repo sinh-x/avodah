@@ -22,6 +22,15 @@ class RepoGitInfo {
     this.errors = const [],
   });
 
+  static List<String> _parseErrors(dynamic errors) {
+    if (errors is List) {
+      return errors.cast<String>();
+    } else if (errors is Map) {
+      return errors.values.map((v) => v.toString()).toList();
+    }
+    return const [];
+  }
+
   factory RepoGitInfo.fromJson(Map<String, dynamic> json) {
     return RepoGitInfo(
       repo: RepoMeta.fromJson(json['repo'] as Map<String, dynamic>),
@@ -35,7 +44,7 @@ class RepoGitInfo {
           const [],
       workingDirectory: WorkingDirectoryStatus.fromJson(
           json['working_directory'] as Map<String, dynamic>),
-      errors: (json['errors'] as List?)?.cast<String>() ?? const [],
+      errors: _parseErrors(json['errors']),
     );
   }
 }
