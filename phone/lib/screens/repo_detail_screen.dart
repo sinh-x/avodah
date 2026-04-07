@@ -268,20 +268,32 @@ class _GitInfoSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _BranchStatusRow(
-                    label: 'main',
+                    label: gitInfo.mainBranch.name.isNotEmpty
+                        ? gitInfo.mainBranch.name
+                        : 'main',
                     exists: gitInfo.mainBranch.exists,
                     commit: gitInfo.mainBranch.latestCommit,
                     color: theme.colorScheme.primary,
                   ),
                   const Divider(height: 16),
                   _BranchStatusRow(
-                    label: 'develop',
+                    label: gitInfo.developBranch.name.isNotEmpty
+                        ? gitInfo.developBranch.name
+                        : 'develop',
                     exists: gitInfo.developBranch.exists,
                     commit: gitInfo.developBranch.latestCommit,
                     color: theme.colorScheme.secondary,
                   ),
                   const Divider(height: 16),
-                  _AheadBehindIndicator(mainVsDevelop: gitInfo.mainVsDevelop),
+                  _AheadBehindIndicator(
+                    mainVsDevelop: gitInfo.mainVsDevelop,
+                    mainBranchName: gitInfo.mainBranch.name.isNotEmpty
+                        ? gitInfo.mainBranch.name
+                        : 'main',
+                    developBranchName: gitInfo.developBranch.name.isNotEmpty
+                        ? gitInfo.developBranch.name
+                        : 'develop',
+                  ),
                 ],
               ),
             ),
@@ -344,7 +356,7 @@ class _BranchStatusRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 60,
+          width: 120,
           child: Text(
             label,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -389,8 +401,14 @@ class _BranchStatusRow extends StatelessWidget {
 
 class _AheadBehindIndicator extends StatelessWidget {
   final MainVsDevelop mainVsDevelop;
+  final String mainBranchName;
+  final String developBranchName;
 
-  const _AheadBehindIndicator({required this.mainVsDevelop});
+  const _AheadBehindIndicator({
+    required this.mainVsDevelop,
+    required this.mainBranchName,
+    required this.developBranchName,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -416,17 +434,17 @@ class _AheadBehindIndicator extends StatelessWidget {
     return Row(
       children: [
         _AheadBehindBadge(
-          label: 'main',
+          label: mainBranchName,
           count: mainVsDevelop.mainAhead,
           color: theme.colorScheme.primary,
-          tooltip: 'commits ahead of develop',
+          tooltip: 'commits ahead of $developBranchName',
         ),
         const SizedBox(width: 8),
         _AheadBehindBadge(
-          label: 'develop',
+          label: developBranchName,
           count: mainVsDevelop.developAhead,
           color: theme.colorScheme.secondary,
-          tooltip: 'commits ahead of main',
+          tooltip: 'commits ahead of $mainBranchName',
         ),
       ],
     );
