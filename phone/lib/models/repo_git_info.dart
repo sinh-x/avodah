@@ -9,7 +9,7 @@ class RepoGitInfo {
   final MainVsDevelop mainVsDevelop;
   final List<FeatureBranch> featureBranches;
   final WorkingDirectoryStatus workingDirectory;
-  final List<String> errors;
+  final Map<String, String> errors;
 
   const RepoGitInfo({
     required this.repo,
@@ -19,16 +19,17 @@ class RepoGitInfo {
     required this.mainVsDevelop,
     required this.featureBranches,
     required this.workingDirectory,
-    this.errors = const [],
+    this.errors = const {},
   });
 
-  static List<String> _parseErrors(dynamic errors) {
-    if (errors is List) {
-      return errors.cast<String>();
-    } else if (errors is Map) {
-      return errors.values.map((v) => v.toString()).toList();
+  static Map<String, String> _parseErrors(dynamic raw) {
+    if (raw is Map) {
+      return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
     }
-    return const [];
+    if (raw is List) {
+      return { for (var i = 0; i < raw.length; i++) 'error_$i': raw[i].toString() };
+    }
+    return const {};
   }
 
   factory RepoGitInfo.fromJson(Map<String, dynamic> json) {
@@ -46,16 +47,6 @@ class RepoGitInfo {
           json['working_directory'] as Map<String, dynamic>),
       errors: _parseErrors(json['errors']),
     );
-  }
-
-  static List<String> _parseErrors(dynamic raw) {
-    if (raw is Map) {
-      return raw.values.whereType<String>().toList();
-    }
-    if (raw is List) {
-      return raw.whereType<String>().toList();
-    }
-    return const [];
   }
 }
 
