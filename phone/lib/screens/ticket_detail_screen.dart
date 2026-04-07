@@ -881,6 +881,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             comments: _ticket!.comments
                 .where((c) => c.id != comment.id)
                 .toList(),
+            subTickets: _ticket!.subTickets,
             createdAt: _ticket!.createdAt,
             updatedAt: _ticket!.updatedAt,
             resolvedAt: _ticket!.resolvedAt,
