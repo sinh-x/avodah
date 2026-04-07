@@ -10,6 +10,7 @@ import '../models/create_idea_payload.dart';
 import '../models/deploy_result.dart';
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
+import '../models/focus_item.dart';
 import '../models/repo_git_info.dart';
 import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
@@ -555,6 +556,15 @@ class AgentApiClient {
     final query = '?${Uri(queryParameters: params).query}';
     final response = await _get('/api/board$query');
     return BoardView.fromJson(response['board'] as Map<String, dynamic>);
+  }
+
+  /// Get the GTD focus view — cross-project actionable items sorted by priority and staleness.
+  ///
+  /// GET /api/focus?enrich=true → FocusResult
+  Future<FocusResult> getFocus({bool enrich = false}) async {
+    final query = enrich ? '?enrich=true' : '';
+    final response = await _get('/api/focus$query');
+    return FocusResult.fromJson(response);
   }
 
   /// Get a single ticket by ID.
