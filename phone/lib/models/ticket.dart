@@ -61,19 +61,41 @@ class TicketComment {
 class SubTicket {
   final String id;
   final String title;
+  final String summary;
   final String status;
+  final String assignee;
+  final String priority;
+  final String estimate;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const SubTicket({
     required this.id,
     required this.title,
+    this.summary = '',
     required this.status,
+    this.assignee = '',
+    this.priority = 'medium',
+    this.estimate = '',
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory SubTicket.fromJson(Map<String, dynamic> json) {
     return SubTicket(
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
+      summary: json['summary'] as String? ?? '',
       status: json['status'] as String? ?? '',
+      assignee: json['assignee'] as String? ?? '',
+      priority: json['priority'] as String? ?? 'medium',
+      estimate: json['estimate'] as String? ?? '',
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'] as String)
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'] as String)
+          : null,
     );
   }
 }

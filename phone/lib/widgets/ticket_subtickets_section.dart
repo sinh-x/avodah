@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../models/ticket.dart';
-import '../screens/ticket_detail_screen.dart';
-import '../services/board_provider.dart';
 
 /// A collapsible section listing sub-tickets linked to a ticket.
 ///
 /// Shows each sub-ticket with its ID, title, and status badge.
-/// Tapping a row navigates to [TicketDetailScreen] for that sub-ticket.
+/// Tapping a row opens a bottom sheet with sub-ticket details.
 class TicketSubTicketsSection extends StatelessWidget {
   /// The list of sub-tickets to display.
   final List<SubTicket> subTickets;
 
-  /// The board provider used to navigate to [TicketDetailScreen].
-  final BoardProvider boardProvider;
-
   const TicketSubTicketsSection({
     super.key,
     required this.subTickets,
-    required this.boardProvider,
   });
 
   @override
@@ -27,7 +21,6 @@ class TicketSubTicketsSection extends StatelessWidget {
       label: 'SubTickets section',
       child: _SectionContent(
         subTickets: subTickets,
-        boardProvider: boardProvider,
       ),
     );
   }
@@ -35,11 +28,9 @@ class TicketSubTicketsSection extends StatelessWidget {
 
 class _SectionContent extends StatefulWidget {
   final List<SubTicket> subTickets;
-  final BoardProvider boardProvider;
 
   const _SectionContent({
     required this.subTickets,
-    required this.boardProvider,
   });
 
   @override
@@ -130,7 +121,6 @@ class _SectionContentState extends State<_SectionContent> {
       children: widget.subTickets
           .map((st) => _SubTicketRow(
                 subTicket: st,
-                boardProvider: widget.boardProvider,
               ))
           .toList(),
     );
@@ -140,11 +130,9 @@ class _SectionContentState extends State<_SectionContent> {
 /// A single sub-ticket row with ID, title, status badge, and tap-to-navigate.
 class _SubTicketRow extends StatelessWidget {
   final SubTicket subTicket;
-  final BoardProvider boardProvider;
 
   const _SubTicketRow({
     required this.subTicket,
-    required this.boardProvider,
   });
 
   @override
@@ -158,7 +146,7 @@ class _SubTicketRow extends StatelessWidget {
           'status ${subTicket.status}',
       button: true,
       child: InkWell(
-        onTap: () => _navigateToSubTicket(context),
+        onTap: () => _showSubTicketDetails(context),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -215,13 +203,121 @@ class _SubTicketRow extends StatelessWidget {
     );
   }
 
-  void _navigateToSubTicket(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TicketDetailScreen(
-          ticketId: subTicket.id,
-          boardProvider: boardProvider,
+  void _showSubTicketDetails(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = _statusColor(context, subTicket.status);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // ID + status row
+            Row(
+              children: [
+                Text(
+                  subTicket.id,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontFamily: 'monospace',
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    subTicket.status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Title
+            Text(
+              subTicket.title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            // Summary
+            if (subTicket.summary.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                subTicket.summary,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            // Metadata chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (subTicket.assignee.isNotEmpty)
+                  _metaChip(theme, Icons.person_outline, subTicket.assignee),
+                if (subTicket.priority.isNotEmpty)
+                  _metaChip(theme, Icons.flag_outlined, subTicket.priority),
+                if (subTicket.estimate.isNotEmpty)
+                  _metaChip(theme, Icons.timer_outlined, subTicket.estimate),
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _metaChip(ThemeData theme, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: theme.colorScheme.outline),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1287,7 +1287,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           const SizedBox(height: 4),
           TicketSubTicketsSection(
             subTickets: ticket.subTickets,
-            boardProvider: widget.boardProvider,
           ),
           const SizedBox(height: 4),
           TicketRepoInfoSection(
