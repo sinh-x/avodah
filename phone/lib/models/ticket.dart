@@ -58,6 +58,26 @@ class TicketComment {
   }
 }
 
+class SubTicket {
+  final String id;
+  final String title;
+  final String status;
+
+  const SubTicket({
+    required this.id,
+    required this.title,
+    required this.status,
+  });
+
+  factory SubTicket.fromJson(Map<String, dynamic> json) {
+    return SubTicket(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+    );
+  }
+}
+
 class Ticket {
   final String id; // e.g. "PA-001"
   final String project;
@@ -76,6 +96,7 @@ class Ticket {
   final List<String> blockedBy;
   final List<DocRef> docRefs;
   final List<TicketComment> comments;
+  final List<SubTicket> subTickets;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? resolvedAt;
@@ -98,6 +119,7 @@ class Ticket {
     required this.blockedBy,
     required this.docRefs,
     required this.comments,
+    required this.subTickets,
     required this.createdAt,
     required this.updatedAt,
     this.resolvedAt,
@@ -106,6 +128,7 @@ class Ticket {
   factory Ticket.fromJson(Map<String, dynamic> json) {
     final tagsList = json['tags'] as List? ?? [];
     final commentsList = json['comments'] as List? ?? [];
+    final subTicketsList = json['subTickets'] as List? ?? [];
 
     // blockedBy: try new field first, fall back to deprecated dependencies
     final blockedByRaw =
@@ -149,6 +172,9 @@ class Ticket {
       docRefs: docRefs,
       comments: commentsList
           .map((e) => TicketComment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      subTickets: subTicketsList
+          .map((e) => SubTicket.fromJson(e as Map<String, dynamic>))
           .toList(),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
