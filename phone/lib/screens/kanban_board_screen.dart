@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/deployment.dart';
 import '../models/ticket.dart';
 import '../services/board_provider.dart';
+import '../services/deployment_provider.dart';
 import '../services/focus_provider.dart';
 import '../services/local_dashboard_provider.dart';
 import '../widgets/board_column.dart';
 import '../widgets/bulletin_banner.dart';
 import '../widgets/connection_indicator.dart';
+import '../models/focus_item.dart';
 import '../widgets/focus_item_card.dart';
 import '../widgets/ticket_card.dart';
 import '../widgets/wip_summary.dart';
@@ -34,12 +37,14 @@ class KanbanBoardScreen extends StatefulWidget {
   final BoardProvider boardProvider;
   final LocalDashboardProvider dashboardProvider;
   final FocusProvider? focusProvider;
+  final DeploymentProvider? deploymentProvider;
 
   const KanbanBoardScreen({
     super.key,
     required this.boardProvider,
     required this.dashboardProvider,
     this.focusProvider,
+    this.deploymentProvider,
   });
 
   @override
@@ -108,9 +113,14 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final listenable = widget.focusProvider != null
-        ? Listenable.merge([widget.boardProvider, widget.focusProvider!])
-        : widget.boardProvider as Listenable;
+    final listeners = <Listenable>[widget.boardProvider];
+    if (widget.focusProvider != null) listeners.add(widget.focusProvider!);
+    if (widget.deploymentProvider != null) {
+      listeners.add(widget.deploymentProvider!);
+    }
+    final listenable = listeners.length == 1
+        ? listeners.first
+        : Listenable.merge(listeners);
     return ListenableBuilder(
       listenable: listenable,
       builder: (context, _) => _buildScaffold(context),
@@ -422,8 +432,12 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
   }
 
   Widget _buildFocusView(BuildContext context, FocusProvider focusProvider) {
+    final deploymentProvider = widget.deploymentProvider;
+
     return ListenableBuilder(
-      listenable: focusProvider,
+      listenable: deploymentProvider != null
+          ? Listenable.merge([focusProvider, deploymentProvider])
+          : focusProvider,
       builder: (context, _) {
         if (focusProvider.loading && focusProvider.result == null) {
           return const Center(child: CircularProgressIndicator());
@@ -464,6 +478,40 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         final items = focusProvider.filteredFocusItems;
         final wip = focusProvider.wipSummary;
 
+        // Build running deployments map: ticketId -> Deployment
+        final runningDeployments = <String, Deployment>{};
+        if (deploymentProvider != null) {
+          for (final d in deploymentProvider.allDeployments) {
+            if (d.isRunning && d.ticketId != null) {
+              runningDeployments[d.ticketId!] = d;
+            }
+          }
+        }
+
+        // Partition items into active (with running deployment) and remaining
+        final activeItems = <FocusItem>[];
+        final activeDeployments = <String, Deployment>{};
+        final remainingItems = <FocusItem>[];
+
+        for (final item in items) {
+          final deployment = runningDeployments[item.id];
+          if (deployment != null) {
+            activeItems.add(item);
+            activeDeployments[item.id] = deployment;
+          } else {
+            remainingItems.add(item);
+          }
+        }
+
+        // Calculate total item count for ListView
+        // Structure: [WIP?][ActiveWork header?][active items][remaining items]
+        int itemCount = remainingItems.length;
+        final hasWip = wip != null;
+        final hasActiveWork = activeItems.isNotEmpty;
+
+        if (hasWip) itemCount += 1;
+        if (hasActiveWork) itemCount += 1 + activeItems.length;
+
         return Column(
           children: [
             _buildFocusFilterRow(context, focusProvider),
@@ -471,19 +519,58 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
               child: RefreshIndicator(
                 onRefresh: focusProvider.refresh,
                 child: ListView.builder(
-                  itemCount: items.length + (wip != null ? 1 : 0),
+                  itemCount: itemCount,
                   itemBuilder: (context, index) {
-                    if (wip != null && index == 0) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: WipSummaryWidget(wip: wip),
+                    // Determine what each index represents
+                    int currentIndex = 0;
+
+                    // WIP summary
+                    if (hasWip) {
+                      if (index == currentIndex) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: WipSummaryWidget(wip: wip!),
+                        );
+                      }
+                      currentIndex += 1;
+                    }
+
+                    // Active Work section
+                    if (hasActiveWork) {
+                      if (index == currentIndex) {
+                        return _ActiveWorkSection(
+                          activeItems: activeItems,
+                          activeDeployments: activeDeployments,
+                          onTicketTap: (id) =>
+                              _openTicketFromFocus(context, id),
+                        );
+                      }
+                      currentIndex += 1;
+
+                      // Active work items
+                      final activeIndex = index - currentIndex;
+                      if (activeIndex >= 0 && activeIndex < activeItems.length) {
+                        final item = activeItems[activeIndex];
+                        return FocusItemCard(
+                          item: item,
+                          deployment: activeDeployments[item.id],
+                          onTap: () => _openTicketFromFocus(context, item.id),
+                        );
+                      }
+                      currentIndex += activeItems.length;
+                    }
+
+                    // Remaining items
+                    final remainingIndex = index - currentIndex;
+                    if (remainingIndex >= 0 && remainingIndex < remainingItems.length) {
+                      final item = remainingItems[remainingIndex];
+                      return FocusItemCard(
+                        item: item,
+                        onTap: () => _openTicketFromFocus(context, item.id),
                       );
                     }
-                    final item = items[index - (wip != null ? 1 : 0)];
-                    return FocusItemCard(
-                      item: item,
-                      onTap: () => _openTicketFromFocus(context, item.id),
-                    );
+
+                    return const SizedBox.shrink();
                   },
                 ),
               ),
@@ -577,6 +664,107 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         );
       }
     }
+  }
+}
+
+/// Collapsible Active Work section showing focus items with running deployments.
+class _ActiveWorkSection extends StatelessWidget {
+  final List<FocusItem> activeItems;
+  final Map<String, Deployment> activeDeployments;
+  final void Function(String ticketId) onTicketTap;
+
+  const _ActiveWorkSection({
+    required this.activeItems,
+    required this.activeDeployments,
+    required this.onTicketTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ExpansionTile(
+        leading: const _AnimatedRunningDot(),
+        title: Text(
+          'Active Work',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '${activeItems.length}',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: Colors.green.shade700,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        initiallyExpanded: true,
+        children: activeItems.map((item) {
+          final deployment = activeDeployments[item.id];
+          return FocusItemCard(
+            item: item,
+            deployment: deployment,
+            onTap: () => onTicketTap(item.id),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+/// Animated green dot for running indicator.
+class _AnimatedRunningDot extends StatefulWidget {
+  const _AnimatedRunningDot();
+
+  @override
+  State<_AnimatedRunningDot> createState() => _AnimatedRunningDotState();
+}
+
+class _AnimatedRunningDotState extends State<_AnimatedRunningDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.green.withValues(alpha: _animation.value),
+          ),
+        );
+      },
+    );
   }
 }
 

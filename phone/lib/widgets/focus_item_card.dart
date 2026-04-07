@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/deployment.dart';
 import '../models/focus_item.dart';
 
 /// Stale thresholds from PA-1092: pending-approval 2d, implementing 5d,
@@ -20,15 +21,19 @@ int _staleThreshold(String status) {
 /// A compact Material 3 card displaying a focus item for the GTD Focus view.
 ///
 /// Shows ticket ID, title, project badge, priority indicator, stale badge,
-/// and blocked badge. Tap callback for navigation.
+/// and blocked badge. Tap callback for navigation. When [deployment] is
+/// provided, shows a deployment badge with team name, elapsed time, and
+/// running indicator.
 class FocusItemCard extends StatelessWidget {
   final FocusItem item;
   final VoidCallback? onTap;
+  final Deployment? deployment;
 
   const FocusItemCard({
     super.key,
     required this.item,
     this.onTap,
+    this.deployment,
   });
 
   @override
@@ -87,6 +92,11 @@ class FocusItemCard extends StatelessWidget {
                   if (item.isBlocked) _BlockedBadge(blockerIds: item.blockerIds),
                 ],
               ),
+              // Deployment badge row (when deployment is active)
+              if (deployment != null) ...[
+                const SizedBox(height: 4),
+                _DeploymentBadge(deployment: deployment!),
+              ],
               // Assignee row
               if (item.assignee != null) ...[
                 const SizedBox(height: 4),
@@ -201,6 +211,95 @@ class _BlockedBadge extends StatelessWidget {
     return _BadgeChip(
       label: label,
       color: Colors.red.shade700,
+    );
+  }
+}
+
+/// Deployment badge — shows team name, elapsed time, and animated running indicator.
+class _DeploymentBadge extends StatelessWidget {
+  final Deployment deployment;
+
+  const _DeploymentBadge({required this.deployment});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AnimatedRunningDot(),
+          const SizedBox(width: 4),
+          Text(
+            deployment.team,
+            style: const TextStyle(
+              color: Colors.green,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            deployment.elapsedDuration,
+            style: TextStyle(
+              color: Colors.green.shade700,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Animated running indicator dot.
+class _AnimatedRunningDot extends StatefulWidget {
+  @override
+  State<_AnimatedRunningDot> createState() => _AnimatedRunningDotState();
+}
+
+class _AnimatedRunningDotState extends State<_AnimatedRunningDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.green.withValues(alpha: _animation.value),
+          ),
+        );
+      },
     );
   }
 }

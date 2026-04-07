@@ -260,6 +260,7 @@ class _HomeShellState extends State<_HomeShell> {
               boardProvider: widget.boardProvider,
               dashboardProvider: widget.dashboardProvider,
               focusProvider: widget.focusProvider,
+              deploymentProvider: widget.deploymentProvider,
             ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
