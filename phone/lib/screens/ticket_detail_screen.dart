@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
+import '../models/repo_git_info.dart';
 import '../models/ticket.dart';
 import '../screens/document_viewer_screen.dart';
 import '../services/agent_api_client.dart';
@@ -15,6 +16,9 @@ import '../widgets/status_picker_sheet.dart';
 import '../widgets/team_picker_sheet.dart';
 import '../widgets/no_select_text_field.dart';
 import '../widgets/text_input_sheet.dart';
+import '../widgets/ticket_deployments_section.dart';
+import '../widgets/ticket_subtickets_section.dart';
+import '../widgets/ticket_repo_info_section.dart';
 import 'activity_timeline_screen.dart';
 
 /// Full ticket detail view with read and edit modes.
@@ -53,6 +57,14 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   DateTime? _deployRoutingFetchedAt;
   bool _fetchingRouting = false;
 
+  // Repo & deployment state (lazy-loaded after ticket)
+  RepoGitInfo? _repoGitInfo;
+  List<Deployment>? _ticketDeployments;
+  bool _repoLoading = false;
+  bool _deploymentsLoading = false;
+  String? _repoError;
+  String? _deploymentsError;
+
   // Comment input
   final _commentController = TextEditingController();
 
@@ -81,12 +93,70 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           _ticket = ticket;
           _loading = false;
         });
+        // Fetch repo info and deployments in parallel — doesn't block initial render
+        _fetchRepoAndDeployments(ticket.project, ticket.id);
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
+        });
+      }
+    }
+  }
+
+  /// Fetches repo git info and deployments in parallel for the given project.
+  /// Deployments are filtered client-side to only those linked to [ticketId].
+  Future<void> _fetchRepoAndDeployments(String project, String ticketId) async {
+    setState(() {
+      _repoLoading = true;
+      _deploymentsLoading = true;
+      _repoError = null;
+      _deploymentsError = null;
+    });
+
+    await Future.wait([
+      _fetchRepoInfo(project),
+      _fetchDeployments(project, ticketId),
+    ]);
+  }
+
+  Future<void> _fetchRepoInfo(String project) async {
+    try {
+      final repoInfo =
+          await widget.boardProvider.client.getRepoGitInfo(project);
+      if (mounted) {
+        setState(() {
+          _repoGitInfo = repoInfo;
+          _repoLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _repoError = e.toString();
+          _repoLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchDeployments(String project, String ticketId) async {
+    try {
+      final all = await widget.boardProvider.client.getRepoDeployments(project);
+      if (mounted) {
+        setState(() {
+          _ticketDeployments =
+              all.where((d) => d.ticketId == ticketId).toList();
+          _deploymentsLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _deploymentsError = e.toString();
+          _deploymentsLoading = false;
         });
       }
     }
@@ -1069,6 +1139,16 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                     ),
                   ),
                 ),
+              // Deployment count chip — shows latest deploy status color (lazy-loaded)
+              if (_ticketDeployments != null || _deploymentsLoading)
+                _DeploymentCountChip(
+                  deployments: _ticketDeployments,
+                  isLoading: _deploymentsLoading,
+                  error: _deploymentsError,
+                ),
+              // SubTicket count chip — only when > 0
+              if (ticket.subTickets.isNotEmpty)
+                _SubTicketCountChip(count: ticket.subTickets.length),
             ],
           ),
           const SizedBox(height: 10),
@@ -1196,6 +1276,27 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             ),
           ],
+          // Collapsible sections: Deployments, SubTickets, Repo Info
+          const SizedBox(height: 8),
+          TicketDeploymentsSection(
+            deployments: _ticketDeployments ?? [],
+            isLoading: _deploymentsLoading,
+            error: _deploymentsError,
+            client: widget.boardProvider.client,
+          ),
+          const SizedBox(height: 4),
+          TicketSubTicketsSection(
+            subTickets: ticket.subTickets,
+            boardProvider: widget.boardProvider,
+          ),
+          const SizedBox(height: 4),
+          TicketRepoInfoSection(
+            repoGitInfo: _repoGitInfo,
+            isLoading: _repoLoading,
+            error: _repoError,
+            ticketId: ticket.id,
+          ),
+          const SizedBox(height: 8),
           // Tags — tappable
           _FieldSavingIndicator(
             isSaving: _savingFields.contains('tags'),
@@ -1412,6 +1513,111 @@ class _InfoChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Inline chip showing deployment count with latest deploy status color.
+class _DeploymentCountChip extends StatelessWidget {
+  final List<Deployment>? deployments;
+  final bool isLoading;
+  final String? error;
+
+  const _DeploymentCountChip({
+    this.deployments,
+    this.isLoading = false,
+    this.error,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (isLoading) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(strokeWidth: 1.5),
+        ),
+      );
+    }
+
+    final deps = deployments ?? [];
+    final count = deps.length;
+    final latestStatus = deps.isNotEmpty ? deps.first.status : null;
+    final color = latestStatus != null ? _deploymentStatusColor(latestStatus) : theme.colorScheme.outline;
+
+    return Semantics(
+      label: '$count deployments. Latest status: $latestStatus.',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Text(
+          '$count deploy${count == 1 ? '' : 's'}',
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline chip showing subticket count.
+class _SubTicketCountChip extends StatelessWidget {
+  final int count;
+
+  const _SubTicketCountChip({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: '$count sub-tickets.',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '$count subticket${count == 1 ? '' : 's'}',
+          style: TextStyle(
+            color: theme.colorScheme.onSecondaryContainer,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Returns a color for a deployment status string.
+Color _deploymentStatusColor(String status) {
+  switch (status) {
+    case 'success':
+      return Colors.green;
+    case 'running':
+      return Colors.orange;
+    case 'failed':
+    case 'crashed':
+      return Colors.red;
+    case 'partial':
+      return Colors.amber;
+    default:
+      return Colors.grey;
   }
 }
 
