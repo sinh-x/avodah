@@ -564,8 +564,13 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                     final remainingIndex = index - currentIndex;
                     if (remainingIndex >= 0 && remainingIndex < remainingItems.length) {
                       final item = remainingItems[remainingIndex];
+                      final isBottom = focusProvider.isBottomItem(item.id);
                       return FocusItemCard(
                         item: item,
+                        isBottomItem: isBottom,
+                        onDismissed: isBottom
+                            ? null
+                            : () => focusProvider.sendToBottom(item.id),
                         onTap: () => _openTicketFromFocus(context, item.id),
                       );
                     }
@@ -638,6 +643,14 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             onSelected: (_) =>
                 focusProvider.setEnrichEnabled(!focusProvider.enrichEnabled),
           ),
+          if (focusProvider.hasBottomItems) ...[
+            const SizedBox(width: 12),
+            ActionChip(
+              avatar: const Icon(Icons.restore, size: 16),
+              label: Text('Restore all (${focusProvider.bottomItemCount})'),
+              onPressed: focusProvider.clearBottomItems,
+            ),
+          ],
         ],
       ),
     );

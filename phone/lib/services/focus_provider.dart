@@ -8,6 +8,7 @@ import 'agent_api_client.dart';
 
 const _prefEnrichEnabled = 'focus_enrich_enabled';
 const _prefViewMode = 'focus_view_mode';
+const _prefBottomItems = 'focus_bottom_items';
 
 enum FocusViewMode { board, focus }
 
@@ -26,6 +27,7 @@ class FocusProvider extends ChangeNotifier {
   String? _selectedAssignee;
   bool _enrichEnabled = false;
   FocusViewMode _viewMode = FocusViewMode.board;
+  final Set<String> _bottomItemIds = {};
   Timer? _pollTimer;
   SharedPreferences? _prefs;
 
@@ -38,6 +40,8 @@ class FocusProvider extends ChangeNotifier {
     _enrichEnabled = _prefs?.getBool(_prefEnrichEnabled) ?? false;
     final viewModeIndex = _prefs?.getInt(_prefViewMode) ?? 0;
     _viewMode = FocusViewMode.values[viewModeIndex];
+    final bottomIds = _prefs?.getStringList(_prefBottomItems) ?? [];
+    _bottomItemIds.addAll(bottomIds);
   }
 
   // --- Getters ---
@@ -49,11 +53,14 @@ class FocusProvider extends ChangeNotifier {
   String? get selectedAssignee => _selectedAssignee;
   bool get enrichEnabled => _enrichEnabled;
   FocusViewMode get viewMode => _viewMode;
+  int get bottomItemCount => _bottomItemIds.length;
+  bool get hasBottomItems => _bottomItemIds.isNotEmpty;
 
   /// All focus items from the last fetch.
   List<FocusItem> get allFocusItems => _result?.focus ?? [];
 
-  /// Filtered focus items based on selected project and assignee.
+  /// Filtered focus items based on selected project and assignee,
+  /// with bottom items sorted to the end.
   List<FocusItem> get filteredFocusItems {
     var items = allFocusItems;
 
@@ -65,8 +72,22 @@ class FocusProvider extends ChangeNotifier {
       items = items.where((i) => i.assignee == _selectedAssignee).toList();
     }
 
-    return items;
+    // Partition into non-bottom and bottom
+    final nonBottom = <FocusItem>[];
+    final bottom = <FocusItem>[];
+    for (final item in items) {
+      if (_bottomItemIds.contains(item.id)) {
+        bottom.add(item);
+      } else {
+        nonBottom.add(item);
+      }
+    }
+
+    return [...nonBottom, ...bottom];
   }
+
+  /// Returns true if the given item ID is marked as a bottom item.
+  bool isBottomItem(String id) => _bottomItemIds.contains(id);
 
   /// WIP summary from the last fetch.
   WipSummary? get wipSummary => _result?.wip;
@@ -114,6 +135,27 @@ class FocusProvider extends ChangeNotifier {
     if (_viewMode == mode) return;
     _viewMode = mode;
     _prefs?.setInt(_prefViewMode, mode.index);
+    notifyListeners();
+  }
+
+  /// Send an item to the bottom of the focus list.
+  void sendToBottom(String itemId) {
+    _bottomItemIds.add(itemId);
+    _prefs?.setStringList(_prefBottomItems, _bottomItemIds.toList());
+    notifyListeners();
+  }
+
+  /// Restore an item from the bottom of the focus list.
+  void restoreItem(String itemId) {
+    _bottomItemIds.remove(itemId);
+    _prefs?.setStringList(_prefBottomItems, _bottomItemIds.toList());
+    notifyListeners();
+  }
+
+  /// Clear all bottom items.
+  void clearBottomItems() {
+    _bottomItemIds.clear();
+    _prefs?.setStringList(_prefBottomItems, []);
     notifyListeners();
   }
 

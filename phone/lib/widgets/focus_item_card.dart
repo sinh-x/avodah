@@ -24,94 +24,134 @@ int _staleThreshold(String status) {
 /// and blocked badge. Tap callback for navigation. When [deployment] is
 /// provided, shows a deployment badge with team name, elapsed time, and
 /// running indicator.
+///
+/// When [isBottomItem] is true, applies a dimmed visual style.
 class FocusItemCard extends StatelessWidget {
   final FocusItem item;
   final VoidCallback? onTap;
   final Deployment? deployment;
+  final bool isBottomItem;
+  final VoidCallback? onDismissed;
 
   const FocusItemCard({
     super.key,
     required this.item,
     this.onTap,
     this.deployment,
+    this.isBottomItem = false,
+    this.onDismissed,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Row: ticket ID + priority indicator + title
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _PriorityIndicator(priority: item.priority),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.id,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
+    final cardContent = Opacity(
+      opacity: isBottomItem ? 0.5 : 1.0,
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row: ticket ID + priority indicator + title
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _PriorityIndicator(priority: item.priority),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.id,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 2),
+                          Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Badges row
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    _ProjectBadge(project: item.project),
+                    if (item.staleDays > 0) _StaleBadge(item: item),
+                    if (item.isBlocked) _BlockedBadge(blockerIds: item.blockerIds),
+                  ],
+                ),
+                // Deployment badge row (when deployment is active)
+                if (deployment != null) ...[
+                  const SizedBox(height: 4),
+                  _DeploymentBadge(deployment: deployment!),
+                ],
+                // Assignee row
+                if (item.assignee != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.assignee!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 6),
-              // Badges row
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  _ProjectBadge(project: item.project),
-                  if (item.staleDays > 0) _StaleBadge(item: item),
-                  if (item.isBlocked) _BlockedBadge(blockerIds: item.blockerIds),
-                ],
-              ),
-              // Deployment badge row (when deployment is active)
-              if (deployment != null) ...[
-                const SizedBox(height: 4),
-                _DeploymentBadge(deployment: deployment!),
               ],
-              // Assignee row
-              if (item.assignee != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  item.assignee!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
     );
+
+    if (onDismissed != null) {
+      return Dismissible(
+        key: Key(item.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 24),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.orange,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.arrow_downward, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Send to bottom',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        onDismissed: (_) => onDismissed?.call(),
+        child: cardContent,
+      );
+    }
+
+    return cardContent;
   }
 }
 
