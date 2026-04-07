@@ -155,6 +155,21 @@ class ImageAttachmentPickerState extends State<ImageAttachmentPicker> {
     });
     widget.onUploadingChanged?.call(uploading);
   }
+
+  /// Pre-loads image paths from a saved draft.
+  ///
+  /// Only adds paths that point to existing files.
+  Future<void> setInitialImages(List<String> paths) async {
+    final validImages = <XFile>[];
+    for (final path in paths) {
+      if (await File(path).exists()) {
+        validImages.add(XFile(path));
+      }
+    }
+    setState(() {
+      _selectedImages.addAll(validImages);
+    });
+  }
 }
 
 class _ImageThumbnail extends StatelessWidget {

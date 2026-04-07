@@ -74,6 +74,17 @@ class GuidedSummaryFieldsState extends State<GuidedSummaryFields> {
     return _controllers.map((k, v) => MapEntry(k, v.text));
   }
 
+  /// Sets all field values from [values] map.
+  ///
+  /// Only fields that exist in the current type's config are updated.
+  void setValues(Map<String, String> values) {
+    for (final entry in values.entries) {
+      if (_controllers.containsKey(entry.key)) {
+        _controllers[entry.key]!.text = entry.value;
+      }
+    }
+  }
+
   /// Validates all required fields. Returns true if valid.
   bool validate() {
     bool valid = true;
