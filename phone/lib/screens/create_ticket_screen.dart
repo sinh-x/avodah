@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../config/ticket_type_config.dart';
 import '../models/agent_team.dart';
 import '../services/agent_api_client.dart';
 import '../services/board_provider.dart';
+import '../services/ticket_draft_service.dart';
 import '../widgets/guided_summary_fields.dart';
 import '../widgets/image_attachment_picker.dart';
 import '../widgets/no_select_text_field.dart';
@@ -42,6 +45,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   static const _priorities = ['critical', 'high', 'medium', 'low'];
   static const _estimates = ['XS', 'S', 'M', 'L', 'XL'];
 
+  Timer? _debounceTimer;
+  static const _debounceDuration = Duration(milliseconds: 500);
+
   late final Future<List<AgentTeam>> _teamsFuture;
 
   @override
@@ -49,13 +55,124 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
     super.initState();
     _selectedProject = widget.boardProvider.selectedProject;
     _teamsFuture = widget.boardProvider.client.listAgentTeams();
+
+    // Load draft and pre-populate form
+    _loadDraftWithRestore();
+
+    // Add debounced listeners to text controllers
+    _titleController.addListener(_onTitleChanged);
+    _freeformSummaryController.addListener(_onFreeformNotesChanged);
+  }
+
+  void _onTitleChanged() {
+    _scheduleDebounceSave();
+  }
+
+  void _onFreeformNotesChanged() {
+    _scheduleDebounceSave();
+  }
+
+  Future<void> _loadDraftWithRestore() async {
+    final draft = await TicketDraftService.loadDraft();
+    if (draft == null) return;
+    if (!mounted) return;
+
+    setState(() {
+      if (draft.project != null) _selectedProject = draft.project;
+      final title = draft.title;
+      if (title != null) _titleController.text = title;
+      final typeName = draft.typeName;
+      if (typeName != null) {
+        _selectedType = PhoneTicketType.values.firstWhere(
+          (t) => t.name == typeName,
+          orElse: () => _selectedType,
+        );
+      }
+      final status = draft.status;
+      if (status != null) _selectedStatus = status;
+      final team = draft.team;
+      if (team != null) _selectedTeam = team;
+      final priority = draft.priority;
+      if (priority != null) _selectedPriority = priority;
+      final estimate = draft.estimate;
+      if (estimate != null) _selectedEstimate = estimate;
+      final freeformNotes = draft.freeformNotes;
+      if (freeformNotes != null) {
+        _freeformSummaryController.text = freeformNotes;
+      }
+    });
+
+    // Restore guided field values after widget rebuild
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (draft.guidedValues.isNotEmpty) {
+        _guidedFieldsKey.currentState?.setValues(draft.guidedValues);
+      }
+      // Restore image paths (async, best-effort)
+      if (draft.imagePaths.isNotEmpty) {
+        _imagePickerKey.currentState?.setInitialImages(draft.imagePaths);
+      }
+      // Show draft restored snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Draft restored'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _titleController.dispose();
     _freeformSummaryController.dispose();
     super.dispose();
+  }
+
+  void _scheduleDebounceSave() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_debounceDuration, () => _saveDraft());
+  }
+
+  Future<void> _saveDraft() async {
+    final guidedState = _guidedFieldsKey.currentState;
+    final draft = TicketDraft(
+      project: _selectedProject,
+      title: _titleController.text,
+      typeName: _selectedType.name,
+      status: _selectedStatus,
+      team: _selectedTeam,
+      priority: _selectedPriority,
+      estimate: _selectedEstimate,
+      guidedValues: guidedState?.getValues() ?? {},
+      freeformNotes: _freeformSummaryController.text,
+      imagePaths:
+          _imagePickerKey.currentState?.selectedImages.map((i) => i.path).toList() ?? [],
+    );
+    await TicketDraftService.saveDraft(draft);
+  }
+
+  Future<void> _clearDraft() async {
+    _debounceTimer?.cancel();
+    await TicketDraftService.clearDraft();
+  }
+
+  void _resetForm() {
+    _titleController.clear();
+    _freeformSummaryController.clear();
+    _guidedFieldsKey.currentState?.setValues({});
+    _imagePickerKey.currentState?.clear();
+    setState(() {
+      _selectedProject = widget.boardProvider.selectedProject;
+      _selectedType = PhoneTicketType.task;
+      _selectedPriority = 'medium';
+      _selectedEstimate = null;
+      _selectedStatus = 'requirement-review';
+      _selectedTeam = null;
+    });
   }
 
   Future<void> _save() async {
@@ -121,6 +238,9 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       }
 
       if (mounted) {
+        // Clear draft after successful ticket creation
+        await _clearDraft();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ticket created')),
         );
@@ -143,6 +263,20 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       appBar: AppBar(
         title: const Text('Create Ticket'),
         actions: [
+          if (!_saving)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Clear Draft',
+              onPressed: () async {
+                await _clearDraft();
+                _resetForm();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Draft cleared')),
+                  );
+                }
+              },
+            ),
           _saving
               ? const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
@@ -191,7 +325,10 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     .map((p) => DropdownMenuItem(value: p.key, child: Text(p.key)))
                     .toList(),
                 onChanged: (p) {
-                  if (p != null) setState(() => _selectedProject = p);
+                  if (p != null) {
+                    setState(() => _selectedProject = p);
+                    _saveDraft();
+                  }
                 },
               );
             }),
@@ -214,7 +351,21 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             // Type — tappable button that opens type picker bottom sheet
             _TypePickerButton(
               selectedType: _selectedType,
-              onChanged: (type) => setState(() => _selectedType = type),
+              onChanged: (type) {
+                if (type == _selectedType) return;
+                // Capture old guided values before type change clears them
+                final oldGuidedValues =
+                    _guidedFieldsKey.currentState?.getValues() ?? {};
+                // Save current draft with old type
+                _saveDraft();
+                setState(() => _selectedType = type);
+                // After widget rebuild, restore guided values that match new type
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _guidedFieldsKey.currentState
+                      ?.setValues(oldGuidedValues);
+                });
+              },
             ),
             const SizedBox(height: 16),
 
@@ -238,8 +389,10 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                 ),
               ],
               selected: {_selectedStatus},
-              onSelectionChanged: (s) =>
-                  setState(() => _selectedStatus = s.first),
+              onSelectionChanged: (s) {
+                setState(() => _selectedStatus = s.first);
+                _saveDraft();
+              },
             ),
             const SizedBox(height: 16),
 
@@ -286,7 +439,10 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     isDense: true,
                   ),
                   items: items,
-                  onChanged: (v) => setState(() => _selectedTeam = v),
+                  onChanged: (v) {
+                    setState(() => _selectedTeam = v);
+                    _saveDraft();
+                  },
                 );
               },
             ),
@@ -307,7 +463,10 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                         .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                         .toList(),
                     onChanged: (p) {
-                      if (p != null) setState(() => _selectedPriority = p);
+                      if (p != null) {
+                        setState(() => _selectedPriority = p);
+                        _saveDraft();
+                      }
                     },
                   ),
                 ),
@@ -327,6 +486,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                         v == null ? 'Estimate is required' : null,
                     onChanged: (e) {
                       setState(() => _selectedEstimate = e);
+                      _saveDraft();
                     },
                   ),
                 ),
