@@ -108,8 +108,11 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final listenable = widget.focusProvider != null
+        ? Listenable.merge([widget.boardProvider, widget.focusProvider!])
+        : widget.boardProvider as Listenable;
     return ListenableBuilder(
-      listenable: widget.boardProvider,
+      listenable: listenable,
       builder: (context, _) => _buildScaffold(context),
     );
   }
