@@ -574,14 +574,20 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             ),
             const Divider(height: 1),
-            ...otherProjects.map(
-              (p) => ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(p.key),
-                onTap: () => Navigator.pop(sheetCtx, p.key),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: otherProjects.length,
+                itemBuilder: (context, index) {
+                  final p = otherProjects[index];
+                  return ListTile(
+                    leading: const Icon(Icons.folder_outlined),
+                    title: Text(p.key),
+                    onTap: () => Navigator.pop(sheetCtx, p.key),
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),

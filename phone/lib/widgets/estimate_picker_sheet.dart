@@ -78,34 +78,40 @@ class EstimatePickerSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          ..._kAllEstimates.map((estimate) {
-            final isSelected = estimate == currentEstimate;
-            final color = estimateColor(estimate);
-            return ListTile(
-              leading: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              title: Text(
-                estimateLabel(estimate),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-              trailing: isSelected
-                  ? Icon(Icons.check, color: theme.colorScheme.primary)
-                  : null,
-              selected: isSelected,
-              selectedColor: theme.colorScheme.primary,
-              onTap: () => onSelect(estimate),
-            );
-          }),
-          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _kAllEstimates.length,
+              itemBuilder: (context, index) {
+                final estimate = _kAllEstimates[index];
+                final isSelected = estimate == currentEstimate;
+                final color = estimateColor(estimate);
+                return ListTile(
+                  leading: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  title: Text(
+                    estimateLabel(estimate),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                  trailing: isSelected
+                      ? Icon(Icons.check, color: theme.colorScheme.primary)
+                      : null,
+                  selected: isSelected,
+                  selectedColor: theme.colorScheme.primary,
+                  onTap: () => onSelect(estimate),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

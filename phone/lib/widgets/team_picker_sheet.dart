@@ -106,7 +106,7 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
               ),
             ),
           ] else ...[
-            // None option to clear the team field
+            // None option to clear the team field (always visible)
             ListTile(
               leading: Icon(Icons.clear, color: theme.colorScheme.outline),
               title: Text(
@@ -126,47 +126,53 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
               },
             ),
             const Divider(height: 1),
-            ..._teams.map((team) {
-              final isSelected = team.name == widget.currentTeam;
-              return ListTile(
-                leading: Icon(
-                  Icons.group_outlined,
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline,
-                ),
-                title: Row(
-                  children: [
-                    Text(
-                      team.name,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
-                      ),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _teams.length,
+                itemBuilder: (context, index) {
+                  final team = _teams[index];
+                  final isSelected = team.name == widget.currentTeam;
+                  return ListTile(
+                    leading: Icon(
+                      Icons.group_outlined,
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline,
                     ),
-                    if (!team.inboxExists) ...[
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.warning_amber_outlined,
-                        size: 14,
-                        color: theme.colorScheme.error,
-                      ),
-                    ],
-                  ],
-                ),
-                trailing: isSelected
-                    ? Icon(Icons.check, color: theme.colorScheme.primary)
-                    : null,
-                selected: isSelected,
-                selectedColor: theme.colorScheme.primary,
-                onTap: () {
-                  widget.onSelect(team.name);
-                  Navigator.of(context).pop();
+                    title: Row(
+                      children: [
+                        Text(
+                          team.name,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        if (!team.inboxExists) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.warning_amber_outlined,
+                            size: 14,
+                            color: theme.colorScheme.error,
+                          ),
+                        ],
+                      ],
+                    ),
+                    trailing: isSelected
+                        ? Icon(Icons.check, color: theme.colorScheme.primary)
+                        : null,
+                    selected: isSelected,
+                    selectedColor: theme.colorScheme.primary,
+                    onTap: () {
+                      widget.onSelect(team.name);
+                      Navigator.of(context).pop();
+                    },
+                  );
                 },
-              );
-            }),
+              ),
+            ),
           ],
-          const SizedBox(height: 8),
         ],
       ),
     );

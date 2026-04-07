@@ -87,34 +87,40 @@ class PriorityPickerSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          ..._kAllPriorities.map((priority) {
-            final isSelected = priority == currentPriority;
-            final color = priorityColor(priority);
-            return ListTile(
-              leading: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              title: Text(
-                priorityLabel(priority),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-              trailing: isSelected
-                  ? Icon(Icons.check, color: theme.colorScheme.primary)
-                  : null,
-              selected: isSelected,
-              selectedColor: theme.colorScheme.primary,
-              onTap: () => onSelect(priority),
-            );
-          }),
-          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _kAllPriorities.length,
+              itemBuilder: (context, index) {
+                final priority = _kAllPriorities[index];
+                final isSelected = priority == currentPriority;
+                final color = priorityColor(priority);
+                return ListTile(
+                  leading: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  title: Text(
+                    priorityLabel(priority),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                  trailing: isSelected
+                      ? Icon(Icons.check, color: theme.colorScheme.primary)
+                      : null,
+                  selected: isSelected,
+                  selectedColor: theme.colorScheme.primary,
+                  onTap: () => onSelect(priority),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
