@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../models/ticket.dart';
 import '../services/board_provider.dart';
+import '../services/focus_provider.dart';
 import '../services/local_dashboard_provider.dart';
 import '../widgets/board_column.dart';
 import '../widgets/bulletin_banner.dart';
 import '../widgets/connection_indicator.dart';
+import '../widgets/focus_item_card.dart';
 import '../widgets/ticket_card.dart';
+import '../widgets/wip_summary.dart';
 import '../services/crdt_sync_service.dart';
 import '../settings/settings_screen.dart';
 import 'create_bulletin_screen.dart';
@@ -30,8 +33,14 @@ import 'repo_detail_screen.dart';
 class KanbanBoardScreen extends StatefulWidget {
   final BoardProvider boardProvider;
   final LocalDashboardProvider dashboardProvider;
+  final FocusProvider? focusProvider;
 
-  const KanbanBoardScreen({super.key, required this.boardProvider, required this.dashboardProvider});
+  const KanbanBoardScreen({
+    super.key,
+    required this.boardProvider,
+    required this.dashboardProvider,
+    this.focusProvider,
+  });
 
   @override
   State<KanbanBoardScreen> createState() => _KanbanBoardScreenState();
@@ -107,9 +116,32 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
 
   Widget _buildScaffold(BuildContext context) {
     final provider = widget.boardProvider;
+    final focusProvider = widget.focusProvider;
+    final isFocusMode = focusProvider != null &&
+        focusProvider.viewMode == FocusViewMode.focus;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kanban Board'),
+        title: focusProvider != null
+            ? SegmentedButton<FocusViewMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: FocusViewMode.board,
+                    label: Text('Board'),
+                    icon: Icon(Icons.view_kanban_outlined),
+                  ),
+                  ButtonSegment(
+                    value: FocusViewMode.focus,
+                    label: Text('Focus'),
+                    icon: Icon(Icons.center_focus_strong_outlined),
+                  ),
+                ],
+                selected: {isFocusMode ? FocusViewMode.focus : FocusViewMode.board},
+                onSelectionChanged: (selection) {
+                  focusProvider.setViewMode(selection.first);
+                },
+              )
+            : const Text('Kanban Board'),
         actions: [
           ValueListenableBuilder<SyncConnectionState>(
             valueListenable: widget.dashboardProvider.connectionState,
@@ -165,22 +197,24 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
         tooltip: 'New ticket',
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        children: [
-          _buildFilterRow(context, provider),
-          if (provider.activeBulletins.isNotEmpty)
-            BulletinBanner(
-              bulletins: provider.activeBulletins,
-              onResolve: _resolveBulletin,
+      body: isFocusMode
+          ? _buildFocusView(context, focusProvider)
+          : Column(
+              children: [
+                _buildFilterRow(context, provider),
+                if (provider.activeBulletins.isNotEmpty)
+                  BulletinBanner(
+                    bulletins: provider.activeBulletins,
+                    onResolve: _resolveBulletin,
+                  ),
+                if (provider.loading && provider.board == null)
+                  const Expanded(child: Center(child: CircularProgressIndicator()))
+                else if (provider.error != null && provider.board == null)
+                  _buildError(context, provider)
+                else
+                  Expanded(child: _buildBoardArea(context, provider)),
+              ],
             ),
-          if (provider.loading && provider.board == null)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else if (provider.error != null && provider.board == null)
-            _buildError(context, provider)
-          else
-            Expanded(child: _buildBoardArea(context, provider)),
-        ],
-      ),
     );
   }
 
@@ -382,6 +416,164 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
           ),
       ],
     );
+  }
+
+  Widget _buildFocusView(BuildContext context, FocusProvider focusProvider) {
+    return ListenableBuilder(
+      listenable: focusProvider,
+      builder: (context, _) {
+        if (focusProvider.loading && focusProvider.result == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (focusProvider.error != null && focusProvider.result == null) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_off,
+                    size: 48, color: Theme.of(context).colorScheme.error),
+                const SizedBox(height: 12),
+                Text('Failed to load focus',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    focusProvider.error ?? '',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: focusProvider.refresh,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final items = focusProvider.filteredFocusItems;
+        final wip = focusProvider.wipSummary;
+
+        return Column(
+          children: [
+            _buildFocusFilterRow(context, focusProvider),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: focusProvider.refresh,
+                child: ListView.builder(
+                  itemCount: items.length + (wip != null ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (wip != null && index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: WipSummaryWidget(wip: wip),
+                      );
+                    }
+                    final item = items[index - (wip != null ? 1 : 0)];
+                    return FocusItemCard(
+                      item: item,
+                      onTap: () => _openTicketFromFocus(context, item.id),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFocusFilterRow(
+      BuildContext context, FocusProvider focusProvider) {
+    final projects = focusProvider.availableProjects;
+    final assignees = focusProvider.availableAssignees;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          if (projects.isEmpty)
+            const Text('No projects')
+          else
+            DropdownButton<String>(
+              value: focusProvider.selectedProject != null &&
+                      projects.contains(focusProvider.selectedProject)
+                  ? focusProvider.selectedProject
+                  : null,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              hint: const Text('All projects'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('All projects')),
+                ...projects.map((p) => DropdownMenuItem(
+                      value: p,
+                      child: Text(p),
+                    )),
+              ],
+              onChanged: (p) => focusProvider.setProject(p),
+            ),
+          if (assignees.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            FilterChip(
+              label: const Text('All'),
+              selected: focusProvider.selectedAssignee == null,
+              onSelected: (_) => focusProvider.setAssignee(null),
+            ),
+            ...assignees.map((a) => Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: FilterChip(
+                    label: Text(a),
+                    selected: focusProvider.selectedAssignee == a,
+                    onSelected: (_) => focusProvider.setAssignee(
+                        focusProvider.selectedAssignee == a ? null : a),
+                  ),
+                )),
+          ],
+          const SizedBox(width: 12),
+          FilterChip(
+            label: const Text('Enrich'),
+            selected: focusProvider.enrichEnabled,
+            avatar: focusProvider.enrichEnabled
+                ? const Icon(Icons.auto_awesome, size: 16)
+                : null,
+            onSelected: (_) =>
+                focusProvider.setEnrichEnabled(!focusProvider.enrichEnabled),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openTicketFromFocus(BuildContext context, String ticketId) async {
+    // Fetch ticket from API then navigate
+    try {
+      final ticket = await widget.boardProvider.client.getTicket(ticketId);
+      if (context.mounted) {
+        Navigator.of(context)
+            .push(MaterialPageRoute<void>(
+              builder: (_) => TicketDetailScreen(
+                ticketId: ticket.id,
+                boardProvider: widget.boardProvider,
+              ),
+            ))
+            .then((_) => widget.focusProvider?.refresh());
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load ticket: $e')),
+        );
+      }
+    }
   }
 }
 

@@ -13,6 +13,7 @@ import 'services/agent_api_client.dart';
 import 'services/board_provider.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/deployment_provider.dart';
+import 'services/focus_provider.dart';
 import 'services/local_dashboard_provider.dart';
 import 'services/local_write_service.dart';
 import 'services/review_provider.dart';
@@ -42,6 +43,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   DeploymentProvider? _deploymentProvider;
   TeamBrowserProvider? _teamBrowserProvider;
   BoardProvider? _boardProvider;
+  FocusProvider? _focusProvider;
   Timer? _syncTimer;
 
   @override
@@ -93,6 +95,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     boardProvider.refresh();
     boardProvider.startPolling();
 
+    final focusProvider = FocusProvider(apiClient);
+    focusProvider.startPolling();
+
     setState(() {
       _db = db;
       _dashboardProvider = dashboardProvider;
@@ -103,6 +108,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
       _deploymentProvider = deploymentProvider;
       _teamBrowserProvider = teamBrowserProvider;
       _boardProvider = boardProvider;
+      _focusProvider = focusProvider;
     });
 
     // Initial pull + dashboard render
@@ -146,6 +152,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _focusProvider?.dispose();
     _boardProvider?.dispose();
     _teamBrowserProvider?.dispose();
     _deploymentProvider?.dispose();
@@ -184,6 +191,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               deploymentProvider: _deploymentProvider!,
               teamBrowserProvider: _teamBrowserProvider!,
               boardProvider: _boardProvider!,
+              focusProvider: _focusProvider,
               onPushDeltas: _pushDeltas,
             ),
     );
@@ -199,6 +207,7 @@ class _HomeShell extends StatefulWidget {
   final DeploymentProvider deploymentProvider;
   final TeamBrowserProvider teamBrowserProvider;
   final BoardProvider boardProvider;
+  final FocusProvider? focusProvider;
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
 
   const _HomeShell({
@@ -209,6 +218,7 @@ class _HomeShell extends StatefulWidget {
     required this.deploymentProvider,
     required this.teamBrowserProvider,
     required this.boardProvider,
+    this.focusProvider,
     this.onPushDeltas,
   });
 
@@ -246,7 +256,11 @@ class _HomeShellState extends State<_HomeShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          KanbanBoardScreen(boardProvider: widget.boardProvider, dashboardProvider: widget.dashboardProvider),
+          KanbanBoardScreen(
+              boardProvider: widget.boardProvider,
+              dashboardProvider: widget.dashboardProvider,
+              focusProvider: widget.focusProvider,
+            ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
