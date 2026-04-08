@@ -46,7 +46,7 @@ class TicketDraft {
   final String? title;
   final String? typeName;
   final String? status;
-  final String? team;
+  final String? assignee;
   final String? priority;
   final String? estimate;
   final Map<String, String> guidedValues;
@@ -58,7 +58,7 @@ class TicketDraft {
     this.title,
     this.typeName,
     this.status,
-    this.team,
+    this.assignee,
     this.priority,
     this.estimate,
     this.guidedValues = const {},
@@ -71,7 +71,7 @@ class TicketDraft {
         'title': title,
         'typeName': typeName,
         'status': status,
-        'team': team,
+        'assignee': assignee,
         'priority': priority,
         'estimate': estimate,
         'guidedValues': guidedValues,
@@ -84,7 +84,8 @@ class TicketDraft {
         title: json['title'] as String?,
         typeName: json['typeName'] as String?,
         status: json['status'] as String?,
-        team: json['team'] as String?,
+        // NF2: read 'assignee' first, fall back to 'team' for legacy drafts
+        assignee: json['assignee'] as String? ?? json['team'] as String?,
         priority: json['priority'] as String?,
         estimate: json['estimate'] as String?,
         guidedValues: (json['guidedValues'] as Map<String, dynamic>?)
