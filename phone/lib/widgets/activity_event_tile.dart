@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/activity_event.dart';
 
 /// Renders a single activity event in a timeline style.
 ///
 /// Supports [expanded] mode to show event data fields below the label.
+/// Each tile can be independently expanded/collapsed via tap.
 class ActivityEventTile extends StatelessWidget {
   final ActivityEvent event;
   final bool expanded;
+  final VoidCallback? onTap;
 
   const ActivityEventTile({
     super.key,
     required this.event,
     this.expanded = false,
+    this.onTap,
   });
 
   @override
@@ -25,62 +29,74 @@ class ActivityEventTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Timeline dot
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.15),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Timeline dot
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.15),
+              ),
+              child: Icon(icon, size: 14, color: color),
             ),
-            child: Icon(icon, size: 14, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _buildLabel(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: event.isMilestone
-                              ? FontWeight.w600
-                              : FontWeight.normal,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _buildLabel(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: event.isMilestone
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
+                      const SizedBox(width: 8),
+                      Text(
+                        time,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        expanded
+                            ? Icons.keyboard_arrow_down
+                            : Icons.keyboard_arrow_right,
+                        size: 18,
+                        color: theme.colorScheme.outline,
+                      ),
+                    ],
+                  ),
+                  if (event.agent.isNotEmpty)
                     Text(
-                      time,
+                      event.agent,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.outline,
-                        fontFamily: 'monospace',
                       ),
                     ),
+                  if (expanded && event.data.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    _buildDataSection(theme),
                   ],
-                ),
-                if (event.agent.isNotEmpty)
-                  Text(
-                    event.agent,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                if (expanded && event.data.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  _buildDataSection(theme),
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -127,23 +143,32 @@ class ActivityEventTile extends StatelessWidget {
         .toList();
     if (entries.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: entries
-            .map((e) => Text(
-                  '${e.key}: ${e.value}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(fontFamily: 'monospace'),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ))
-            .toList(),
+    // Build markdown content from data entries
+    final buffer = StringBuffer();
+    for (final e in entries) {
+      buffer.writeln('**${e.key}:** ${e.value}');
+    }
+
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: MarkdownBody(
+          data: buffer.toString(),
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            p: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            strong: theme.textTheme.bodySmall
+                ?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.bold),
+            code: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            ),
+          ),
+        ),
       ),
     );
   }

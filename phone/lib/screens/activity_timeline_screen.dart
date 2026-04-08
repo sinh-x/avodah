@@ -32,6 +32,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
   bool _loading = true;
   String? _error;
   bool _expanded = false;
+  Set<int> _expandedItems = {};
   Timer? _refreshTimer;
   Deployment? _enrichedDeployment;
 
@@ -72,6 +73,16 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
       // Continue polling while the deployment is running (check enriched deployment if available)
       if (mounted && (_enrichedDeployment?.isRunning ?? widget.deployment.isRunning)) {
         _scheduleRefresh();
+      }
+    });
+  }
+
+  void _toggleItem(int index) {
+    setState(() {
+      if (_expandedItems.contains(index)) {
+        _expandedItems = Set.from(_expandedItems)..remove(index);
+      } else {
+        _expandedItems = Set.from(_expandedItems)..add(index);
       }
     });
   }
@@ -143,10 +154,16 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
               child: ListView.builder(
                 padding: const EdgeInsets.only(top: 8, bottom: 32),
                 itemCount: _events.length,
-                itemBuilder: (context, index) => ActivityEventTile(
-                  event: _events[index],
-                  expanded: _expanded,
-                ),
+                itemBuilder: (context, index) {
+                  // Global expand overrides individual states; otherwise use individual
+                  final isExpanded =
+                      _expanded || _expandedItems.contains(index);
+                  return ActivityEventTile(
+                    event: _events[index],
+                    expanded: isExpanded,
+                    onTap: () => _toggleItem(index),
+                  );
+                },
               ),
             ),
         ],
