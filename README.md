@@ -73,38 +73,29 @@ Avodah is a Flutter-based task management and time tracking application inspired
 git clone https://github.com/sinh-x/avodah.git
 cd avodah
 
-# Install dependencies
-flutter pub get
+# CLI (primary interface)
+cd mcp && dart pub get
+dart run mcp/bin/avo.dart --help
 
-# Run on Linux
-flutter run -d linux
-
-# Run on Android
-flutter run -d android
+# Phone viewer (Flutter web + Android)
+cd phone && flutter pub get
+cd phone && flutter build web --release
 ```
 
 ## Project Structure
 
 ```
-lib/
-├── main.dart
-├── app.dart
-├── core/
-│   ├── crdt/          # CRDT implementations
-│   ├── sync/          # P2P sync service
-│   ├── storage/       # Isar database
-│   └── platform/      # Platform-specific code
-├── features/
-│   ├── tasks/         # Task management
-│   ├── projects/      # Project organization
-│   ├── tags/          # Tag system
-│   ├── timer/         # Time tracking
-│   ├── worklog/       # Work history
-│   └── settings/      # App settings
-└── shared/
-    ├── widgets/       # Reusable UI components
-    ├── theme/         # Theming
-    └── utils/         # Utilities
+avodah/
+├── packages/avodah_core/   # Shared core (CRDT, documents, Drift database)
+├── mcp/                    # CLI + MCP server (pure Dart)
+│   ├── bin/                # Entry points (avo.dart, server.dart)
+│   ├── lib/cli/            # CLI command classes
+│   ├── lib/services/       # Business logic
+│   └── lib/tools/          # MCP server tool handlers
+├── phone/                  # Flutter viewer app (web + Android)
+│   ├── android/            # Android build
+│   └── web/                # Web build template
+└── docs/                   # Design specs
 ```
 
 ## Development

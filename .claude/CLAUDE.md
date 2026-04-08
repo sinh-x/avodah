@@ -5,26 +5,31 @@
 This is a **multi-package** project:
 
 ```bash
-# Flutter app (root)
-flutter pub get
-flutter pub run build_runner build --delete-conflicting-outputs
-flutter test
+# Core package (pure Dart)
+cd packages/avodah_core && dart pub get
+cd packages/avodah_core && dart test
 
 # MCP/CLI subpackage (uses dart, NOT flutter)
 cd mcp && dart pub get
 cd mcp && dart test
 dart run mcp/bin/avo.dart       # CLI entry point
 dart run mcp/bin/server.dart    # MCP server entry point
+
+# Phone viewer app (Flutter)
+cd phone && flutter pub get
+cd phone && flutter test
+cd phone && flutter build web --release
 ```
 
 ## Project Structure
 
 ```
 avodah/
-├── lib/                        # Flutter app
-│   ├── core/                   # CRDT, storage utilities
-│   └── features/               # Feature modules (tasks, projects, tags, timer, settings)
-├── packages/avodah_core/       # Shared core package (documents, CRDT)
+├── packages/avodah_core/       # Shared core package (documents, CRDT, storage)
+│   ├── lib/crdt/               # CRDT primitives (HLC, LWW registers, counters)
+│   ├── lib/documents/          # CRDT document types (task, project, tag, worklog, etc.)
+│   ├── lib/storage/            # Drift database schema and tables
+│   └── test/                   # Core package tests
 ├── mcp/                        # CLI + MCP server (pure Dart)
 │   ├── bin/                    # Entry points (avo.dart, server.dart)
 │   ├── lib/cli/                # CLI command classes
@@ -32,7 +37,10 @@ avodah/
 │   ├── lib/storage/            # Drift database
 │   ├── lib/config/             # Jira profile config
 │   └── lib/tools/              # MCP server tool handlers
-├── test/                       # Flutter app tests (mirrors lib/)
+├── phone/                      # Flutter viewer app (web + android)
+│   ├── lib/                    # App code
+│   ├── android/                # Android build
+│   └── web/                    # Web build template
 └── docs/design/                # Design specs
 ```
 
@@ -42,7 +50,7 @@ avodah/
 2. **Document class** - Extends `CrdtDocument<T>` with `.create()`, `.fromDrift()`, `.fromState()`
 3. **Model class** - Immutable UI model
 
-Reference: `lib/features/tasks/models/task_document.dart`
+Reference: `packages/avodah_core/lib/documents/task_document.dart`
 
 ## Service Pattern (mcp/)
 
@@ -52,9 +60,10 @@ Reference: `lib/features/tasks/models/task_document.dart`
 
 ## Testing
 
-- Flutter app: `flutter test`
+- Core package: `cd packages/avodah_core && dart test`
 - MCP/CLI: `cd mcp && dart test`
-- 220+ tests across 6 service suites (Timer, Task, Worklog, Project, Jira, Plan)
+- Phone viewer: `cd phone && flutter test`
+- 700+ tests across core, CLI services, and viewer
 
 ## Versioning & Release
 
