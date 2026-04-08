@@ -39,7 +39,7 @@ class BoardProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
   String? _selectedProject;
-  String? _selectedTeam;
+  String? _selectedAssignee;
   bool _showTerminal = false;
   String _searchQuery = '';
   Timer? _pollTimer;
@@ -67,7 +67,7 @@ class BoardProvider extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
   String? get selectedProject => _selectedProject;
-  String? get selectedTeam => _selectedTeam;
+  String? get selectedAssignee => _selectedAssignee;
   bool get showTerminal => _showTerminal;
   String get searchQuery => _searchQuery;
 
@@ -126,9 +126,9 @@ class BoardProvider extends ChangeNotifier {
     refresh();
   }
 
-  void setTeam(String? team) {
-    if (_selectedTeam == team) return;
-    _selectedTeam = team;
+  void setAssignee(String? assignee) {
+    if (_selectedAssignee == assignee) return;
+    _selectedAssignee = assignee;
     notifyListeners();
     refresh();
   }
@@ -167,7 +167,7 @@ class BoardProvider extends ChangeNotifier {
 
       final results = await Future.wait([
         _client.getBoard(
-            project: _selectedProject ?? '', team: _selectedTeam),
+            project: _selectedProject ?? '', assignee: _selectedAssignee),
         _client.getBulletins(),
       ]);
       _board = results[0] as BoardView;
@@ -290,6 +290,7 @@ class BoardProvider extends ChangeNotifier {
       columns: updatedColumns,
       total: board.total,
       teamCounts: board.teamCounts,
+      assigneeCounts: board.assigneeCounts,
     );
   }
 }
