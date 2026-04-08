@@ -501,7 +501,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         initialTeam: initialTeam,
         initialObjective: initialObjective,
         initialRepo: initialRepo,
-        onDeploy: (team, mode, objective, {repo}) async {
+        onDeploy: (team, mode, objective, {repo, provider, teamModel}) async {
           Navigator.pop(context);
           try {
             final result = await client.triggerDeployment(
@@ -510,6 +510,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               objective: objective.isNotEmpty ? objective : null,
               repo: repo,
               ticket: ticket.id,
+              provider: provider,
+              teamModel: teamModel,
             );
             if (!mounted) return;
             if (!result.started) {

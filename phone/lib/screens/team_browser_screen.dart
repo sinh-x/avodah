@@ -103,7 +103,7 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
       builder: (_) => DeploySheet(
         paTeams: widget.teamProvider.paTeams,
         paRepos: widget.teamProvider.paRepos,
-        onDeploy: (team, mode, objective, {repo}) async {
+        onDeploy: (team, mode, objective, {repo, provider, teamModel}) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
@@ -111,6 +111,8 @@ class _TeamBrowserScreenState extends State<TeamBrowserScreen> {
               mode,
               objective: objective.isNotEmpty ? objective : null,
               repo: repo,
+              provider: provider,
+              teamModel: teamModel,
             );
             if (mounted) {
               messenger.showSnackBar(
@@ -619,7 +621,7 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
         paRepos: widget.teamProvider.paRepos,
         initialTeam: widget.team,
         initialObjective: widget.file.name,
-        onDeploy: (team, mode, objective, {repo}) async {
+        onDeploy: (team, mode, objective, {repo, provider, teamModel}) async {
           Navigator.pop(context);
           try {
             final result = await widget.teamProvider.deploy(
@@ -627,6 +629,8 @@ class _TeamFileViewScreenState extends State<_TeamFileViewScreen> {
               mode,
               objective: objective.isNotEmpty ? objective : null,
               repo: repo,
+              provider: provider,
+              teamModel: teamModel,
             );
             if (mounted) {
               messenger.showSnackBar(SnackBar(

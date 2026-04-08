@@ -385,12 +385,16 @@ class AgentApiClient {
   /// Returns immediately after the subprocess is started.
   /// Optional [repo] passes `--repo <name>` to PA (for codebase-aware modes).
   /// Optional [ticket] links the deployment to a ticket in the registry.
+  /// Optional [provider] selects the AI provider (anthropic, minimax).
+  /// Optional [teamModel] selects the model (haiku, sonnet, opus).
   Future<DeployResult> triggerDeployment(
     String team,
     String mode, {
     String? objective,
     String? repo,
     String? ticket,
+    String? provider,
+    String? teamModel,
   }) async {
     final body = <String, dynamic>{'team': team, 'mode': mode};
     if (objective != null && objective.isNotEmpty) {
@@ -401,6 +405,12 @@ class AgentApiClient {
     }
     if (ticket != null && ticket.isNotEmpty) {
       body['ticket'] = ticket;
+    }
+    if (provider != null && provider.isNotEmpty) {
+      body['provider'] = provider;
+    }
+    if (teamModel != null && teamModel.isNotEmpty) {
+      body['team_model'] = teamModel;
     }
     final response = await _post('/api/deploy', body: body);
     return DeployResult.fromJson(response);

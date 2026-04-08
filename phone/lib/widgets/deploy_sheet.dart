@@ -41,8 +41,10 @@ class DeploySheet extends StatefulWidget {
   /// Called when user taps Launch.
   /// [objective] may be empty string if user left the field blank.
   /// [repo] is null when no repo was selected.
+  /// [provider] is null when using team default.
+  /// [teamModel] is null when using team default.
   final Future<void> Function(String team, String mode, String objective,
-      {String? repo}) onDeploy;
+      {String? repo, String? provider, String? teamModel}) onDeploy;
 
   const DeploySheet({
     super.key,
@@ -62,6 +64,8 @@ class _DeploySheetState extends State<DeploySheet> {
   String? _selectedTeam;
   String? _selectedMode;
   String? _selectedRepo;
+  String? _selectedProvider;
+  String? _selectedModel;
   bool _deploying = false;
   bool _objectiveTouched = false;
   late final TextEditingController _objectiveController;
@@ -89,6 +93,17 @@ class _DeploySheetState extends State<DeploySheet> {
 
     // Auto-select mode if the initial team has exactly one deploy mode.
     _autoSelectMode();
+
+    // Pre-select provider and model from team's configured defaults.
+    _applyTeamDefaults();
+  }
+
+  void _applyTeamDefaults() {
+    if (_selectedTeam == null) return;
+    final paTeam = _paTeamFor(_selectedTeam!);
+    if (paTeam == null) return;
+    _selectedProvider = paTeam.defaultProvider;
+    _selectedModel = paTeam.defaultModel;
   }
 
   @override
@@ -199,6 +214,7 @@ class _DeploySheetState extends State<DeploySheet> {
                       _selectedTeam = team;
                       _selectedMode = null;
                       _autoSelectMode();
+                      _applyTeamDefaults();
                     });
                   },
                 ),
@@ -219,6 +235,31 @@ class _DeploySheetState extends State<DeploySheet> {
                     selectedRepo: _selectedRepo,
                     enabled: !_deploying,
                     onChanged: (repo) => setState(() => _selectedRepo = repo),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Provider dropdown
+                if (_selectedTeam != null) ...[
+                  Text('Provider', style: theme.textTheme.labelMedium),
+                  const SizedBox(height: 6),
+                  _ProviderSelector(
+                    selectedProvider: _selectedProvider,
+                    enabled: !_deploying,
+                    onChanged: (p) =>
+                        setState(() => _selectedProvider = p),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Model dropdown
+                if (_selectedTeam != null) ...[
+                  Text('Model', style: theme.textTheme.labelMedium),
+                  const SizedBox(height: 6),
+                  _ModelSelector(
+                    selectedModel: _selectedModel,
+                    enabled: !_deploying,
+                    onChanged: (m) => setState(() => _selectedModel = m),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -324,6 +365,8 @@ class _DeploySheetState extends State<DeploySheet> {
         _selectedMode!,
         sanitizedObjective,
         repo: _selectedRepo,
+        provider: _selectedProvider,
+        teamModel: _selectedModel,
       );
     } finally {
       if (mounted) setState(() => _deploying = false);
@@ -428,6 +471,104 @@ class _TeamSelector extends StatelessWidget {
               (t) => DropdownMenuItem(
                 value: t.name,
                 child: Text(t.name),
+              ),
+            )
+            .toList(),
+        onChanged: enabled ? onChanged : null,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider selector widget
+// ---------------------------------------------------------------------------
+
+class _ProviderSelector extends StatelessWidget {
+  final String? selectedProvider;
+  final bool enabled;
+  final void Function(String?) onChanged;
+
+  static const _providers = ['anthropic', 'minimax'];
+
+  const _ProviderSelector({
+    required this.selectedProvider,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButton<String>(
+        value: selectedProvider,
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        hint: Text(
+          'anthropic',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.outline),
+        ),
+        items: _providers
+            .map(
+              (p) => DropdownMenuItem(
+                value: p,
+                child: Text(p),
+              ),
+            )
+            .toList(),
+        onChanged: enabled ? onChanged : null,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Model selector widget
+// ---------------------------------------------------------------------------
+
+class _ModelSelector extends StatelessWidget {
+  final String? selectedModel;
+  final bool enabled;
+  final void Function(String?) onChanged;
+
+  static const _models = ['haiku', 'sonnet', 'opus'];
+
+  const _ModelSelector({
+    required this.selectedModel,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButton<String>(
+        value: selectedModel,
+        isExpanded: true,
+        underline: const SizedBox.shrink(),
+        hint: Text(
+          'opus',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.outline),
+        ),
+        items: _models
+            .map(
+              (m) => DropdownMenuItem(
+                value: m,
+                child: Text(m),
               ),
             )
             .toList(),
