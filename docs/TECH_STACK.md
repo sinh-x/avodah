@@ -55,11 +55,11 @@ avodah/
 │   ├── lib/storage/              # Drift database
 │   ├── lib/config/               # Jira profiles, AvoConfig
 │   └── lib/tools/                # MCP tool handlers
-├── phone/                        # Web viewer (Docker + Caddy)
+├── phone/                        # Read-only Android viewer
 │   └── lib/
 │       ├── models/               # Snapshot models (plain Dart)
-│       ├── screens/             # Dashboard UI
-│       └── services/            # WebSocket client
+│       ├── screens/              # Dashboard UI
+│       └── services/             # WebSocket client
 ├── tool/                         # Dev scripts
 │   ├── bump_version.dart         # Semver bumping
 │   └── bump_build.dart           # Build number (+N)
@@ -164,13 +164,12 @@ Subcommands: `task {add,list,show,done,undone,delete,undelete,due,cat,note}`, `p
 | Deduplication | Skips broadcast if JSON unchanged |
 | Payload | `DaySnapshot` JSON (timer, plan, tasks, worklogs) |
 
-### Web Viewer
+### Phone Viewer
 
-Flutter web app (`phone/`) — served via Docker + Caddy:
+Separate Flutter app (`phone/`) — read-only dashboard:
 - WebSocket client with auto-reconnect (exponential backoff)
 - Displays: timer bar, plan-vs-actual table, planned tasks, worklog summary
 - Connection state indicator
-- Built with `flutter build web --release`, delivered via Caddy with COOP/COEP headers
 - Dependencies: `web_socket_channel: ^3.0.0`, `shared_preferences: ^2.2.0`
 
 ## External Integrations
@@ -273,7 +272,9 @@ Test runner script: `tool/run_tests.sh` (JSON reporter, clean summary)
 | Script | Command |
 |--------|---------|
 | `avo-run` | `flutter run -d linux` |
+| `avo-run-android` | `flutter run -d android` |
 | `avo-build` | `flutter build linux --release` |
+| `avo-build-android` | `flutter build apk --release` |
 | `avo-test` | `flutter test` |
 | `avo-analyze` | `flutter analyze` |
 | `avo-clean` | `flutter clean && flutter pub get` |
@@ -293,8 +294,8 @@ Fish shell (`completions/avo.fish`):
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Linux desktop | **MVP** ✓ | Primary target, GTK3 |
-| Web viewer | **MVP** ✓ | Served via Docker + Caddy (AVO-038/039) |
-| Android | Removed | Replaced by web viewer (AVO-039) |
+| Android | Buildable | APK builds, not primary focus |
+| Web (Chrome) | Functional | Debug mode works, UI incomplete |
 | Windows | Deferred | Not in MVP scope |
 | macOS | Deferred | Not in MVP scope |
 | iOS | Deferred | Not in MVP scope |

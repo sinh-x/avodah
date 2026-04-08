@@ -8,7 +8,7 @@ Avodah is a Flutter-based task management and time tracking application inspired
 
 - **Local-first**: All data lives on your devices, works fully offline
 - **P2P Sync**: Devices sync directly using CRDTs, no central server required
-- **Platforms**: Linux desktop (CLI + Flutter), Web viewer (Docker + Caddy), CLI on any platform
+- **Cross-platform**: Android and Linux desktop (iOS, Windows, macOS planned)
 - **Privacy-focused**: No analytics, no telemetry, your data stays yours
 
 ## Architecture
@@ -63,8 +63,8 @@ Avodah is a Flutter-based task management and time tracking application inspired
 ### Prerequisites
 
 - Flutter SDK 3.x
+- Android SDK (for Android)
 - Linux development tools (for Linux desktop)
-- Docker + Caddy (for web viewer)
 
 ### Installation
 
@@ -78,6 +78,9 @@ flutter pub get
 
 # Run on Linux
 flutter run -d linux
+
+# Run on Android
+flutter run -d android
 ```
 
 ## Project Structure

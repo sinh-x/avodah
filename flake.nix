@@ -115,7 +115,9 @@
 
           # Dev command scripts
           avo-run = pkgs.writeShellScriptBin "avo-run" "flutter run -d linux";
+          avo-run-android = pkgs.writeShellScriptBin "avo-run-android" "cd $(git rev-parse --show-toplevel)/phone && flutter run -d android";
           avo-build = pkgs.writeShellScriptBin "avo-build" "flutter build linux --release";
+          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "cd $(git rev-parse --show-toplevel)/phone && flutter build apk --release";
           avo-test = pkgs.writeShellScriptBin "avo-test" "flutter test";
           avo-analyze = pkgs.writeShellScriptBin "avo-analyze" "flutter analyze";
           avo-clean = pkgs.writeShellScriptBin "avo-clean" "flutter clean && flutter pub get";
@@ -182,7 +184,9 @@
               pkgs.clang
               # Dev commands
               avo-run
+              avo-run-android
               avo-build
+              avo-build-android
               avo-test
               avo-analyze
               avo-clean
@@ -212,7 +216,9 @@
               echo ""
               echo "Commands:"
               echo "  avo-run           - Run on Linux desktop"
+              echo "  avo-run-android   - Run on Android device/emulator"
               echo "  avo-build         - Build Linux release"
+              echo "  avo-build-android - Build Android APK"
               echo "  avo-test          - Run tests"
               echo "  avo-analyze       - Run analyzer"
               echo "  avo-clean         - Clean and get deps"

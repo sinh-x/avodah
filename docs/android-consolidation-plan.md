@@ -1,7 +1,4 @@
 # Android Consolidation Plan
-
-> **Status:** Superseded — root android/ removed; phone/ native builds obsoleted by AVO-038 web build (see AVO-039)
-
 ## Remove Root `android/` — Redirect to `phone/avodah_viewer`
 
 > **Date:** 2026-03-13
