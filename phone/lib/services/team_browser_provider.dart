@@ -58,10 +58,12 @@ class TeamBrowserProvider extends ChangeNotifier {
   /// Trigger a PA team deployment.
   ///
   /// Optional [repo] passes `--repo <name>` to PA for codebase-aware modes.
+  /// Optional [provider] selects the AI provider (anthropic, minimax).
+  /// Optional [teamModel] selects the model (haiku, sonnet, opus).
   Future<DeployResult> deploy(String team, String mode,
-      {String? objective, String? repo}) {
+      {String? objective, String? repo, String? provider, String? teamModel}) {
     return _client.triggerDeployment(team, mode,
-        objective: objective, repo: repo);
+        objective: objective, repo: repo, provider: provider, teamModel: teamModel);
   }
 
   /// Fetch team list.

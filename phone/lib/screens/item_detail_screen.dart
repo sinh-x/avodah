@@ -684,7 +684,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         paRepos: widget.paRepos ?? const [],
         initialTeam: team,
         initialObjective: widget.item.id,
-        onDeploy: (t, mode, objective, {repo}) async {
+        onDeploy: (t, mode, objective, {repo, provider, teamModel}) async {
           Navigator.pop(context);
           try {
             final result = await widget.reviewProvider.client.triggerDeployment(
@@ -692,6 +692,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               mode,
               objective: objective.isNotEmpty ? objective : null,
               repo: repo,
+              provider: provider,
+              teamModel: teamModel,
             );
             if (mounted) {
               messenger.showSnackBar(SnackBar(

@@ -5,11 +5,15 @@ class PaTeam {
   final String name;
   final String description;
   final List<DeployMode> deployModes;
+  final String? defaultProvider;
+  final String? defaultModel;
 
   const PaTeam({
     required this.name,
     required this.description,
     required this.deployModes,
+    this.defaultProvider,
+    this.defaultModel,
   });
 
   factory PaTeam.fromJson(Map<String, dynamic> json) {
@@ -21,6 +25,8 @@ class PaTeam {
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
       deployModes: modes,
+      defaultProvider: json['default_provider'] as String?,
+      defaultModel: json['default_model'] as String?,
     );
   }
 }
