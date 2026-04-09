@@ -13,17 +13,7 @@ final _annotationPattern = RegExp(r'^##\s+(\d+):\s+(.*)$');
 /// Wraps [Markdown] to detect taps on individual lines/paragraphs and
 /// renders inline comment annotation markers (## N: Title sections) as
 /// visually distinct styled blockquotes with amber/yellow left border.
-///
-/// Usage:
-/// ```dart
-/// MarkdownWithAnnotations(
-///   data: markdownContent,
-///   onLineTapped: (lineIndex, lineText, lineNumber) {
-///     // Show inline comment sheet
-///   },
-/// )
-/// ```
-class MarkdownWithAnnotations extends StatefulWidget {
+class MarkdownWithAnnotations extends StatelessWidget {
   /// The markdown content to render.
   final String data;
 
@@ -43,129 +33,26 @@ class MarkdownWithAnnotations extends StatefulWidget {
   });
 
   @override
-  State<MarkdownWithAnnotations> createState() => _MarkdownWithAnnotationsState();
-}
-
-class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
-  String _selectedText = '';
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final defaultStyleSheet = theme.textTheme.bodyMedium?.merge(
       const TextStyle(height: 1.5),
     );
-    final lines = widget.data.split('\n');
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Show selected text if any
-        if (_selectedText.isNotEmpty)
-          GestureDetector(
-            onTap: () => _showCommentSheet(_selectedText),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.comment_outlined, size: 16, color: Colors.amber.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Comment on: "$_selectedText"',
-                      style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Icon(Icons.add, size: 16, color: Colors.amber.shade700),
-                ],
-              ),
-            ),
-          ),
-        // Line numbers + Markdown (line numbers are tappable)
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Line numbers column - tappable
-            SizedBox(
-              width: 32,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(lines.length, (index) {
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedText = lines[index];
-                        });
-                      },
-                      child: Container(
-                        height: 24, // Fixed height per line
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '${index + 1}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ),
-            // Markdown content
-            Expanded(
-              child: Markdown(
-                data: widget.data,
-                shrinkWrap: true,
-                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-                builders: {
-                  'blockquote': _AnnotationBlockquoteBuilder(
-                    onLineTapped: widget.onLineTapped,
-                    sourceLines: lines,
-                  ),
-                },
-                onTapLink: (text, href, title) {
-                  // Allow link taps to open URLs
-                },
-              ),
-            ),
-          ],
+    return Markdown(
+      data: data,
+      shrinkWrap: true,
+      styleSheet: styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+      builders: {
+        'blockquote': _AnnotationBlockquoteBuilder(
+          onLineTapped: onLineTapped,
+          sourceLines: data.split('\n'),
         ),
-      ],
+      },
+      onTapLink: (text, href, title) {
+        // Allow link taps to open URLs
+      },
     );
-  }
-
-  void _showCommentSheet(String selectedText) {
-    // Find ALL occurrences of the selected text in the document
-    final lines = widget.data.split('\n');
-    List<int> matchingLineIndices = [];
-
-    for (int i = 0; i < lines.length; i++) {
-      if (lines[i].contains(selectedText)) {
-        matchingLineIndices.add(i);
-      }
-    }
-
-    // Use first match
-    final lineIndex = matchingLineIndices.isNotEmpty ? matchingLineIndices.first : 0;
-
-    // Clear selection and call onLineTapped
-    setState(() {
-      _selectedText = '';
-    });
-
-    widget.onLineTapped(lineIndex, selectedText, lineIndex + 1);
   }
 
   MarkdownStyleSheet _buildAnnotationStyleSheet(

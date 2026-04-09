@@ -28,6 +28,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   DocumentContent? _document;
   bool _loading = true;
   String? _error;
+  String _selectedText = '';
 
   String get _filename {
     final parts = widget.path.split('/');
@@ -80,6 +81,23 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         });
       }
     }
+  }
+
+  void _showCommentSheet(String selectedText) {
+    final lines = _document?.content?.split('\n') ?? [];
+    List<int> matchingLineIndices = [];
+
+    for (int i = 0; i < lines.length; i++) {
+      if (lines[i].contains(selectedText)) {
+        matchingLineIndices.add(i);
+      }
+    }
+
+    final lineIndex = matchingLineIndices.isNotEmpty ? matchingLineIndices.first : 0;
+    setState(() {
+      _selectedText = '';
+    });
+    _onLineTapped(lineIndex, selectedText, lineIndex + 1);
   }
 
   void _onLineTapped(int lineIndex, String selectedText, int lineNumber) {
@@ -155,10 +173,18 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (_selectedText.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.comment),
+              tooltip: 'Add Comment',
+              onPressed: () => _showCommentSheet(_selectedText),
+            ),
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: 'Add Section',
-            onPressed: _onAddSection,
+            tooltip: _selectedText.isNotEmpty ? 'Add Comment' : 'Add Section',
+            onPressed: _selectedText.isNotEmpty
+                ? () => _showCommentSheet(_selectedText)
+                : _onAddSection,
           ),
         ],
       ),
@@ -204,12 +230,88 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Widget _buildMarkdown(String content) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: MarkdownWithAnnotations(
-        data: content,
-        onLineTapped: _onLineTapped,
-      ),
+    final lines = content.split('\n');
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Show selected text if any
+        if (_selectedText.isNotEmpty)
+          GestureDetector(
+            onTap: () => _showCommentSheet(_selectedText),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.comment_outlined, size: 16, color: Colors.amber.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Comment on: "$_selectedText"',
+                      style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.add, size: 16, color: Colors.amber.shade700),
+                ],
+              ),
+            ),
+          ),
+        // Line numbers + Markdown side by side
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tappable line numbers
+              SizedBox(
+                width: 40,
+                child: ListView.builder(
+                  itemCount: lines.length,
+                  itemExtent: 24, // Fixed height per line
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedText = lines[index];
+                        });
+                      },
+                      child: Container(
+                        height: 24,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          '${index + 1}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // Markdown content
+              Expanded(
+                child: SingleChildScrollView(
+                  child: MarkdownWithAnnotations(
+                    data: content,
+                    onLineTapped: _onLineTapped,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
