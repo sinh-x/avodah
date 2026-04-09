@@ -217,12 +217,8 @@ class _TapAwareMarkdownBodyState extends State<_TapAwareMarkdownBody> {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: print data length to confirm content is being received
-    debugPrint('MarkdownWithAnnotations.build: data length = ${widget.data.length}');
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        debugPrint('LayoutBuilder constraints: $constraints');
         return GestureDetector(
           onTapUp: (details) => _handleTap(details.localPosition),
           behavior: HitTestBehavior.opaque,
