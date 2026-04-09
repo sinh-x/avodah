@@ -18,7 +18,7 @@ final _annotationPattern = RegExp(r'^##\s+(\d+):\s+(.*)$');
 /// ```dart
 /// MarkdownWithAnnotations(
 ///   data: markdownContent,
-///   onLineTapped: (lineIndex, lineText) {
+///   onLineTapped: (lineIndex, lineText, lineNumber) {
 ///     // Show inline comment sheet
 ///   },
 /// )
@@ -28,8 +28,8 @@ class MarkdownWithAnnotations extends StatefulWidget {
   final String data;
 
   /// Called when the user taps a line or paragraph of rendered markdown.
-  /// Passes the 0-based line index and the text content of that line.
-  final void Function(int lineIndex, String lineText) onLineTapped;
+  /// Passes the 0-based line index, the tapped text, and the 1-based line number.
+  final void Function(int lineIndex, String tappedText, int lineNumber) onLineTapped;
 
   /// Optional style for annotation markers. Falls back to default amber
   /// blockquote styling.
@@ -56,7 +56,6 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       const TextStyle(height: 1.5),
     );
     final lines = widget.data.split('\n');
-    final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,20 +141,25 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
   }
 
   void _showCommentSheet(String selectedText) {
-    // Find the line index of the selected text
+    // Find ALL occurrences of the selected text in the document
     final lines = widget.data.split('\n');
-    int lineIndex = 0;
+    List<int> matchingLineIndices = [];
+
     for (int i = 0; i < lines.length; i++) {
-      if (lines[i].contains(selectedText) || selectedText.contains(lines[i])) {
-        lineIndex = i;
-        break;
+      if (lines[i].contains(selectedText)) {
+        matchingLineIndices.add(i);
       }
     }
 
-    widget.onLineTapped(lineIndex, lines[lineIndex]);
+    // Use first match
+    final lineIndex = matchingLineIndices.isNotEmpty ? matchingLineIndices.first : 0;
+
+    // Clear selection and call onLineTapped
     setState(() {
       _selectedText = '';
     });
+
+    widget.onLineTapped(lineIndex, selectedText, lineIndex + 1);
   }
 
   MarkdownStyleSheet _buildAnnotationStyleSheet(
@@ -188,7 +192,7 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
 
 /// Custom builder for blockquote elements that detects annotation markers.
 class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
-  final void Function(int lineIndex, String lineText) onLineTapped;
+  final void Function(int lineIndex, String tappedText, int lineNumber) onLineTapped;
   final List<String> sourceLines;
 
   _AnnotationBlockquoteBuilder({
@@ -250,4 +254,3 @@ class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
     );
   }
 }
-

@@ -82,7 +82,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
   }
 
-  void _onLineTapped(int lineIndex, String lineText) {
+  void _onLineTapped(int lineIndex, String selectedText, int lineNumber) {
     final lines = _document?.content?.split('\n') ?? [];
     final surroundingText =
         lineIndex > 0 ? lines[lineIndex - 1] : (lineIndex < lines.length - 1 ? lines[lineIndex + 1] : null);
@@ -91,9 +91,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       context: context,
       isScrollControlled: true,
       builder: (_) => InlineCommentSheet(
-        contextText: lineText,
+        contextText: selectedText,
         surroundingText: surroundingText,
-        onSubmit: (comment) => _submitInlineComment(lineIndex + 1, lineText, comment),
+        onSubmit: (comment) => _submitInlineComment(lineNumber, selectedText, comment),
       ),
     );
   }
