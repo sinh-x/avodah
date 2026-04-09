@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_commits.dart';
+import '../models/repo_diff.dart';
 import '../services/agent_api_client.dart';
 import '../utils/date_helpers.dart';
-import 'commit_diff_screen.dart';
+import '../widgets/diff_widgets.dart';
 
 /// Screen showing paginated commit history for a specific branch.
 ///
@@ -35,6 +36,7 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   static const int _limit = 20;
   int _total = 0;
   final ScrollController _scrollController = ScrollController();
+  final Map<String, RepoDiff?> _diffCache = {};
 
   @override
   void initState() {
@@ -129,18 +131,29 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
     await _loadCommits();
   }
 
-  void _navigateToCommitDiff(RepoCommit commit) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CommitDiffScreen(
-          apiClient: widget.apiClient,
-          repoKey: widget.repoKey,
-          commitSha: commit.hash,
-          commitMessage: commit.message,
-        ),
-      ),
-    );
+  Future<void> _loadDiff(String commitHash) async {
+    if (_diffCache.containsKey(commitHash)) return;
+
+    try {
+      final diff = await widget.apiClient.getRepoDiff(widget.repoKey, commitHash);
+      if (mounted) {
+        setState(() {
+          _diffCache[commitHash] = diff;
+        });
+      }
+    } on AgentApiException {
+      if (mounted) {
+        setState(() {
+          _diffCache[commitHash] = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _diffCache[commitHash] = null;
+        });
+      }
+    }
   }
 
   @override
@@ -200,10 +213,12 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _CommitTile(
+          return _ExpandableCommitTile(
             commit: _commits[index],
             repoKey: widget.repoKey,
-            onTap: () => _navigateToCommitDiff(_commits[index]),
+            apiClient: widget.apiClient,
+            diffCache: _diffCache,
+            onExpand: () => _loadDiff(_commits[index].hash),
           );
         },
       ),
@@ -211,94 +226,135 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   }
 }
 
-class _CommitTile extends StatelessWidget {
+class _ExpandableCommitTile extends StatefulWidget {
   final RepoCommit commit;
   final String repoKey;
-  final VoidCallback onTap;
+  final AgentApiClient apiClient;
+  final Map<String, RepoDiff?> diffCache;
+  final VoidCallback onExpand;
 
-  const _CommitTile({
+  const _ExpandableCommitTile({
     required this.commit,
     required this.repoKey,
-    required this.onTap,
+    required this.apiClient,
+    required this.diffCache,
+    required this.onExpand,
   });
+
+  @override
+  State<_ExpandableCommitTile> createState() => _ExpandableCommitTileState();
+}
+
+class _ExpandableCommitTileState extends State<_ExpandableCommitTile> {
+  bool _isExpanded = false;
+
+  void _handleTap() {
+    final wasExpanded = _isExpanded;
+    setState(() {
+      _isExpanded = !_isExpanded;
+    });
+    if (!wasExpanded) {
+      widget.onExpand();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final diff = commit.diffSummary;
+    final diff = widget.commit.diffSummary;
+    final cachedDiff = widget.diffCache[widget.commit.hash];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Card(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top row: hash_short + date
-                Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Collapsed header (always visible, tappable)
+            InkWell(
+              onTap: _handleTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      commit.hashShort,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontFamily: 'monospace',
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      formatDateShort(commit.date),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-
-                // Middle: commit message (first line)
-                Text(
-                  commit.message,
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-
-                // Bottom row: author name + diff summary
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        commit.authorName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
+                    // Top row: hash_short + date
+                    Row(
+                      children: [
+                        Text(
+                          widget.commit.hashShort,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const Spacer(),
+                        Text(
+                          formatDateShort(widget.commit.date),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        AnimatedRotation(
+                          turns: _isExpanded ? 0.25 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            Icons.chevron_right,
+                            size: 18,
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 4),
+
+                    // Middle: commit message (first line)
                     Text(
-                      '+${diff.insertions} -${diff.deletions} in ${diff.filesChanged} file${diff.filesChanged == 1 ? '' : 's'}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
+                      widget.commit.message,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: theme.colorScheme.outline,
+                    const SizedBox(height: 6),
+
+                    // Bottom row: author name + diff summary
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.commit.authorName,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '+${diff.insertions} -${diff.deletions} in ${diff.filesChanged} file${diff.filesChanged == 1 ? '' : 's'}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
+
+            // Expanded: diff view (lazy-loaded)
+            if (_isExpanded)
+              cachedDiff == null
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : DiffView(diff: cachedDiff),
+          ],
         ),
       ),
     );
