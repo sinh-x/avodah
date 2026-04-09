@@ -206,15 +206,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   Widget _buildMarkdown(String content) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MarkdownWithAnnotations(
-            data: content,
-            onLineTapped: _onLineTapped,
-          ),
-        ],
+      child: MarkdownWithAnnotations(
+        data: content,
+        onLineTapped: _onLineTapped,
       ),
     );
   }

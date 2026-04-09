@@ -23,7 +23,7 @@ final _annotationPattern = RegExp(r'^##\s+(\d+):\s+(.*)$');
 ///   },
 /// )
 /// ```
-class MarkdownWithAnnotations extends StatefulWidget {
+class MarkdownWithAnnotations extends StatelessWidget {
   /// The markdown content to render.
   final String data;
 
@@ -43,35 +43,40 @@ class MarkdownWithAnnotations extends StatefulWidget {
   });
 
   @override
-  State<MarkdownWithAnnotations> createState() =>
-      _MarkdownWithAnnotationsState();
-}
-
-class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
-  /// Cached list of source lines for tap resolution.
-  List<String> get _sourceLines => widget.data.split('\n');
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final defaultStyleSheet = theme.textTheme.bodyMedium?.merge(
       const TextStyle(height: 1.5),
     );
 
-    return Markdown(
-      data: widget.data,
-      styleSheet: widget.styleSheet ??
-          _buildAnnotationStyleSheet(context, defaultStyleSheet),
-      builders: {
-        'blockquote': _AnnotationBlockquoteBuilder(
-          onLineTapped: widget.onLineTapped,
-          sourceLines: _sourceLines,
-        ),
-      },
-      onTapLink: (text, href, title) {
-        // Allow link taps to open URLs
-      },
+    return GestureDetector(
+      onTapUp: (details) => _handleTap(context, details.localPosition),
+      behavior: HitTestBehavior.opaque,
+      child: Markdown(
+        data: data,
+        shrinkWrap: true,
+        styleSheet: styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+        builders: {
+          'blockquote': _AnnotationBlockquoteBuilder(
+            onLineTapped: onLineTapped,
+            sourceLines: data.split('\n'),
+          ),
+        },
+        onTapLink: (text, href, title) {
+          // Allow link taps to open URLs
+        },
+      ),
     );
+  }
+
+  void _handleTap(BuildContext context, Offset localPosition) {
+    // Estimate line based on tap position
+    final lineHeight = Theme.of(context).textTheme.bodyMedium?.fontSize ?? 16 * 1.5;
+    final lineIndex = (localPosition.dy / lineHeight).floor();
+    final lines = data.split('\n');
+    if (lineIndex >= 0 && lineIndex < lines.length) {
+      onLineTapped(lineIndex, lines[lineIndex]);
+    }
   }
 
   MarkdownStyleSheet _buildAnnotationStyleSheet(
@@ -79,8 +84,6 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
     TextStyle? baseStyle,
   ) {
     final theme = Theme.of(context);
-
-    // Amber accent for annotation markers (distinct from regular quotes)
     const amberAccent = Color(0xFFFFC107);
     final amberLight = Colors.amber.shade50;
 
