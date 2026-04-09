@@ -100,9 +100,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
   Future<void> _submitInlineComment(int lineNumber, String lineText, String comment) async {
     try {
-      // Use appendSection with line-aware title format
-      final title = '## $lineNumber: ${lineText.length > 40 ? '${lineText.substring(0, 40)}...' : lineText}';
-      await widget.client.appendSection(widget.path, title, comment);
+      await widget.client.appendInlineSection(widget.path, lineText, comment, lineNumber);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Comment added')),
