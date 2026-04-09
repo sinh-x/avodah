@@ -89,9 +89,16 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       return;
     }
 
-    final lines = _document?.content?.split('\n') ?? [];
     debugPrint('_showCommentSheet: selectedText="$selectedText"');
-    debugPrint('_showCommentSheet: total lines=${lines.length}');
+    debugPrint('_showCommentSheet: _document hash=${_document.hashCode}, path=${widget.path}');
+
+    final lines = _document?.content?.split('\n') ?? [];
+    debugPrint('_showCommentSheet: _document?.content?.split lines count=${lines.length}');
+    debugPrint('_showCommentSheet: full document content length=${_document?.content?.length ?? 0}');
+
+    if (_document?.content == null) {
+      debugPrint('_showCommentSheet: _document.content is NULL!');
+    }
 
     List<int> matchingLineIndices = [];
 
