@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_git_info.dart';
+import '../screens/branch_list_screen.dart';
 
 /// A collapsible section showing repository git information.
 ///
@@ -284,6 +285,42 @@ class _RepoInfoBody extends StatelessWidget {
           ),
           ..._buildFeatureBranches(context),
         ],
+
+        // All Branches navigation
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BranchListScreen(repoKey: repoGitInfo.repo.key),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.list, size: 14, color: theme.colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'View All Branches',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right, size: 14, color: theme.colorScheme.primary),
+                ],
+              ),
+            ),
+          ),
+        ),
 
         // Errors, if any
         if (repoGitInfo.errors.isNotEmpty) ...[

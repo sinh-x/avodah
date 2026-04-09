@@ -7,6 +7,7 @@ import '../utils/date_helpers.dart';
 import '../utils/deploy_helpers.dart';
 import 'activity_timeline_screen.dart';
 import 'branch_detail_screen.dart';
+import 'branch_list_screen.dart';
 
 /// Repository detail screen showing git info and deployment history.
 ///
@@ -178,6 +179,7 @@ class _RepoDetailScreenState extends State<RepoDetailScreen> {
 
             // Feature Branches Section
             _FeatureBranchesSection(
+              repoKey: widget.repoKey,
               branches: gitInfo.featureBranches,
               onBranchTap: (branch) => _navigateToBranch(context, branch),
             ),
@@ -508,10 +510,12 @@ class _AheadBehindBadge extends StatelessWidget {
 
 /// Feature branches section with list of branch tiles.
 class _FeatureBranchesSection extends StatelessWidget {
+  final String repoKey;
   final List<FeatureBranch> branches;
   final void Function(FeatureBranch) onBranchTap;
 
   const _FeatureBranchesSection({
+    required this.repoKey,
     required this.branches,
     required this.onBranchTap,
   });
@@ -603,6 +607,23 @@ class _FeatureBranchesSection extends StatelessWidget {
               );
             },
           ),
+
+        // View All Branches button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BranchListScreen(repoKey: repoKey),
+                ),
+              );
+            },
+            icon: const Icon(Icons.account_tree, size: 18),
+            label: const Text('View All Branches'),
+          ),
+        ),
       ],
     );
   }

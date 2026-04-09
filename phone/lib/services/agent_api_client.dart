@@ -11,6 +11,9 @@ import '../models/deploy_result.dart';
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
 import '../models/focus_item.dart';
+import '../models/repo_branches.dart';
+import '../models/repo_commits.dart';
+import '../models/repo_diff.dart';
 import '../models/repo_git_info.dart';
 import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
@@ -528,6 +531,45 @@ class AgentApiClient {
     return deployments
         .map((e) => Deployment.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Fetch branch list for a repository.
+  ///
+  /// GET /api/repos/:key/branches → RepoBranches
+  Future<RepoBranches> getRepoBranches(String key) async {
+    final encoded = Uri.encodeComponent(key);
+    final response = await _get('/api/repos/$encoded/branches');
+    return RepoBranches.fromJson(response);
+  }
+
+  /// Fetch commit history for a repository branch.
+  ///
+  /// GET /api/repos/:key/commits?branch=X&limit=Y&offset=Z → RepoCommits
+  Future<RepoCommits> getRepoCommits(
+    String key,
+    String branch, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      'branch': branch,
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    final encoded = Uri.encodeComponent(key);
+    final query = '?${Uri(queryParameters: params).query}';
+    final response = await _get('/api/repos/$encoded/commits$query');
+    return RepoCommits.fromJson(response);
+  }
+
+  /// Fetch the diff for a specific commit.
+  ///
+  /// GET /api/repos/:key/diff?commit=<sha> → RepoDiff
+  Future<RepoDiff> getRepoDiff(String key, String commitSha) async {
+    final encoded = Uri.encodeComponent(key);
+    final query = '?commit=${Uri.encodeComponent(commitSha)}';
+    final response = await _get('/api/repos/$encoded/diff$query');
+    return RepoDiff.fromJson(response);
   }
 
   // --- Tickets ---
