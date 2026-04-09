@@ -172,7 +172,7 @@ class AgentApiClient {
       await _post(
         '/api/folders/$encodedFolder/files/$encodedFile/sections',
         body: {
-          'title': title, // reference line
+          'title': '', // empty title - just insert content after reference line
           'content': commentLine,
           'location': lineNumber,
         },
