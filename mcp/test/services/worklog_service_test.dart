@@ -28,22 +28,24 @@ void main() {
     });
 
     test('returns summary with multiple worklogs', () async {
-      final now = DateTime.now();
-      final today =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      // Use fixed noon time to avoid day-boundary failures when test runs near midnight UTC
+      final today = DateTime.now();
+      final noon = DateTime(today.year, today.month, today.day, 12, 0, 0);
+      final todayStr =
+          '${noon.year}-${noon.month.toString().padLeft(2, '0')}-${noon.day.toString().padLeft(2, '0')}';
 
       // Create worklogs for today
       final w1 = WorklogDocument.create(
         clock: clock,
         taskId: 'task-1',
-        start: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
-        end: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        start: noon.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        end: noon.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
       );
       final w2 = WorklogDocument.create(
         clock: clock,
         taskId: 'task-2',
-        start: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
-        end: now.millisecondsSinceEpoch,
+        start: noon.subtract(const Duration(hours: 1)).millisecondsSinceEpoch,
+        end: noon.millisecondsSinceEpoch,
       );
 
       await db
@@ -55,7 +57,7 @@ void main() {
 
       final summary = await service.todaySummary();
 
-      expect(summary.date, equals(today));
+      expect(summary.date, equals(todayStr));
       expect(summary.tasks, hasLength(2));
       expect(summary.total.inMinutes, greaterThan(0));
     });

@@ -53,7 +53,7 @@ class WorklogDocument extends CrdtDocument<WorklogDocument> {
     doc.startMs = start;
     doc.endMs = end;
     doc.durationMs = end - start;
-    doc.date = _dateFromMs(start);
+    doc.date = _dateFromMs(end);
     doc.comment = comment;
     doc.category = category;
     final now = DateTime.now().millisecondsSinceEpoch;
