@@ -84,16 +84,53 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   void _showCommentSheet(String selectedText) {
+    if (selectedText.isEmpty) return;
+
     final lines = _document?.content?.split('\n') ?? [];
     List<int> matchingLineIndices = [];
 
+    // Try exact match first
     for (int i = 0; i < lines.length; i++) {
       if (lines[i].contains(selectedText)) {
         matchingLineIndices.add(i);
       }
     }
 
-    final lineIndex = matchingLineIndices.isNotEmpty ? matchingLineIndices.first : 0;
+    // If no exact match, try partial word match
+    if (matchingLineIndices.isEmpty) {
+      final words = selectedText.split(' ').where((w) => w.length > 3).toList();
+      for (int i = 0; i < lines.length; i++) {
+        for (final word in words) {
+          if (lines[i].toLowerCase().contains(word.toLowerCase())) {
+            matchingLineIndices.add(i);
+            break; // Only add once per line
+          }
+        }
+      }
+    }
+
+    // If still no match, use first non-empty line
+    if (matchingLineIndices.isEmpty) {
+      for (int i = 0; i < lines.length; i++) {
+        if (lines[i].trim().isNotEmpty) {
+          matchingLineIndices.add(i);
+          break;
+        }
+      }
+    }
+
+    // If still empty, can't determine line - abort
+    if (matchingLineIndices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find line for comment')),
+      );
+      setState(() {
+        _selectedText = '';
+      });
+      return;
+    }
+
+    final lineIndex = matchingLineIndices.first;
     setState(() {
       _selectedText = '';
     });
