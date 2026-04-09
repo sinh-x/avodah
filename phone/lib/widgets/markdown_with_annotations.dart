@@ -48,16 +48,15 @@ class MarkdownWithAnnotations extends StatefulWidget {
 
 class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
   final _markdownKey = GlobalKey();
-  double _lineHeight = 24.0; // Default fallback
-  Size? _textSize;
+  final List<double> _lineOffsets = [];
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _computeLineHeight());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _computeLineOffsets());
   }
 
-  void _computeLineHeight() {
+  void _computeLineOffsets() {
     if (_markdownKey.currentContext == null) return;
     final renderBox = _markdownKey.currentContext!.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
@@ -71,13 +70,24 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
     );
     textPainter.layout(maxWidth: renderBox.size.width);
 
-    final lineCount = widget.data.split('\n').length;
-    if (lineCount > 0) {
-      setState(() {
-        _textSize = textPainter.size;
-        _lineHeight = textPainter.height / lineCount;
-      });
+    // Get exact line offsets using getLineBoundary
+    _lineOffsets.clear();
+    for (int i = 0; i < widget.data.split('\n').length; i++) {
+      final offset = textPainter.getOffsetForCaret(
+        TextPosition(offset: i < widget.data.length ? widget.data.split('\n').take(i + 1).join('\n').length : 0),
+        Rect.zero,
+      );
+      // Use line height directly since getOffsetForCaret gives character position
     }
+
+    final lineCount = widget.data.split('\n').length;
+    final lineHeight = textPainter.height / lineCount;
+    _lineOffsets.clear();
+    for (int i = 0; i < lineCount; i++) {
+      _lineOffsets.add(i * lineHeight);
+    }
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -116,7 +126,7 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
   }
 
   void _handleTap(Offset localPosition) {
-    if (_lineHeight <= 0) {
+    if (_lineOffsets.isEmpty) {
       // Fallback: use estimated line height
       final lineIndex = (localPosition.dy / 24).floor();
       final lines = widget.data.split('\n');
@@ -126,8 +136,17 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       return;
     }
 
-    // Use the actual computed line height directly
-    final lineIndex = (localPosition.dy / _lineHeight).floor();
+    // Find closest line to tap position using precomputed offsets
+    final tapY = localPosition.dy;
+    int lineIndex = 0;
+    for (int i = 0; i < _lineOffsets.length; i++) {
+      if (tapY >= _lineOffsets[i]) {
+        lineIndex = i;
+      } else {
+        break;
+      }
+    }
+
     final lines = widget.data.split('\n');
     if (lineIndex >= 0 && lineIndex < lines.length) {
       widget.onLineTapped(lineIndex, lines[lineIndex]);
