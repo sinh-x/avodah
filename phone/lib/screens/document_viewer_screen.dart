@@ -158,6 +158,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     if (lineIndex < lines.length) {
       debugPrint('_onLineTapped: line content: "${lines[lineIndex]}"');
     }
+    final surroundingText =
         lineIndex > 0 ? lines[lineIndex - 1] : (lineIndex < lines.length - 1 ? lines[lineIndex + 1] : null);
 
     showModalBottomSheet<void>(
