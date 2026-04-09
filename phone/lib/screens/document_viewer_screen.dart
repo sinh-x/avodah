@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../services/agent_api_client.dart';
+import '../widgets/inline_comment_sheet.dart';
+import '../widgets/markdown_with_annotations.dart';
 
 /// Full-screen document viewer.
 ///
 /// Fetches the document at [path] via [AgentApiClient.getDocument] and renders
-/// it based on file type: markdown (.md/.markdown) → [MarkdownBody],
+/// it based on file type: markdown (.md/.markdown) → [MarkdownWithAnnotations],
 /// directory → entry list. PDF and image viewing require a raw binary API
 /// endpoint (PA-902) and show an informative placeholder until then.
 class DocumentViewerScreen extends StatefulWidget {
@@ -81,6 +82,71 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
   }
 
+  void _onLineTapped(int lineIndex, String lineText) {
+    final lines = _document?.content?.split('\n') ?? [];
+    final surroundingText =
+        lineIndex > 0 ? lines[lineIndex - 1] : (lineIndex < lines.length - 1 ? lines[lineIndex + 1] : null);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => InlineCommentSheet(
+        contextText: lineText,
+        surroundingText: surroundingText,
+        onSubmit: (comment) => _submitInlineComment(lineIndex + 1, lineText, comment),
+      ),
+    );
+  }
+
+  Future<void> _submitInlineComment(int lineNumber, String lineText, String comment) async {
+    try {
+      // Use appendSection with line-aware title format
+      final title = '## $lineNumber: ${lineText.length > 40 ? '${lineText.substring(0, 40)}...' : lineText}';
+      await widget.client.appendSection(widget.path, title, comment);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Comment added')),
+        );
+        _loadDocument(); // Refresh
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add comment: $e')),
+        );
+      }
+    }
+  }
+
+  void _onAddSection() async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => const _AddSectionDialog(),
+    );
+
+    if (result == null || !mounted) return;
+
+    try {
+      await widget.client.appendSection(
+        widget.path,
+        result['title']!,
+        result['content']!,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Section added')),
+        );
+        _loadDocument(); // Refresh
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add section: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,6 +156,13 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Section',
+            onPressed: _onAddSection,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -135,9 +208,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   Widget _buildMarkdown(String content) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: MarkdownBody(
+      child: MarkdownWithAnnotations(
         data: content,
-        selectable: true,
+        onLineTapped: _onLineTapped,
       ),
     );
   }
@@ -192,6 +265,83 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _AddSectionDialog extends StatefulWidget {
+  const _AddSectionDialog();
+
+  @override
+  State<_AddSectionDialog> createState() => _AddSectionDialogState();
+}
+
+class _AddSectionDialogState extends State<_AddSectionDialog> {
+  final _titleController = TextEditingController();
+  final _contentController = TextEditingController();
+
+  bool get _canAdd =>
+      _titleController.text.trim().isNotEmpty &&
+      _contentController.text.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Section'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Section title'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. "Follow-up Notes"',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 16),
+            const Text('Section content'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _contentController,
+              decoration: const InputDecoration(
+                hintText: 'Enter markdown content...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+              minLines: 3,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _canAdd
+              ? () => Navigator.pop(context, {
+                    'title': _titleController.text.trim(),
+                    'content': _contentController.text.trim(),
+                  })
+              : null,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }
