@@ -84,26 +84,36 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   void _showCommentSheet(String selectedText) {
-    if (selectedText.isEmpty) return;
+    if (selectedText.isEmpty) {
+      debugPrint('_showCommentSheet: selectedText is empty');
+      return;
+    }
 
     final lines = _document?.content?.split('\n') ?? [];
+    debugPrint('_showCommentSheet: selectedText="$selectedText"');
+    debugPrint('_showCommentSheet: total lines=${lines.length}');
+
     List<int> matchingLineIndices = [];
 
     // Try exact match first
     for (int i = 0; i < lines.length; i++) {
       if (lines[i].contains(selectedText)) {
+        debugPrint('_showCommentSheet: exact match at line $i: "${lines[i]}"');
         matchingLineIndices.add(i);
       }
     }
 
     // If no exact match, try partial word match
     if (matchingLineIndices.isEmpty) {
+      debugPrint('_showCommentSheet: no exact match, trying partial word match');
       final words = selectedText.split(' ').where((w) => w.length > 3).toList();
+      debugPrint('_showCommentSheet: words to try: $words');
       for (int i = 0; i < lines.length; i++) {
         for (final word in words) {
           if (lines[i].toLowerCase().contains(word.toLowerCase())) {
+            debugPrint('_showCommentSheet: partial match at line $i: "${lines[i]}"');
             matchingLineIndices.add(i);
-            break; // Only add once per line
+            break;
           }
         }
       }
@@ -111,8 +121,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
     // If still no match, use first non-empty line
     if (matchingLineIndices.isEmpty) {
+      debugPrint('_showCommentSheet: no partial match, finding first non-empty line');
       for (int i = 0; i < lines.length; i++) {
         if (lines[i].trim().isNotEmpty) {
+          debugPrint('_showCommentSheet: first non-empty line $i: "${lines[i]}"');
           matchingLineIndices.add(i);
           break;
         }
@@ -121,6 +133,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
     // If still empty, can't determine line - abort
     if (matchingLineIndices.isEmpty) {
+      debugPrint('_showCommentSheet: FAILED to find any matching line');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not find line for comment')),
       );
@@ -131,6 +144,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
 
     final lineIndex = matchingLineIndices.first;
+    debugPrint('_showCommentSheet: USING lineIndex=$lineIndex (line ${lineIndex + 1})');
     setState(() {
       _selectedText = '';
     });
@@ -138,8 +152,12 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   void _onLineTapped(int lineIndex, String selectedText, int lineNumber) {
+    debugPrint('_onLineTapped: lineIndex=$lineIndex, selectedText="$selectedText", lineNumber=$lineNumber');
     final lines = _document?.content?.split('\n') ?? [];
-    final surroundingText =
+    debugPrint('_onLineTapped: document has ${lines.length} lines');
+    if (lineIndex < lines.length) {
+      debugPrint('_onLineTapped: line content: "${lines[lineIndex]}"');
+    }
         lineIndex > 0 ? lines[lineIndex - 1] : (lineIndex < lines.length - 1 ? lines[lineIndex + 1] : null);
 
     showModalBottomSheet<void>(
