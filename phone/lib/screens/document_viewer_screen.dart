@@ -230,13 +230,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Widget _buildMarkdown(String content) {
-    final lines = content.split('\n');
-    final theme = Theme.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Show selected text if any
+        // Selected text indicator
         if (_selectedText.isNotEmpty)
           GestureDetector(
             onTap: () => _showCommentSheet(_selectedText),
@@ -260,55 +257,24 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(Icons.add, size: 16, color: Colors.amber.shade700),
                 ],
               ),
             ),
           ),
-        // Line numbers + Markdown side by side
+        // Markdown content with long press to select
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Tappable line numbers
-              SizedBox(
-                width: 40,
-                child: ListView.builder(
-                  itemCount: lines.length,
-                  itemExtent: 24, // Fixed height per line
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedText = lines[index];
-                        });
-                      },
-                      child: Container(
-                        height: 24,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Text(
-                          '${index + 1}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // Markdown content
-              Expanded(
-                child: SingleChildScrollView(
-                  child: MarkdownWithAnnotations(
-                    data: content,
-                    onLineTapped: _onLineTapped,
-                  ),
-                ),
-              ),
-            ],
+          child: SelectionArea(
+            onSelectionChanged: (selection) {
+              if (selection != null && selection.plainText.isNotEmpty) {
+                setState(() {
+                  _selectedText = selection.plainText;
+                });
+              }
+            },
+            child: MarkdownWithAnnotations(
+              data: content,
+              onLineTapped: _onLineTapped,
+            ),
           ),
         ),
       ],
