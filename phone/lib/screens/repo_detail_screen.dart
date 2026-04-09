@@ -182,6 +182,7 @@ class _RepoDetailScreenState extends State<RepoDetailScreen> {
               repoKey: widget.repoKey,
               branches: gitInfo.featureBranches,
               onBranchTap: (branch) => _navigateToBranch(context, branch),
+              apiClient: widget.apiClient,
             ),
 
             // Deployments Section
@@ -201,7 +202,11 @@ class _RepoDetailScreenState extends State<RepoDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BranchDetailScreen(branch: branch),
+        builder: (_) => BranchDetailScreen(
+          repoKey: widget.repoKey,
+          branch: branch,
+          apiClient: widget.apiClient,
+        ),
       ),
     );
   }
@@ -513,11 +518,13 @@ class _FeatureBranchesSection extends StatelessWidget {
   final String repoKey;
   final List<FeatureBranch> branches;
   final void Function(FeatureBranch) onBranchTap;
+  final AgentApiClient apiClient;
 
   const _FeatureBranchesSection({
     required this.repoKey,
     required this.branches,
     required this.onBranchTap,
+    required this.apiClient,
   });
 
   @override
@@ -616,7 +623,7 @@ class _FeatureBranchesSection extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => BranchListScreen(repoKey: repoKey),
+                  builder: (_) => BranchListScreen(repoKey: repoKey, apiClient: apiClient),
                 ),
               );
             },
