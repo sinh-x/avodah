@@ -201,7 +201,10 @@ class _RepoDetailScreenState extends State<RepoDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BranchDetailScreen(branch: branch),
+        builder: (_) => BranchDetailScreen(
+          repoKey: widget.repoKey,
+          branch: branch,
+        ),
       ),
     );
   }
