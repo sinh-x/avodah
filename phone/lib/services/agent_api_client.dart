@@ -144,17 +144,15 @@ class AgentApiClient {
   /// Append an inline comment section to a document at a specific line number.
   ///
   /// Uses the PA-1119 location-aware endpoint: POST /api/folders/:folderId/files/:fileId/sections
-  /// Falls back to appending at end with location encoded in title if endpoint unavailable.
+  /// Inserts a blockquote comment after the reference line.
+  /// Format: "> [!NOTE] Sinh comment: <content> <timestamp>"
   Future<void> appendInlineSection(
     String path,
-    String title,
-    String content,
+    String title, // The reference line text
+    String content, // User's comment
     int lineNumber,
   ) async {
     // Parse path into folderId and fileId
-    // path format: agent-teams/requirements/artifacts/filename.md
-    // folderId: agent-teams/requirements/artifacts
-    // fileId: filename.md
     final parts = path.split('/');
     if (parts.length < 2) {
       throw AgentApiException(400, 'Invalid path format: $path');
@@ -166,18 +164,22 @@ class AgentApiClient {
     final encodedFolder = Uri.encodeComponent(folderId);
     final encodedFile = Uri.encodeComponent(fileId);
 
+    // Format: > [!NOTE] Sinh comment: <content> <timestamp>
+    final timestamp = DateTime.now().toIso8601String();
+    final commentLine = '> [!NOTE] Sinh comment: $content $timestamp';
+
     try {
       await _post(
         '/api/folders/$encodedFolder/files/$encodedFile/sections',
         body: {
-          'title': '## $lineNumber: $title',
-          'content': content,
+          'title': title, // reference line
+          'content': commentLine,
           'location': lineNumber,
         },
       );
     } catch (e) {
-      // Fallback: use append-section at end with location in title
-      await appendSection(path, '## $lineNumber: $title', content);
+      // Fallback: use append-section at end
+      throw AgentApiException(500, 'Failed to add inline comment: $e');
     }
   }
 

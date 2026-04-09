@@ -87,20 +87,24 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       const TextStyle(height: 1.5),
     );
 
-    return Markdown(
-      key: _markdownKey,
-      data: widget.data,
-      shrinkWrap: true,
-      styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-      builders: {
-        'blockquote': _AnnotationBlockquoteBuilder(
-          onLineTapped: widget.onLineTapped,
-          sourceLines: widget.data.split('\n'),
-        ),
-      },
-      onTapLink: (text, href, title) {
-        // Allow link taps to open URLs
-      },
+    return GestureDetector(
+      onTapUp: (details) => _handleTap(details.localPosition),
+      behavior: HitTestBehavior.translucent,
+      child: Markdown(
+        key: _markdownKey,
+        data: widget.data,
+        shrinkWrap: true,
+        styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+        builders: {
+          'blockquote': _AnnotationBlockquoteBuilder(
+            onLineTapped: widget.onLineTapped,
+            sourceLines: widget.data.split('\n'),
+          ),
+        },
+        onTapLink: (text, href, title) {
+          // Allow link taps to open URLs
+        },
+      ),
     );
   }
 
