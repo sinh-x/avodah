@@ -60,6 +60,7 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
 
     return Markdown(
       data: widget.data,
+      shrinkWrap: true,
       styleSheet: widget.styleSheet ??
           _buildAnnotationStyleSheet(context, defaultStyleSheet),
       builders: {
