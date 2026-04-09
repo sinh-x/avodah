@@ -47,6 +47,8 @@ class MarkdownWithAnnotations extends StatefulWidget {
 }
 
 class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
+  String _selectedText = '';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -56,43 +58,104 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
     final lines = widget.data.split('\n');
     final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16;
 
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Line numbers column - use RichText with same style as markdown for alignment
-        SizedBox(
-          width: 32,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: RichText(
-              text: TextSpan(
-                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                children: List.generate(lines.length, (index) {
-                  return TextSpan(text: '${index + 1}\n');
-                }),
+        // Show selected text if any
+        if (_selectedText.isNotEmpty)
+          GestureDetector(
+            onTap: () => _showCommentSheet(_selectedText),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.comment_outlined, size: 16, color: Colors.amber.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Comment on: "$_selectedText"',
+                      style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.add, size: 16, color: Colors.amber.shade700),
+                ],
               ),
             ),
           ),
-        ),
-        // Markdown content
-        Expanded(
-          child: Markdown(
-            data: widget.data,
-            shrinkWrap: true,
-            styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-            builders: {
-              'blockquote': _AnnotationBlockquoteBuilder(
-                onLineTapped: widget.onLineTapped,
-                sourceLines: lines,
+        // Line numbers + Markdown
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Line numbers column
+            SizedBox(
+              width: 32,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: RichText(
+                  text: TextSpan(
+                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                    children: List.generate(lines.length, (index) {
+                      return TextSpan(text: '${index + 1}\n');
+                    }),
+                  ),
+                ),
               ),
-            },
-            onTapLink: (text, href, title) {
-              // Allow link taps to open URLs
-            },
-          ),
+            ),
+            // Markdown content - selectable
+            Expanded(
+              child: SelectionArea(
+                onSelectionChanged: (selection) {
+                  if (selection != null && selection.plainText.isNotEmpty) {
+                    setState(() {
+                      _selectedText = selection.plainText;
+                    });
+                  }
+                },
+                child: Markdown(
+                  data: widget.data,
+                  shrinkWrap: true,
+                  styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+                  builders: {
+                    'blockquote': _AnnotationBlockquoteBuilder(
+                      onLineTapped: widget.onLineTapped,
+                      sourceLines: lines,
+                    ),
+                  },
+                  onTapLink: (text, href, title) {
+                    // Allow link taps to open URLs
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  void _showCommentSheet(String selectedText) {
+    // Find the line index of the selected text
+    final lines = widget.data.split('\n');
+    int lineIndex = 0;
+    for (int i = 0; i < lines.length; i++) {
+      if (lines[i].contains(selectedText) || selectedText.contains(lines[i])) {
+        lineIndex = i;
+        break;
+      }
+    }
+
+    widget.onLineTapped(lineIndex, lines[lineIndex]);
+    setState(() {
+      _selectedText = '';
+    });
   }
 
   MarkdownStyleSheet _buildAnnotationStyleSheet(
