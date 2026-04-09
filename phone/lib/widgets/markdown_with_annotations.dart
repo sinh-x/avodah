@@ -23,7 +23,7 @@ final _annotationPattern = RegExp(r'^##\s+(\d+):\s+(.*)$');
 ///   },
 /// )
 /// ```
-class MarkdownWithAnnotations extends StatelessWidget {
+class MarkdownWithAnnotations extends StatefulWidget {
   /// The markdown content to render.
   final String data;
 
@@ -43,6 +43,44 @@ class MarkdownWithAnnotations extends StatelessWidget {
   });
 
   @override
+  State<MarkdownWithAnnotations> createState() => _MarkdownWithAnnotationsState();
+}
+
+class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
+  final _markdownKey = GlobalKey();
+  double _lineHeight = 24.0; // Default fallback
+  Size? _textSize;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _computeLineHeight());
+  }
+
+  void _computeLineHeight() {
+    if (_markdownKey.currentContext == null) return;
+    final renderBox = _markdownKey.currentContext!.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: widget.data,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(maxWidth: renderBox.size.width);
+
+    final lineCount = widget.data.split('\n').length;
+    if (lineCount > 0) {
+      setState(() {
+        _textSize = textPainter.size;
+        _lineHeight = textPainter.height / lineCount;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final defaultStyleSheet = theme.textTheme.bodyMedium?.merge(
@@ -50,16 +88,17 @@ class MarkdownWithAnnotations extends StatelessWidget {
     );
 
     return GestureDetector(
-      onTapUp: (details) => _handleTap(context, details.localPosition),
+      onTapUp: (details) => _handleTap(details.localPosition),
       behavior: HitTestBehavior.opaque,
       child: Markdown(
-        data: data,
-        shrinkWrap: true,
-        styleSheet: styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+        key: _markdownKey,
+        data: widget.data,
+        shrinkWrap: false,
+        styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
         builders: {
           'blockquote': _AnnotationBlockquoteBuilder(
-            onLineTapped: onLineTapped,
-            sourceLines: data.split('\n'),
+            onLineTapped: widget.onLineTapped,
+            sourceLines: widget.data.split('\n'),
           ),
         },
         onTapLink: (text, href, title) {
@@ -69,13 +108,21 @@ class MarkdownWithAnnotations extends StatelessWidget {
     );
   }
 
-  void _handleTap(BuildContext context, Offset localPosition) {
-    // Estimate line based on tap position
-    final lineHeight = Theme.of(context).textTheme.bodyMedium?.fontSize ?? 16 * 1.5;
-    final lineIndex = (localPosition.dy / lineHeight).floor();
-    final lines = data.split('\n');
+  void _handleTap(Offset localPosition) {
+    if (_textSize == null || _lineHeight <= 0) return;
+
+    // Scale tap position based on actual rendered size vs available width
+    final renderBox = _markdownKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final availableWidth = renderBox.size.width;
+    final scale = availableWidth > 0 ? (_textSize!.width / availableWidth) : 1.0;
+    final scaledY = localPosition.dy * scale;
+
+    final lineIndex = (scaledY / _lineHeight).floor();
+    final lines = widget.data.split('\n');
     if (lineIndex >= 0 && lineIndex < lines.length) {
-      onLineTapped(lineIndex, lines[lineIndex]);
+      widget.onLineTapped(lineIndex, lines[lineIndex]);
     }
   }
 
