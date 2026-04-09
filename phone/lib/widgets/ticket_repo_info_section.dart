@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/repo_git_info.dart';
 import '../screens/branch_list_screen.dart';
+import '../services/agent_api_client.dart';
 
 /// A collapsible section showing repository git information.
 ///
@@ -20,12 +21,16 @@ class TicketRepoInfoSection extends StatelessWidget {
   /// The ticket ID used to highlight related branches.
   final String ticketId;
 
+  /// The API client for making git requests.
+  final AgentApiClient apiClient;
+
   const TicketRepoInfoSection({
     super.key,
     this.repoGitInfo,
     this.isLoading = false,
     this.error,
     required this.ticketId,
+    required this.apiClient,
   });
 
   @override
@@ -37,6 +42,7 @@ class TicketRepoInfoSection extends StatelessWidget {
         isLoading: isLoading,
         error: error,
         ticketId: ticketId,
+        apiClient: apiClient,
       ),
     );
   }
@@ -47,12 +53,14 @@ class _SectionContent extends StatefulWidget {
   final bool isLoading;
   final String? error;
   final String ticketId;
+  final AgentApiClient apiClient;
 
   const _SectionContent({
     this.repoGitInfo,
     required this.isLoading,
     this.error,
     required this.ticketId,
+    required this.apiClient,
   });
 
   @override
@@ -165,6 +173,7 @@ class _SectionContentState extends State<_SectionContent> {
     return _RepoInfoBody(
       repoGitInfo: widget.repoGitInfo!,
       ticketId: widget.ticketId,
+      apiClient: widget.apiClient,
     );
   }
 }
@@ -217,10 +226,12 @@ class _BranchStatusBadge extends StatelessWidget {
 class _RepoInfoBody extends StatelessWidget {
   final RepoGitInfo repoGitInfo;
   final String ticketId;
+  final AgentApiClient apiClient;
 
   const _RepoInfoBody({
     required this.repoGitInfo,
     required this.ticketId,
+    required this.apiClient,
   });
 
   @override
@@ -295,7 +306,7 @@ class _RepoInfoBody extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => BranchListScreen(repoKey: repoGitInfo.repo.key),
+                  builder: (_) => BranchListScreen(repoKey: repoGitInfo.repo.key, apiClient: apiClient),
                 ),
               );
             },

@@ -11,8 +11,9 @@ import 'commit_history_screen.dart';
 /// Supports pull-to-refresh. Tapping a branch navigates to [CommitHistoryScreen].
 class BranchListScreen extends StatefulWidget {
   final String repoKey;
+  final AgentApiClient apiClient;
 
-  const BranchListScreen({super.key, required this.repoKey});
+  const BranchListScreen({super.key, required this.repoKey, required this.apiClient});
 
   @override
   State<BranchListScreen> createState() => _BranchListScreenState();
@@ -36,9 +37,7 @@ class _BranchListScreenState extends State<BranchListScreen> {
     });
 
     try {
-      final branches = await AgentApiClient.fromWsUrl(
-        'ws://localhost:9847',
-      ).getRepoBranches(widget.repoKey);
+      final branches = await widget.apiClient.getRepoBranches(widget.repoKey);
 
       if (mounted) {
         setState(() {
@@ -136,6 +135,7 @@ class _BranchListScreenState extends State<BranchListScreen> {
         builder: (_) => CommitHistoryScreen(
           repoKey: widget.repoKey,
           branch: branch.name,
+          apiClient: widget.apiClient,
         ),
       ),
     );

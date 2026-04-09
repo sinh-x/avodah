@@ -13,11 +13,13 @@ import 'commit_diff_screen.dart';
 class CommitHistoryScreen extends StatefulWidget {
   final String repoKey;
   final String branch;
+  final AgentApiClient apiClient;
 
   const CommitHistoryScreen({
     super.key,
     required this.repoKey,
     required this.branch,
+    required this.apiClient,
   });
 
   @override
@@ -62,9 +64,7 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
     });
 
     try {
-      final result = await AgentApiClient.fromWsUrl(
-        'ws://localhost:9847',
-      ).getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: 0);
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: 0);
 
       if (mounted) {
         setState(() {
@@ -100,9 +100,7 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
     });
 
     try {
-      final result = await AgentApiClient.fromWsUrl(
-        'ws://localhost:9847',
-      ).getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: _offset);
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: _offset);
 
       if (mounted) {
         setState(() {
