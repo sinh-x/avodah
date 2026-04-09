@@ -99,6 +99,14 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
           .getDeploymentActivity(widget.deployment.deploymentId);
       if (mounted) {
         setState(() {
+          events.sort((a, b) {
+            final aTime = a.timestamp;
+            final bTime = b.timestamp;
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+            return aTime.compareTo(bTime);
+          });
           _events = events;
           _loading = false;
           _error = null;
