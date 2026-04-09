@@ -141,6 +141,23 @@ class AgentApiClient {
         body: {'action': 'append-section', 'title': title, 'content': content});
   }
 
+  /// Append an inline comment section to a document at a specific line number.
+  ///
+  /// For MVP: delegates to [appendSection] with title prefixed by line number
+  /// using the `## N: title` convention.
+  ///
+  /// When PA-1119 server endpoint is available, this can be updated to use
+  /// the `lineNumber` parameter directly for precise placement.
+  Future<void> appendInlineSection(
+    String path,
+    String title,
+    String content,
+    int lineNumber,
+  ) async {
+    final prefixedTitle = '## $lineNumber: $title';
+    await appendSection(path, prefixedTitle, content);
+  }
+
   /// Fetch feedback chip labels from server config.
   ///
   /// Returns empty list if config is missing or malformed.
