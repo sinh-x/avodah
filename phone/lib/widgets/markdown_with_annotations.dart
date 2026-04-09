@@ -58,15 +58,19 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       const TextStyle(height: 1.5),
     );
 
-    return _TapAwareMarkdownBody(
+    return Markdown(
       data: widget.data,
       styleSheet: widget.styleSheet ??
           _buildAnnotationStyleSheet(context, defaultStyleSheet),
-      annotationBuilder: _AnnotationBlockquoteBuilder(
-        onLineTapped: widget.onLineTapped,
-        sourceLines: _sourceLines,
-      ),
-      onLineTapped: widget.onLineTapped,
+      builders: {
+        'blockquote': _AnnotationBlockquoteBuilder(
+          onLineTapped: widget.onLineTapped,
+          sourceLines: _sourceLines,
+        ),
+      },
+      onTapLink: (text, href, title) {
+        // Allow link taps to open URLs
+      },
     );
   }
 
@@ -165,83 +169,3 @@ class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// Internal widget that wraps Markdown with gesture-based tap detection.
-///
-/// Uses [LayoutBuilder] to get constraints and [GestureDetector] to capture
-/// taps, mapping them to line indices based on the text layout.
-class _TapAwareMarkdownBody extends StatefulWidget {
-  final String data;
-  final MarkdownStyleSheet? styleSheet;
-  final MarkdownElementBuilder annotationBuilder;
-  final void Function(int lineIndex, String lineText) onLineTapped;
-
-  const _TapAwareMarkdownBody({
-    required this.data,
-    this.styleSheet,
-    required this.annotationBuilder,
-    required this.onLineTapped,
-  });
-
-  @override
-  State<_TapAwareMarkdownBody> createState() => _TapAwareMarkdownBodyState();
-}
-
-class _TapAwareMarkdownBodyState extends State<_TapAwareMarkdownBody> {
-  final _markdownKey = GlobalKey();
-  double _lineHeight = 0;
-  List<String> get _lines => widget.data.split('\n');
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _computeLineHeight());
-  }
-
-  void _computeLineHeight() {
-    if (_markdownKey.currentContext == null) return;
-    final renderBox = _markdownKey.currentContext!.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: widget.data,
-        style: widget.styleSheet?.p ?? Theme.of(context).textTheme.bodyMedium,
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(maxWidth: renderBox.size.width);
-    setState(() {
-      _lineHeight = textPainter.preferredLineHeight;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GestureDetector(
-          onTapUp: (details) => _handleTap(details.localPosition),
-          behavior: HitTestBehavior.opaque,
-          child: Markdown(
-            key: _markdownKey,
-            data: widget.data,
-            selectable: false,
-            styleSheet: widget.styleSheet,
-            builders: {
-              'blockquote': widget.annotationBuilder,
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  void _handleTap(Offset localPosition) {
-    if (_lineHeight <= 0) return;
-
-    final lineIndex = (localPosition.dy / _lineHeight).floor();
-    if (lineIndex >= 0 && lineIndex < _lines.length) {
-      widget.onLineTapped(lineIndex, _lines[lineIndex]);
-    }
-  }
-}
