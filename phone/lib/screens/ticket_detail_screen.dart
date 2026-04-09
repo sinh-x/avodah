@@ -1278,6 +1278,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             error: _repoError,
             ticketId: ticket.id,
             apiClient: widget.boardProvider.client,
+            linkedBranches: ticket.linkedBranches,
+            linkedCommits: ticket.linkedCommits,
           ),
           const SizedBox(height: 8),
           // Tags — tappable

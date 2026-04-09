@@ -100,6 +100,64 @@ class SubTicket {
   }
 }
 
+class LinkedBranch {
+  final String repo;
+  final String branch;
+  final String sha;
+  final String? linkedAt;
+  final String? linkedBy;
+
+  const LinkedBranch({
+    required this.repo,
+    required this.branch,
+    required this.sha,
+    this.linkedAt,
+    this.linkedBy,
+  });
+
+  factory LinkedBranch.fromJson(Map<String, dynamic> json) {
+    return LinkedBranch(
+      repo: json['repo'] as String? ?? '',
+      branch: json['branch'] as String? ?? '',
+      sha: json['sha'] as String? ?? '',
+      linkedAt: json['linkedAt'] as String?,
+      linkedBy: json['linkedBy'] as String?,
+    );
+  }
+}
+
+class LinkedCommit {
+  final String repo;
+  final String sha;
+  final String message;
+  final String author;
+  final String? timestamp;
+  final String? linkedAt;
+  final String? linkedBy;
+
+  const LinkedCommit({
+    required this.repo,
+    required this.sha,
+    required this.message,
+    required this.author,
+    this.timestamp,
+    this.linkedAt,
+    this.linkedBy,
+  });
+
+  factory LinkedCommit.fromJson(Map<String, dynamic> json) {
+    return LinkedCommit(
+      repo: json['repo'] as String? ?? '',
+      sha: json['sha'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      author: json['author'] as String? ?? '',
+      timestamp: json['timestamp'] as String?,
+      linkedAt: json['linkedAt'] as String?,
+      linkedBy: json['linkedBy'] as String?,
+    );
+  }
+}
+
 class Ticket {
   final String id; // e.g. "PA-001"
   final String project;
@@ -119,6 +177,8 @@ class Ticket {
   final List<DocRef> docRefs;
   final List<TicketComment> comments;
   final List<SubTicket> subTickets;
+  final List<LinkedBranch> linkedBranches;
+  final List<LinkedCommit> linkedCommits;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? resolvedAt;
@@ -142,6 +202,8 @@ class Ticket {
     required this.docRefs,
     required this.comments,
     required this.subTickets,
+    this.linkedBranches = const [],
+    this.linkedCommits = const [],
     required this.createdAt,
     required this.updatedAt,
     this.resolvedAt,
@@ -151,6 +213,8 @@ class Ticket {
     final tagsList = json['tags'] as List? ?? [];
     final commentsList = json['comments'] as List? ?? [];
     final subTicketsList = json['subTickets'] as List? ?? [];
+    final linkedBranchesList = json['linkedBranches'] as List? ?? [];
+    final linkedCommitsList = json['linkedCommits'] as List? ?? [];
 
     // blockedBy: try new field first, fall back to deprecated dependencies
     final blockedByRaw =
@@ -197,6 +261,12 @@ class Ticket {
           .toList(),
       subTickets: subTicketsList
           .map((e) => SubTicket.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      linkedBranches: linkedBranchesList
+          .map((e) => LinkedBranch.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      linkedCommits: linkedCommitsList
+          .map((e) => LinkedCommit.fromJson(e as Map<String, dynamic>))
           .toList(),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),

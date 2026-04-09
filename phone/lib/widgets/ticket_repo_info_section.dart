@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_git_info.dart';
+import '../models/ticket.dart';
 import '../screens/branch_detail_screen.dart';
 import '../screens/branch_list_screen.dart';
+import '../screens/commit_diff_screen.dart';
 import '../services/agent_api_client.dart';
 
 /// A collapsible section showing repository git information.
@@ -25,6 +27,12 @@ class TicketRepoInfoSection extends StatelessWidget {
   /// The API client for making git requests.
   final AgentApiClient apiClient;
 
+  /// Linked branches from the PA ticket system.
+  final List<LinkedBranch> linkedBranches;
+
+  /// Linked commits from the PA ticket system.
+  final List<LinkedCommit> linkedCommits;
+
   const TicketRepoInfoSection({
     super.key,
     this.repoGitInfo,
@@ -32,6 +40,8 @@ class TicketRepoInfoSection extends StatelessWidget {
     this.error,
     required this.ticketId,
     required this.apiClient,
+    this.linkedBranches = const [],
+    this.linkedCommits = const [],
   });
 
   @override
@@ -44,6 +54,8 @@ class TicketRepoInfoSection extends StatelessWidget {
         error: error,
         ticketId: ticketId,
         apiClient: apiClient,
+        linkedBranches: linkedBranches,
+        linkedCommits: linkedCommits,
       ),
     );
   }
@@ -55,6 +67,8 @@ class _SectionContent extends StatefulWidget {
   final String? error;
   final String ticketId;
   final AgentApiClient apiClient;
+  final List<LinkedBranch> linkedBranches;
+  final List<LinkedCommit> linkedCommits;
 
   const _SectionContent({
     this.repoGitInfo,
@@ -62,6 +76,8 @@ class _SectionContent extends StatefulWidget {
     this.error,
     required this.ticketId,
     required this.apiClient,
+    required this.linkedBranches,
+    required this.linkedCommits,
   });
 
   @override
@@ -175,6 +191,8 @@ class _SectionContentState extends State<_SectionContent> {
       repoGitInfo: widget.repoGitInfo!,
       ticketId: widget.ticketId,
       apiClient: widget.apiClient,
+      linkedBranches: widget.linkedBranches,
+      linkedCommits: widget.linkedCommits,
     );
   }
 }
@@ -228,11 +246,15 @@ class _RepoInfoBody extends StatelessWidget {
   final RepoGitInfo repoGitInfo;
   final String ticketId;
   final AgentApiClient apiClient;
+  final List<LinkedBranch> linkedBranches;
+  final List<LinkedCommit> linkedCommits;
 
   const _RepoInfoBody({
     required this.repoGitInfo,
     required this.ticketId,
     required this.apiClient,
+    required this.linkedBranches,
+    required this.linkedCommits,
   });
 
   @override
@@ -326,6 +348,14 @@ class _RepoInfoBody extends StatelessWidget {
           ),
           ..._buildFeatureBranches(context),
         ],
+
+        // Linked Branches & Commits from PA ticket system
+        _LinkedBranchesCommitsSection(
+          repoKey: repoGitInfo.repo.key,
+          linkedBranches: linkedBranches,
+          linkedCommits: linkedCommits,
+          apiClient: apiClient,
+        ),
 
         // All Branches navigation
         const SizedBox(height: 4),
@@ -816,3 +846,250 @@ class _MergedBranchRow extends StatelessWidget {
     );
   }
 }
+
+/// Shows linked branches and commits from the PA ticket system.
+/// Filters by repo and only shows when the filtered list is non-empty.
+class _LinkedBranchesCommitsSection extends StatelessWidget {
+  final String repoKey;
+  final List<LinkedBranch> linkedBranches;
+  final List<LinkedCommit> linkedCommits;
+  final AgentApiClient apiClient;
+
+  const _LinkedBranchesCommitsSection({
+    required this.repoKey,
+    required this.linkedBranches,
+    required this.linkedCommits,
+    required this.apiClient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredBranches = linkedBranches
+        .where((lb) => lb.repo == repoKey)
+        .toList();
+    final filteredCommits = linkedCommits
+        .where((lc) => lc.repo == repoKey)
+        .toList();
+
+    if (filteredBranches.isEmpty && filteredCommits.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 4),
+          child: Text(
+            'Linked Branches & Commits',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        ...filteredBranches.map((lb) => _LinkedBranchRow(
+              linkedBranch: lb,
+              apiClient: apiClient,
+            )),
+        ...filteredCommits.map((lc) => _LinkedCommitRow(
+              linkedCommit: lc,
+              apiClient: apiClient,
+            )),
+      ],
+    );
+  }
+}
+
+/// A single linked branch row. Tapping navigates to BranchDetailScreen.
+class _LinkedBranchRow extends StatelessWidget {
+  final LinkedBranch linkedBranch;
+  final AgentApiClient apiClient;
+
+  const _LinkedBranchRow({
+    required this.linkedBranch,
+    required this.apiClient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Semantics(
+      label: 'Linked branch ${linkedBranch.branch}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BranchDetailScreen(
+                  repoKey: linkedBranch.repo,
+                  branch: FeatureBranch(
+                    name: linkedBranch.branch,
+                    latestCommit: BranchCommit(
+                      hash: linkedBranch.sha,
+                      hashShort: null,
+                      message: '',
+                      date: '',
+                    ),
+                  ),
+                  apiClient: apiClient,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.call_split,
+                  size: 14,
+                  color: theme.colorScheme.secondary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        linkedBranch.branch,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (linkedBranch.linkedBy != null)
+                        Text(
+                          'linked by ${linkedBranch.linkedBy}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                            fontSize: 10,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: theme.colorScheme.outline,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single linked commit row. Tapping navigates to CommitDiffScreen.
+class _LinkedCommitRow extends StatelessWidget {
+  final LinkedCommit linkedCommit;
+  final AgentApiClient apiClient;
+
+  const _LinkedCommitRow({
+    required this.linkedCommit,
+    required this.apiClient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final shortSha = linkedCommit.sha.length > 7
+        ? linkedCommit.sha.substring(0, 7)
+        : linkedCommit.sha;
+
+    return Semantics(
+      label: 'Linked commit $shortSha',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CommitDiffScreen(
+                  apiClient: apiClient,
+                  repoKey: linkedCommit.repo,
+                  commitSha: linkedCommit.sha,
+                  commitMessage: linkedCommit.message,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.commit,
+                  size: 14,
+                  color: theme.colorScheme.tertiary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              shortSha,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              linkedCommit.message,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'by ${linkedCommit.author}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: theme.colorScheme.outline,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
