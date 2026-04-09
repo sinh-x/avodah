@@ -263,17 +263,20 @@ class BoardView {
   final List<BoardColumn> columns;
   final int total;
   final Map<String, int> teamCounts;
+  final Map<String, int> assigneeCounts;
 
   const BoardView({
     required this.project,
     required this.columns,
     required this.total,
     required this.teamCounts,
+    required this.assigneeCounts,
   });
 
   factory BoardView.fromJson(Map<String, dynamic> json) {
     final columnsList = json['columns'] as List? ?? [];
     final teamCountsRaw = json['teamCounts'] as Map<String, dynamic>? ?? {};
+    final assigneeCountsRaw = json['assigneeCounts'] as Map<String, dynamic>? ?? {};
     return BoardView(
       project: json['project'] as String? ?? '',
       columns: columnsList
@@ -281,6 +284,7 @@ class BoardView {
           .toList(),
       total: json['total'] as int? ?? 0,
       teamCounts: teamCountsRaw.map((k, v) => MapEntry(k, v as int)),
+      assigneeCounts: assigneeCountsRaw.map((k, v) => MapEntry(k, v as int)),
     );
   }
 }

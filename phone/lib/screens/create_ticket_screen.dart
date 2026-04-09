@@ -35,7 +35,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   String _selectedStatus = 'requirement-review';
 
   final _titleController = TextEditingController();
-  String? _selectedTeam;
+  String? _selectedAssignee;
   final _freeformSummaryController = TextEditingController();
   final GlobalKey<GuidedSummaryFieldsState> _guidedFieldsKey =
       GlobalKey<GuidedSummaryFieldsState>();
@@ -90,8 +90,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       }
       final status = draft.status;
       if (status != null) _selectedStatus = status;
-      final team = draft.team;
-      if (team != null) _selectedTeam = team;
+      final assignee = draft.assignee;
+      if (assignee != null) _selectedAssignee = assignee;
       final priority = draft.priority;
       if (priority != null) _selectedPriority = priority;
       final estimate = draft.estimate;
@@ -144,7 +144,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       title: _titleController.text,
       typeName: _selectedType.name,
       status: _selectedStatus,
-      team: _selectedTeam,
+      assignee: _selectedAssignee,
       priority: _selectedPriority,
       estimate: _selectedEstimate,
       guidedValues: guidedState?.getValues() ?? {},
@@ -171,7 +171,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
       _selectedPriority = 'medium';
       _selectedEstimate = null;
       _selectedStatus = 'requirement-review';
-      _selectedTeam = null;
+      _selectedAssignee = null;
     });
   }
 
@@ -207,8 +207,8 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         'doc_refs': [],
         'status': _selectedStatus,
       };
-      if (_selectedTeam != null && _selectedTeam!.isNotEmpty) {
-        body['team'] = _selectedTeam;
+      if (_selectedAssignee != null && _selectedAssignee!.isNotEmpty) {
+        body['assignee'] = _selectedAssignee;
       }
       if (assembledSummary.isNotEmpty) {
         body['summary'] = assembledSummary;
@@ -396,14 +396,14 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Team — dropdown populated from API
+            // Assignee — dropdown populated from API
             FutureBuilder<List<AgentTeam>>(
               future: _teamsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return InputDecorator(
                     decoration: const InputDecoration(
-                      labelText: 'Team',
+                      labelText: 'Assignee',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -432,15 +432,15 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                       )),
                 ];
                 return DropdownButtonFormField<String?>(
-                  initialValue: _selectedTeam,
+                  initialValue: _selectedAssignee,
                   decoration: const InputDecoration(
-                    labelText: 'Team',
+                    labelText: 'Assignee',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: items,
                   onChanged: (v) {
-                    setState(() => _selectedTeam = v);
+                    setState(() => _selectedAssignee = v);
                     _saveDraft();
                   },
                 );

@@ -135,7 +135,7 @@ void main() {
     });
 
     group('date handling', () {
-      test('date is extracted from start time', () {
+      test('date is extracted from end time', () {
         final start = DateTime(2026, 2, 9, 14, 30);
         final end = DateTime(2026, 2, 9, 15, 30);
 

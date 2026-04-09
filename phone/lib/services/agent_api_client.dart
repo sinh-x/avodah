@@ -554,15 +554,15 @@ class AgentApiClient {
 
   /// Get the kanban board view for a project.
   ///
-  /// GET /api/board?project=X&team=Y&excludeTags=backlog,archived&excludeTypes=fyi,work-report → {"board": {...}}
+  /// GET /api/board?project=X&assignee=Y&excludeTags=backlog,archived&excludeTypes=fyi,work-report → {"board": {...}}
   /// Always excludes backlog/archived tickets and fyi/work-report types to match CLI defaults.
-  Future<BoardView> getBoard({required String project, String? team}) async {
+  Future<BoardView> getBoard({required String project, String? assignee}) async {
     final params = <String, String>{
       'project': project,
       'excludeTags': 'backlog,archived',
       'excludeTypes': 'fyi,work-report',
     };
-    if (team != null) params['team'] = team;
+    if (assignee != null) params['assignee'] = assignee;
     final query = '?${Uri(queryParameters: params).query}';
     final response = await _get('/api/board$query');
     return BoardView.fromJson(response['board'] as Map<String, dynamic>);
@@ -588,10 +588,10 @@ class AgentApiClient {
 
   /// List tickets with optional filters.
   ///
-  /// GET /api/tickets?project=X&team=Y&status=Z → {"tickets": [...], "count": N}
+  /// GET /api/tickets?project=X&assignee=Y&status=Z → {"tickets": [...], "count": N}
   Future<List<Ticket>> listTickets({
     String? project,
-    String? team,
+    String? assignee,
     String? status,
     String? priority,
     String? type,
@@ -601,7 +601,7 @@ class AgentApiClient {
   }) async {
     final params = <String, String>{};
     if (project != null) params['project'] = project;
-    if (team != null) params['team'] = team;
+    if (assignee != null) params['assignee'] = assignee;
     if (status != null) params['status'] = status;
     if (priority != null) params['priority'] = priority;
     if (type != null) params['type'] = type;

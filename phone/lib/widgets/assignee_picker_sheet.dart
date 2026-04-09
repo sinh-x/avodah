@@ -3,41 +3,41 @@ import 'package:flutter/material.dart';
 import '../models/agent_team.dart';
 import '../services/agent_api_client.dart';
 
-/// A bottom sheet for picking a team from the available agent teams.
+/// A bottom sheet for picking an assignee from the available agent teams.
 ///
 /// Fetches the team list from [AgentApiClient.listAgentTeams]. Shows a
 /// loading indicator while fetching and falls back to an empty list on error.
 ///
-/// Includes a "None" sentinel item to allow clearing the team field.
+/// Includes a "None" sentinel item to allow clearing the assignee field.
 ///
 /// Usage:
 /// ```dart
 /// showModalBottomSheet(
 ///   context: context,
-///   builder: (_) => TeamPickerSheet(
+///   builder: (_) => AssigneePickerSheet(
 ///     client: boardProvider.client,
-///     currentTeam: ticket.team,
-///     onSelect: (team) { _saveField('team', team); },
+///     currentAssignee: ticket.assignee,
+///     onSelect: (assignee) { _saveField('assignee', assignee); },
 ///   ),
 /// );
 /// ```
-class TeamPickerSheet extends StatefulWidget {
+class AssigneePickerSheet extends StatefulWidget {
   final AgentApiClient client;
-  final String? currentTeam;
-  final void Function(String? team) onSelect;
+  final String? currentAssignee;
+  final void Function(String? assignee) onSelect;
 
-  const TeamPickerSheet({
+  const AssigneePickerSheet({
     super.key,
     required this.client,
-    this.currentTeam,
+    this.currentAssignee,
     required this.onSelect,
   });
 
   @override
-  State<TeamPickerSheet> createState() => _TeamPickerSheetState();
+  State<AssigneePickerSheet> createState() => _AssigneePickerSheetState();
 }
 
-class _TeamPickerSheetState extends State<TeamPickerSheet> {
+class _AssigneePickerSheetState extends State<AssigneePickerSheet> {
   List<AgentTeam> _teams = [];
   bool _loading = true;
   String? _error;
@@ -57,7 +57,7 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
         _loading = false;
       });
     } catch (e) {
-      debugPrint('TeamPickerSheet: failed to fetch teams: $e');
+      debugPrint('AssigneePickerSheet: failed to fetch teams: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -87,7 +87,7 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'Select Team',
+              'Select Assignee',
               style: theme.textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
@@ -106,7 +106,7 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
               ),
             ),
           ] else ...[
-            // None option to clear the team field (always visible)
+            // None option to clear the assignee field (always visible)
             ListTile(
               leading: Icon(Icons.clear, color: theme.colorScheme.outline),
               title: Text(
@@ -115,10 +115,10 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
                   color: theme.colorScheme.outline,
                 ),
               ),
-              trailing: widget.currentTeam == null
+              trailing: widget.currentAssignee == null
                   ? Icon(Icons.check, color: theme.colorScheme.primary)
                   : null,
-              selected: widget.currentTeam == null,
+              selected: widget.currentAssignee == null,
               selectedColor: theme.colorScheme.primary,
               onTap: () {
                 widget.onSelect(null);
@@ -132,7 +132,7 @@ class _TeamPickerSheetState extends State<TeamPickerSheet> {
                 itemCount: _teams.length,
                 itemBuilder: (context, index) {
                   final team = _teams[index];
-                  final isSelected = team.name == widget.currentTeam;
+                  final isSelected = team.name == widget.currentAssignee;
                   return ListTile(
                     leading: Icon(
                       Icons.group_outlined,

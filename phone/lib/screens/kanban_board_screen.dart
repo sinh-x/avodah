@@ -236,8 +236,8 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
     final projectItems = provider.projects.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
-    final teams = provider.board != null
-        ? (provider.board!.teamCounts.keys.toList()..sort())
+    final assignees = provider.board != null
+        ? (provider.board!.assigneeCounts.keys.toList()..sort())
         : <String>[];
 
     return Column(
@@ -293,20 +293,20 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       : null,
                 ),
               ],
-              if (teams.isNotEmpty) ...[
+              if (assignees.isNotEmpty) ...[
                 const SizedBox(width: 12),
                 FilterChip(
                   label: const Text('All'),
-                  selected: provider.selectedTeam == null,
-                  onSelected: (_) => provider.setTeam(null),
+                  selected: provider.selectedAssignee == null,
+                  onSelected: (_) => provider.setAssignee(null),
                 ),
-                ...teams.map((team) => Padding(
+                ...assignees.map((assignee) => Padding(
                       padding: const EdgeInsets.only(left: 6),
                       child: FilterChip(
-                        label: Text(team),
-                        selected: provider.selectedTeam == team,
-                        onSelected: (_) => provider.setTeam(
-                            provider.selectedTeam == team ? null : team),
+                        label: Text(assignee),
+                        selected: provider.selectedAssignee == assignee,
+                        onSelected: (_) => provider.setAssignee(
+                            provider.selectedAssignee == assignee ? null : assignee),
                       ),
                     )),
               ],
@@ -529,7 +529,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       if (index == currentIndex) {
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: WipSummaryWidget(wip: wip!),
+                          child: WipSummaryWidget(wip: wip),
                         );
                       }
                       currentIndex += 1;

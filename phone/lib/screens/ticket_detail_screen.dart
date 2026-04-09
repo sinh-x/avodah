@@ -13,7 +13,7 @@ import '../widgets/deploy_sheet.dart';
 import '../widgets/estimate_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
-import '../widgets/team_picker_sheet.dart';
+import '../widgets/assignee_picker_sheet.dart';
 import '../widgets/no_select_text_field.dart';
 import '../widgets/text_input_sheet.dart';
 import '../widgets/ticket_deployments_section.dart';
@@ -372,29 +372,15 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
-  void _openTeamSheet(Ticket ticket) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => TeamPickerSheet(
-        client: widget.boardProvider.client,
-        currentTeam: ticket.team,
-        onSelect: (team) {
-          _saveField('team', team);
-        },
-      ),
-    );
-  }
-
   void _openAssigneeSheet(Ticket ticket) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => TextInputSheet(
-        label: 'Assignee',
-        initialValue: ticket.assignee,
-        onConfirm: (value) {
-          _saveField('assignee', value);
+      builder: (_) => AssigneePickerSheet(
+        client: widget.boardProvider.client,
+        currentAssignee: ticket.assignee,
+        onSelect: (assignee) {
+          _saveField('assignee', assignee);
         },
       ),
     );
@@ -478,12 +464,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     final routing = _deployRouting!;
     final paTeams = routing.toPaTeams();
 
-    // Auto-suggest team: ticket.team first, then fall back to ticket.assignee.
+    // Auto-suggest team: ticket.assignee only (team field is deprecated).
     String? initialTeam;
-    if (ticket.team != null &&
-        paTeams.any((t) => t.name == ticket.team)) {
-      initialTeam = ticket.team;
-    } else if (ticket.assignee != null &&
+    if (ticket.assignee != null &&
         paTeams.any((t) => t.name == ticket.assignee)) {
       initialTeam = ticket.assignee;
     }
@@ -1154,34 +1137,34 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             ],
           ),
           const SizedBox(height: 10),
-            // Team row — tappable (min 48dp tall for tap target)
-            // Always show (even when null) so user can set a team
+            // Assignee row — tappable (min 48dp tall for tap target)
+            // Always show (even when null) so user can set an assignee
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 48),
               child: _FieldSavingIndicator(
-                isSaving: _savingFields.contains('team'),
+                isSaving: _savingFields.contains('assignee'),
                 child: Semantics(
-                  label: ticket.team != null
-                      ? 'Team: ${ticket.team}. Tap to change.'
-                      : 'Team: not set. Tap to set.',
+                  label: ticket.assignee != null
+                      ? 'Assignee: ${ticket.assignee}. Tap to change.'
+                      : 'Assignee: not set. Tap to set.',
                   button: true,
                   child: InkWell(
-                    onTap: _savingFields.contains('team')
+                    onTap: _savingFields.contains('assignee')
                         ? null
-                        : () => _openTeamSheet(ticket),
+                        : () => _openAssigneeSheet(ticket),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.group_outlined,
+                          Icon(Icons.person_outline,
                               size: 14, color: theme.colorScheme.outline),
                           const SizedBox(width: 4),
                           Text(
-                            ticket.team ?? 'Set team',
+                            ticket.assignee ?? 'Set assignee',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: ticket.team != null
+                              color: ticket.assignee != null
                                   ? null
                                   : theme.colorScheme.outline,
                             ),
@@ -1193,38 +1176,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 ),
               ),
             ),
-            if (ticket.team != null && ticket.assignee != null)
-              const SizedBox(width: 16),
-            // Assignee row — tappable (min 48dp tall for tap target)
-            if (ticket.assignee != null)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: _FieldSavingIndicator(
-                  isSaving: _savingFields.contains('assignee'),
-                  child: Semantics(
-                    label: 'Assignee: ${ticket.assignee}. Tap to change.',
-                    button: true,
-                    child: InkWell(
-                      onTap: _savingFields.contains('assignee')
-                          ? null
-                          : () => _openAssigneeSheet(ticket),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.person_outline,
-                                size: 14, color: theme.colorScheme.outline),
-                            const SizedBox(width: 4),
-                            _AssigneeText(assignee: ticket.assignee!),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           if (ticket.summary != null && ticket.summary!.isNotEmpty) ...[
             const SizedBox(height: 16),
             _SectionLabel('Summary'),
@@ -1619,41 +1570,6 @@ Color _deploymentStatusColor(String status) {
       return Colors.amber;
     default:
       return Colors.grey;
-  }
-}
-
-/// Displays an assignee string with team/agent parsing.
-/// If [assignee] contains '/', renders "team/" in muted text + "agent" in bold.
-class _AssigneeText extends StatelessWidget {
-  final String assignee;
-  const _AssigneeText({required this.assignee});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (!assignee.contains('/')) {
-      return Text(assignee, style: theme.textTheme.bodySmall);
-    }
-    final idx = assignee.indexOf('/');
-    final teamPart = assignee.substring(0, idx + 1); // includes '/'
-    final agentPart = assignee.substring(idx + 1);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          teamPart,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-        Text(
-          agentPart,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
   }
 }
 
