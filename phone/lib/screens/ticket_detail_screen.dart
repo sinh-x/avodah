@@ -14,6 +14,7 @@ import '../widgets/estimate_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
 import '../widgets/assignee_picker_sheet.dart';
+import '../widgets/image_attachment_picker.dart';
 import '../widgets/no_select_text_field.dart';
 import '../widgets/text_input_sheet.dart';
 import '../widgets/ticket_deployments_section.dart';
@@ -67,6 +68,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   // Comment input
   final _commentController = TextEditingController();
+
+  // Image attachment picker key
+  final _imagePickerKey = GlobalKey<ImageAttachmentPickerState>();
 
   @override
   void initState() {
@@ -1229,7 +1233,33 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ),
             ),
           ],
-          // Collapsible sections: Deployments, SubTickets, Repo Info
+          // Image attachments — "Add photo" button + picker
+          const SizedBox(height: 16),
+          _SectionLabel('Attachments'),
+          const SizedBox(height: 8),
+          ImageAttachmentPicker(
+            key: _imagePickerKey,
+            onUpload: (images, ticketId) async {
+              final successes = <String>[];
+              final failures = <String>[];
+              final picker = _imagePickerKey.currentState!;
+              for (var i = 0; i < images.length; i++) {
+                picker.setUploadProgress((i + 0.5) / images.length);
+                try {
+                  final docRef = await widget.boardProvider.client
+                      .uploadAttachment(ticketId, images[i]);
+                  successes.add(docRef);
+                } catch (_) {
+                  failures.add(images[i].path);
+                }
+              }
+              picker.setUploadProgress(1.0);
+              return (successes: successes, failures: failures);
+            },
+            onUploadingChanged: (uploading) {
+              setState(() {});
+            },
+          ),
           const SizedBox(height: 8),
           TicketDeploymentsSection(
             deployments: _ticketDeployments ?? [],
