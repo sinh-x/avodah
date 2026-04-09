@@ -56,50 +56,66 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
     final lines = widget.data.split('\n');
     final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        // Line numbers column
-        SizedBox(
-          width: 32,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(lines.length, (index) {
-                return GestureDetector(
-                  onTap: () => widget.onLineTapped(index, lines[index]),
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    height: lineHeight * 1.5,
-                    child: Text(
-                      '${index + 1}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                        fontSize: 12,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Line numbers column (display only)
+            SizedBox(
+              width: 32,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(lines.length, (index) {
+                    return Container(
+                      height: lineHeight * 1.5,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${index + 1}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-        // Markdown content
-        Expanded(
-          child: Markdown(
-            data: widget.data,
-            shrinkWrap: true,
-            styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-            builders: {
-              'blockquote': _AnnotationBlockquoteBuilder(
-                onLineTapped: widget.onLineTapped,
-                sourceLines: lines,
+                    );
+                  }),
+                ),
               ),
+            ),
+            // Markdown content
+            Expanded(
+              child: Markdown(
+                data: widget.data,
+                shrinkWrap: true,
+                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+                builders: {
+                  'blockquote': _AnnotationBlockquoteBuilder(
+                    onLineTapped: widget.onLineTapped,
+                    sourceLines: lines,
+                  ),
+                },
+                onTapLink: (text, href, title) {
+                  // Allow link taps to open URLs
+                },
+              ),
+            ),
+          ],
+        ),
+        // Tap overlay - use IgnorePointer to let taps pass through for scrolling
+        // but capture taps for line selection
+        Positioned.fill(
+          child: GestureDetector(
+            onTapUp: (details) {
+              // Calculate which line was tapped based on Y position
+              final tapY = details.localPosition.dy;
+              final tappedLine = (tapY / (lineHeight * 1.5)).floor();
+              if (tappedLine >= 0 && tappedLine < lines.length) {
+                widget.onLineTapped(tappedLine, lines[tappedLine]);
+              }
             },
-            onTapLink: (text, href, title) {
-              // Allow link taps to open URLs
-            },
+            behavior: HitTestBehavior.opaque,
           ),
         ),
       ],
