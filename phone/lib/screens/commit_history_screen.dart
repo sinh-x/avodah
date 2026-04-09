@@ -29,6 +29,7 @@ class CommitHistoryScreen extends StatefulWidget {
 
 class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   List<RepoCommit> _commits = [];
+  List<RepoCommit> _filteredCommits = [];
   bool _loading = true;
   String? _error;
   bool _loadingMore = false;
@@ -37,6 +38,20 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   int _total = 0;
   final ScrollController _scrollController = ScrollController();
   final Map<String, RepoDiff?> _diffCache = {};
+
+  /// Extracts ticket key from branch name (e.g., 'AVO-067' from 'feature/AVO-067-branch-commit-ui').
+  /// Returns null if no ticket key can be extracted.
+  String? get _ticketKey {
+    final match = RegExp(r'([A-Z]+-\d+)').firstMatch(widget.branch);
+    return match?.group(1);
+  }
+
+  /// Filters commits by ticket key if available.
+  List<RepoCommit> _filterByTicketKey(List<RepoCommit> commits) {
+    final key = _ticketKey;
+    if (key == null) return commits;
+    return commits.where((c) => c.message.contains(key)).toList();
+  }
 
   @override
   void initState() {
@@ -66,12 +81,15 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
     });
 
     try {
-      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: 0);
+      // Fetch more commits to ensure we have enough after local filtering
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit * 3, offset: 0);
 
       if (mounted) {
+        final filtered = _filterByTicketKey(result.commits);
         setState(() {
           _commits = result.commits;
-          _total = result.meta.total;
+          _filteredCommits = filtered;
+          _total = filtered.length;
           _loading = false;
         });
       }
@@ -94,33 +112,34 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
 
   Future<void> _loadMore() async {
     if (_loadingMore) return;
-    if (_offset + _limit >= _total) return;
 
     setState(() {
       _loadingMore = true;
-      _offset += _limit;
     });
 
     try {
-      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit, offset: _offset);
+      // Fetch more commits and filter locally
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch, limit: _limit * 2, offset: _offset);
 
       if (mounted) {
+        final newFiltered = _filterByTicketKey(result.commits);
         setState(() {
           _commits = [..._commits, ...result.commits];
+          _filteredCommits = [..._filteredCommits, ...newFiltered];
+          _offset += result.commits.length;
+          _total = _filteredCommits.length;
           _loadingMore = false;
         });
       }
     } on AgentApiException {
       if (mounted) {
         setState(() {
-          _offset -= _limit;
           _loadingMore = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _offset -= _limit;
           _loadingMore = false;
         });
       }
@@ -167,11 +186,11 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading && _commits.isEmpty) {
+    if (_loading && _filteredCommits.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_error != null && _commits.isEmpty) {
+    if (_error != null && _filteredCommits.isEmpty) {
       return RefreshIndicator(
         onRefresh: _onRefresh,
         child: ListView(
@@ -205,20 +224,20 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 32),
-        itemCount: _commits.length + (_loadingMore ? 1 : 0),
+        itemCount: _filteredCommits.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index >= _commits.length) {
+          if (index >= _filteredCommits.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
           return _ExpandableCommitTile(
-            commit: _commits[index],
+            commit: _filteredCommits[index],
             repoKey: widget.repoKey,
             apiClient: widget.apiClient,
             diffCache: _diffCache,
-            onExpand: () => _loadDiff(_commits[index].hash),
+            onExpand: () => _loadDiff(_filteredCommits[index].hash),
           );
         },
       ),

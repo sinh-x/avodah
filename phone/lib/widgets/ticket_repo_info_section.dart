@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_git_info.dart';
+import '../screens/branch_detail_screen.dart';
 import '../screens/branch_list_screen.dart';
 import '../services/agent_api_client.dart';
 
@@ -238,9 +239,38 @@ class _RepoInfoBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Find ticket branch from featureBranches
+    final ticketBranch = repoGitInfo.featureBranches
+        .where((b) => _isRelatedBranch(b.name))
+        .firstOrNull;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Ticket Branch - displayed prominently if found
+        if (ticketBranch != null) ...[
+          _TicketBranchRow(
+            branch: ticketBranch,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BranchDetailScreen(
+                    repoKey: repoGitInfo.repo.key,
+                    branch: ticketBranch,
+                    apiClient: apiClient,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ] else ...[
+          // Ticket branch not found - show merged/fallback message
+          _MergedBranchRow(ticketId: ticketId),
+          const SizedBox(height: 8),
+        ],
+
         // Current branch and working directory status
         _InfoRow(
           icon: Icons.call_split,
@@ -343,16 +373,13 @@ class _RepoInfoBody extends StatelessWidget {
   }
 
   List<Widget> _buildFeatureBranches(BuildContext context) {
-    final branches = List<FeatureBranch>.from(repoGitInfo.featureBranches);
+    // Filter to only ticket-related branches
+    final branches = repoGitInfo.featureBranches
+        .where((b) => _isRelatedBranch(b.name))
+        .toList();
 
-    // Sort: related branches first, then alphabetically
-    branches.sort((a, b) {
-      final aRelated = _isRelatedBranch(a.name);
-      final bRelated = _isRelatedBranch(b.name);
-      if (aRelated && !bRelated) return -1;
-      if (!aRelated && bRelated) return 1;
-      return a.name.compareTo(b.name);
-    });
+    // Sort alphabetically
+    branches.sort((a, b) => a.name.compareTo(b.name));
 
     return branches.map((branch) {
       return _FeatureBranchRow(
@@ -616,6 +643,172 @@ class _ErrorsRow extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.error,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shows the ticket branch prominently as the primary branch indicator.
+/// Tapping navigates to BranchDetailScreen.
+class _TicketBranchRow extends StatelessWidget {
+  final FeatureBranch branch;
+  final VoidCallback onTap;
+
+  const _TicketBranchRow({
+    required this.branch,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Semantics(
+      label: 'Ticket branch ${branch.name}. Tap to view details.',
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.primary,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.verified_user,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Ticket Branch',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      branch.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows a message when the ticket branch has been merged/deleted.
+class _MergedBranchRow extends StatelessWidget {
+  final String ticketId;
+
+  const _MergedBranchRow({required this.ticketId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.5),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.merge,
+            size: 18,
+            color: theme.colorScheme.outline,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: theme.colorScheme.outline,
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        'Branch Merged',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$ticketId branch not available',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Commits with $ticketId key are in develop branch',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
