@@ -109,17 +109,18 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
   }
 
   void _handleTap(Offset localPosition) {
-    if (_textSize == null || _lineHeight <= 0) return;
+    if (_lineHeight <= 0) {
+      // Fallback: use estimated line height
+      final lineIndex = (localPosition.dy / 24).floor();
+      final lines = widget.data.split('\n');
+      if (lineIndex >= 0 && lineIndex < lines.length) {
+        widget.onLineTapped(lineIndex, lines[lineIndex]);
+      }
+      return;
+    }
 
-    // Scale tap position based on actual rendered size vs available width
-    final renderBox = _markdownKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final availableWidth = renderBox.size.width;
-    final scale = availableWidth > 0 ? (_textSize!.width / availableWidth) : 1.0;
-    final scaledY = localPosition.dy * scale;
-
-    final lineIndex = (scaledY / _lineHeight).floor();
+    // Use the actual computed line height directly
+    final lineIndex = (localPosition.dy / _lineHeight).floor();
     final lines = widget.data.split('\n');
     if (lineIndex >= 0 && lineIndex < lines.length) {
       widget.onLineTapped(lineIndex, lines[lineIndex]);
