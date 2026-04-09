@@ -56,66 +56,39 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
     final lines = widget.data.split('\n');
     final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16;
 
-    return Stack(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Line numbers column (display only)
-            SizedBox(
-              width: 32,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(lines.length, (index) {
-                    return Container(
-                      height: lineHeight * 1.5,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '${index + 1}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                          fontSize: 12,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
+        // Line numbers column - use RichText with same style as markdown for alignment
+        SizedBox(
+          width: 32,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: RichText(
+              text: TextSpan(
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                children: List.generate(lines.length, (index) {
+                  return TextSpan(text: '${index + 1}\n');
+                }),
               ),
             ),
-            // Markdown content
-            Expanded(
-              child: Markdown(
-                data: widget.data,
-                shrinkWrap: true,
-                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-                builders: {
-                  'blockquote': _AnnotationBlockquoteBuilder(
-                    onLineTapped: widget.onLineTapped,
-                    sourceLines: lines,
-                  ),
-                },
-                onTapLink: (text, href, title) {
-                  // Allow link taps to open URLs
-                },
-              ),
-            ),
-          ],
+          ),
         ),
-        // Tap overlay - use IgnorePointer to let taps pass through for scrolling
-        // but capture taps for line selection
-        Positioned.fill(
-          child: GestureDetector(
-            onTapUp: (details) {
-              // Calculate which line was tapped based on Y position
-              final tapY = details.localPosition.dy;
-              final tappedLine = (tapY / (lineHeight * 1.5)).floor();
-              if (tappedLine >= 0 && tappedLine < lines.length) {
-                widget.onLineTapped(tappedLine, lines[tappedLine]);
-              }
+        // Markdown content
+        Expanded(
+          child: Markdown(
+            data: widget.data,
+            shrinkWrap: true,
+            styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+            builders: {
+              'blockquote': _AnnotationBlockquoteBuilder(
+                onLineTapped: widget.onLineTapped,
+                sourceLines: lines,
+              ),
             },
-            behavior: HitTestBehavior.opaque,
+            onTapLink: (text, href, title) {
+              // Allow link taps to open URLs
+            },
           ),
         ),
       ],
