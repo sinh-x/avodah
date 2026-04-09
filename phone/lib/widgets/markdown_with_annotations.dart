@@ -93,7 +93,7 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       child: Markdown(
         key: _markdownKey,
         data: widget.data,
-        shrinkWrap: false,
+        shrinkWrap: true,
         styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
         builders: {
           'blockquote': _AnnotationBlockquoteBuilder(

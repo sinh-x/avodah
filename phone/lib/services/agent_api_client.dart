@@ -143,19 +143,42 @@ class AgentApiClient {
 
   /// Append an inline comment section to a document at a specific line number.
   ///
-  /// For MVP: delegates to [appendSection] with title prefixed by line number
-  /// using the `## N: title` convention.
-  ///
-  /// When PA-1119 server endpoint is available, this can be updated to use
-  /// the `lineNumber` parameter directly for precise placement.
+  /// Uses the PA-1119 location-aware endpoint: POST /api/folders/:folderId/files/:fileId/sections
+  /// Falls back to appending at end with location encoded in title if endpoint unavailable.
   Future<void> appendInlineSection(
     String path,
     String title,
     String content,
     int lineNumber,
   ) async {
-    final prefixedTitle = '## $lineNumber: $title';
-    await appendSection(path, prefixedTitle, content);
+    // Parse path into folderId and fileId
+    // path format: agent-teams/requirements/artifacts/filename.md
+    // folderId: agent-teams/requirements/artifacts
+    // fileId: filename.md
+    final parts = path.split('/');
+    if (parts.length < 2) {
+      throw AgentApiException(400, 'Invalid path format: $path');
+    }
+    final fileId = parts.last;
+    final folderParts = parts.sublist(0, parts.length - 1);
+    final folderId = folderParts.join('/');
+
+    final encodedFolder = Uri.encodeComponent(folderId);
+    final encodedFile = Uri.encodeComponent(fileId);
+
+    try {
+      await _post(
+        '/api/folders/$encodedFolder/files/$encodedFile/sections',
+        body: {
+          'title': '## $lineNumber: $title',
+          'content': content,
+          'location': lineNumber,
+        },
+      );
+    } catch (e) {
+      // Fallback: use append-section at end with location in title
+      await appendSection(path, '## $lineNumber: $title', content);
+    }
   }
 
   /// Fetch feedback chip labels from server config.
