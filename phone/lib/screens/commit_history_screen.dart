@@ -134,6 +134,7 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => CommitDiffScreen(
+          apiClient: widget.apiClient,
           repoKey: widget.repoKey,
           commitSha: commit.hash,
           commitMessage: commit.message,

@@ -134,6 +134,7 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => CommitDiffScreen(
+          apiClient: widget.apiClient,
           repoKey: widget.repoKey,
           commitSha: commit.hash,
           commitMessage: commit.message,

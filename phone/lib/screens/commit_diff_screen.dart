@@ -9,12 +9,14 @@ import '../services/agent_api_client.dart';
 /// Shows loading spinner while fetching, error state with retry on failure,
 /// and a color-coded diff view on success.
 class CommitDiffScreen extends StatefulWidget {
+  final AgentApiClient apiClient;
   final String repoKey;
   final String commitSha;
   final String? commitMessage;
 
   const CommitDiffScreen({
     super.key,
+    required this.apiClient,
     required this.repoKey,
     required this.commitSha,
     this.commitMessage,
@@ -46,9 +48,7 @@ class _CommitDiffScreenState extends State<CommitDiffScreen> {
     });
 
     try {
-      final diff = await AgentApiClient.fromWsUrl(
-        'ws://localhost:9847',
-      ).getRepoDiff(widget.repoKey, widget.commitSha);
+      final diff = await widget.apiClient.getRepoDiff(widget.repoKey, widget.commitSha);
 
       if (mounted) {
         setState(() {
