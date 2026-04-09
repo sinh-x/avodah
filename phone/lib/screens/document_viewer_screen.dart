@@ -138,6 +138,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       }
     }
 
+    debugPrint('_showCommentSheet: matchingLineIndices = $matchingLineIndices');
+    debugPrint('_showCommentSheet: first match = ${matchingLineIndices.isNotEmpty ? matchingLineIndices.first : -1}');
+
     // If still empty, can't determine line - abort
     if (matchingLineIndices.isEmpty) {
       debugPrint('_showCommentSheet: FAILED to find any matching line');
@@ -150,7 +153,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       return;
     }
 
-    final lineIndex = matchingLineIndices.first;
+    // Use LAST match (user likely selected text near where they want to comment)
+    final lineIndex = matchingLineIndices.last;
     debugPrint('_showCommentSheet: USING lineIndex=$lineIndex (line ${lineIndex + 1})');
     setState(() {
       _selectedText = '';
