@@ -174,7 +174,7 @@ class AgentApiClient {
         body: {
           'title': '', // empty title - just insert content after reference line
           'content': commentLine,
-          'location': lineNumber + 1, // +1 to insert AFTER the reference line
+          'location': lineNumber, // lineNumber is already the target insertion point
         },
       );
     } catch (e) {
