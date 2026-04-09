@@ -47,144 +47,63 @@ class MarkdownWithAnnotations extends StatefulWidget {
 }
 
 class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
-  final _markdownKey = GlobalKey();
-  final List<double> _lineOffsets = [];
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _computeLineOffsets());
-  }
-
-  void _computeLineOffsets() {
-    if (_markdownKey.currentContext == null) return;
-    final renderBox = _markdownKey.currentContext!.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: widget.data,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout(maxWidth: renderBox.size.width);
-
-    // Get exact line offsets using getLineBoundary
-    _lineOffsets.clear();
-    for (int i = 0; i < widget.data.split('\n').length; i++) {
-      final offset = textPainter.getOffsetForCaret(
-        TextPosition(offset: i < widget.data.length ? widget.data.split('\n').take(i + 1).join('\n').length : 0),
-        Rect.zero,
-      );
-      // Use line height directly since getOffsetForCaret gives character position
-    }
-
-    final lineCount = widget.data.split('\n').length;
-    final lineHeight = textPainter.height / lineCount;
-    _lineOffsets.clear();
-    for (int i = 0; i < lineCount; i++) {
-      _lineOffsets.add(i * lineHeight);
-    }
-
-    if (mounted) setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final defaultStyleSheet = theme.textTheme.bodyMedium?.merge(
       const TextStyle(height: 1.5),
     );
-
     final lines = widget.data.split('\n');
-    final lineCount = lines.length;
-    final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16 * 1.5;
+    final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16;
 
-    return Stack(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Line numbers column
-            SizedBox(
-              width: 32,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(lineCount, (index) {
-                    return SizedBox(
-                      height: lineHeight,
-                      child: Text(
-                        '${index + 1}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                          fontSize: 12,
-                        ),
+        // Line numbers column
+        SizedBox(
+          width: 32,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(lines.length, (index) {
+                return GestureDetector(
+                  onTap: () => widget.onLineTapped(index, lines[index]),
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox(
+                    height: lineHeight * 1.5,
+                    child: Text(
+                      '${index + 1}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                        fontSize: 12,
                       ),
-                    );
-                  }),
-                ),
-              ),
-            ),
-            // Markdown content
-            Expanded(
-              child: Markdown(
-                key: _markdownKey,
-                data: widget.data,
-                shrinkWrap: true,
-                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-                builders: {
-                  'blockquote': _AnnotationBlockquoteBuilder(
-                    onLineTapped: widget.onLineTapped,
-                    sourceLines: lines,
+                    ),
                   ),
-                },
-                onTapLink: (text, href, title) {
-                  // Allow link taps to open URLs
-                },
-              ),
+                );
+              }),
             ),
-          ],
+          ),
         ),
-        Positioned.fill(
-          child: GestureDetector(
-            onTapUp: (details) => _handleTap(details.localPosition),
-            behavior: HitTestBehavior.translucent,
-            child: Container(color: Colors.transparent),
+        // Markdown content
+        Expanded(
+          child: Markdown(
+            data: widget.data,
+            shrinkWrap: true,
+            styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+            builders: {
+              'blockquote': _AnnotationBlockquoteBuilder(
+                onLineTapped: widget.onLineTapped,
+                sourceLines: lines,
+              ),
+            },
+            onTapLink: (text, href, title) {
+              // Allow link taps to open URLs
+            },
           ),
         ),
       ],
     );
-  }
-
-  void _handleTap(Offset localPosition) {
-    if (_lineOffsets.isEmpty) {
-      // Fallback: use estimated line height
-      final lineIndex = (localPosition.dy / 24).floor();
-      final lines = widget.data.split('\n');
-      if (lineIndex >= 0 && lineIndex < lines.length) {
-        widget.onLineTapped(lineIndex, lines[lineIndex]);
-      }
-      return;
-    }
-
-    // Find closest line to tap position using precomputed offsets
-    final tapY = localPosition.dy;
-    int lineIndex = 0;
-    for (int i = 0; i < _lineOffsets.length; i++) {
-      if (tapY >= _lineOffsets[i]) {
-        lineIndex = i;
-      } else {
-        break;
-      }
-    }
-
-    final lines = widget.data.split('\n');
-    if (lineIndex >= 0 && lineIndex < lines.length) {
-      widget.onLineTapped(lineIndex, lines[lineIndex]);
-    }
   }
 
   MarkdownStyleSheet _buildAnnotationStyleSheet(
