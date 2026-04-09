@@ -97,22 +97,56 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
       const TextStyle(height: 1.5),
     );
 
+    final lines = widget.data.split('\n');
+    final lineCount = lines.length;
+    final lineHeight = theme.textTheme.bodyMedium?.fontSize ?? 16 * 1.5;
+
     return Stack(
       children: [
-        Markdown(
-          key: _markdownKey,
-          data: widget.data,
-          shrinkWrap: true,
-          styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-          builders: {
-            'blockquote': _AnnotationBlockquoteBuilder(
-              onLineTapped: widget.onLineTapped,
-              sourceLines: widget.data.split('\n'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Line numbers column
+            SizedBox(
+              width: 32,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(lineCount, (index) {
+                    return SizedBox(
+                      height: lineHeight,
+                      child: Text(
+                        '${index + 1}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontSize: 12,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
             ),
-          },
-          onTapLink: (text, href, title) {
-            // Allow link taps to open URLs
-          },
+            // Markdown content
+            Expanded(
+              child: Markdown(
+                key: _markdownKey,
+                data: widget.data,
+                shrinkWrap: true,
+                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+                builders: {
+                  'blockquote': _AnnotationBlockquoteBuilder(
+                    onLineTapped: widget.onLineTapped,
+                    sourceLines: lines,
+                  ),
+                },
+                onTapLink: (text, href, title) {
+                  // Allow link taps to open URLs
+                },
+              ),
+            ),
+          ],
         ),
         Positioned.fill(
           child: GestureDetector(
