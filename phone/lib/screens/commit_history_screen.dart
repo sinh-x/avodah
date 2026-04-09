@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/repo_commits.dart';
 import '../services/agent_api_client.dart';
 import '../utils/date_helpers.dart';
+import 'commit_diff_screen.dart';
 
 /// Screen showing paginated commit history for a specific branch.
 ///
@@ -130,6 +131,19 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
     await _loadCommits();
   }
 
+  void _navigateToCommitDiff(RepoCommit commit) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CommitDiffScreen(
+          repoKey: widget.repoKey,
+          commitSha: commit.hash,
+          commitMessage: commit.message,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -187,7 +201,11 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _CommitTile(commit: _commits[index]);
+          return _CommitTile(
+            commit: _commits[index],
+            repoKey: widget.repoKey,
+            onTap: () => _navigateToCommitDiff(_commits[index]),
+          );
         },
       ),
     );
@@ -196,8 +214,14 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
 
 class _CommitTile extends StatelessWidget {
   final RepoCommit commit;
+  final String repoKey;
+  final VoidCallback onTap;
 
-  const _CommitTile({required this.commit});
+  const _CommitTile({
+    required this.commit,
+    required this.repoKey,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -207,64 +231,74 @@ class _CommitTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top row: hash_short + date
-              Row(
-                children: [
-                  Text(
-                    commit.hashShort,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontFamily: 'monospace',
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: hash_short + date
+                Row(
+                  children: [
+                    Text(
+                      commit.hashShort,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontFamily: 'monospace',
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    formatDateShort(commit.date),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              // Middle: commit message (first line)
-              Text(
-                commit.message,
-                style: theme.textTheme.bodyMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-
-              // Bottom row: author name + diff summary
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      commit.authorName,
+                    const Spacer(),
+                    Text(
+                      formatDateShort(commit.date),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.outline,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    '+${diff.insertions} -${diff.deletions} in ${diff.filesChanged} file${diff.filesChanged == 1 ? '' : 's'}',
-                    style: theme.textTheme.bodySmall?.copyWith(
+                  ],
+                ),
+                const SizedBox(height: 4),
+
+                // Middle: commit message (first line)
+                Text(
+                  commit.message,
+                  style: theme.textTheme.bodyMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+
+                // Bottom row: author name + diff summary
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        commit.authorName,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '+${diff.insertions} -${diff.deletions} in ${diff.filesChanged} file${diff.filesChanged == 1 ? '' : 's'}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,
                       color: theme.colorScheme.outline,
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
