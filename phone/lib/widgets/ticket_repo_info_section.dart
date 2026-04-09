@@ -999,9 +999,14 @@ class _LinkedCommitRow extends StatelessWidget {
     required this.apiClient,
   });
 
+  static bool _isValidSha(String sha) {
+    return RegExp(r'^[a-f0-9]{40}$', caseSensitive: false).hasMatch(sha);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isValidSha = _isValidSha(linkedCommit.sha);
     final shortSha = linkedCommit.sha.length > 7
         ? linkedCommit.sha.substring(0, 7)
         : linkedCommit.sha;
@@ -1011,28 +1016,32 @@ class _LinkedCommitRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CommitDiffScreen(
-                  apiClient: apiClient,
-                  repoKey: linkedCommit.repo,
-                  commitSha: linkedCommit.sha,
-                  commitMessage: linkedCommit.message,
-                ),
-              ),
-            );
-          },
+          onTap: isValidSha
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CommitDiffScreen(
+                        apiClient: apiClient,
+                        repoKey: linkedCommit.repo,
+                        commitSha: linkedCommit.sha,
+                        commitMessage: linkedCommit.message,
+                      ),
+                    ),
+                  );
+                }
+              : null,
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Row(
               children: [
                 Icon(
-                  Icons.commit,
+                  isValidSha ? Icons.commit : Icons.warning,
                   size: 14,
-                  color: theme.colorScheme.tertiary,
+                  color: isValidSha
+                      ? theme.colorScheme.tertiary
+                      : theme.colorScheme.error,
                 ),
                 const SizedBox(width: 6),
                 Expanded(

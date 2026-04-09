@@ -38,6 +38,8 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
   int _total = 0;
   final ScrollController _scrollController = ScrollController();
   final Map<String, RepoDiff?> _diffCache = {};
+  final Set<String> _failedDiffs = {};
+  RepoCommit? _headerCommit;
 
   /// Extracts ticket key from branch name (e.g., 'AVO-067' from 'feature/AVO-067-branch-commit-ui').
   /// Returns null if no ticket key can be extracted.
@@ -86,11 +88,24 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
 
       if (mounted) {
         final filtered = _filterByTicketKey(result.commits);
+        // If header has empty message (synthetic branch from linked branch),
+        // find the matching commit from loaded commits
+        RepoCommit? headerCommit;
+        if (widget.branch.latestCommit.hash.isNotEmpty &&
+            widget.branch.latestCommit.message.isEmpty) {
+          for (final c in result.commits) {
+            if (c.hash == widget.branch.latestCommit.hash) {
+              headerCommit = c;
+              break;
+            }
+          }
+        }
         setState(() {
           _commits = result.commits;
           _filteredCommits = filtered;
           _total = filtered.length;
           _loadingCommits = false;
+          _headerCommit = headerCommit;
         });
       }
     } on AgentApiException catch (e) {
@@ -123,12 +138,25 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
 
       if (mounted) {
         final newFiltered = _filterByTicketKey(result.commits);
+        // Check for header commit in new commits if not already found
+        RepoCommit? headerCommit;
+        if (_headerCommit == null &&
+            widget.branch.latestCommit.hash.isNotEmpty &&
+            widget.branch.latestCommit.message.isEmpty) {
+          for (final c in result.commits) {
+            if (c.hash == widget.branch.latestCommit.hash) {
+              headerCommit = c;
+              break;
+            }
+          }
+        }
         setState(() {
           _commits = [..._commits, ...result.commits];
           _filteredCommits = [..._filteredCommits, ...newFiltered];
           _offset += result.commits.length;
           _total = _filteredCommits.length;
           _loadingMore = false;
+          if (headerCommit != null) _headerCommit = headerCommit;
         });
       }
     } on AgentApiException {
@@ -151,34 +179,49 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
   }
 
   Future<void> _loadDiff(String commitHash) async {
-    if (_diffCache.containsKey(commitHash)) return;
+    if (_diffCache.containsKey(commitHash) && !_failedDiffs.contains(commitHash)) return;
 
     try {
       final diff = await widget.apiClient.getRepoDiff(widget.repoKey, commitHash);
       if (mounted) {
         setState(() {
+          _failedDiffs.remove(commitHash);
           _diffCache[commitHash] = diff;
         });
       }
     } on AgentApiException {
       if (mounted) {
         setState(() {
-          _diffCache[commitHash] = null;
+          _diffCache.remove(commitHash);
+          _failedDiffs.add(commitHash);
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _diffCache[commitHash] = null;
+          _diffCache.remove(commitHash);
+          _failedDiffs.add(commitHash);
         });
       }
     }
   }
 
+  void _retryDiff(String commitHash) {
+    setState(() {
+      _failedDiffs.remove(commitHash);
+      _diffCache.remove(commitHash);
+    });
+    _loadDiff(commitHash);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final commit = widget.branch.latestCommit;
+    // Use _headerCommit when header has empty message (synthetic branch from linked branch)
+    // Both RepoCommit and BranchCommit have hash, message, date fields
+    final commit = (_headerCommit != null && widget.branch.latestCommit.message.isEmpty)
+        ? _headerCommit as dynamic
+        : widget.branch.latestCommit;
 
     return Scaffold(
       appBar: AppBar(
@@ -389,7 +432,9 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
             repoKey: widget.repoKey,
             apiClient: widget.apiClient,
             diffCache: _diffCache,
+            failedDiffs: _failedDiffs,
             onExpand: () => _loadDiff(_filteredCommits[index].hash),
+            onRetry: () => _retryDiff(_filteredCommits[index].hash),
           );
         },
       ),
@@ -402,14 +447,18 @@ class _ExpandableCommitTile extends StatefulWidget {
   final String repoKey;
   final AgentApiClient apiClient;
   final Map<String, RepoDiff?> diffCache;
+  final Set<String> failedDiffs;
   final VoidCallback onExpand;
+  final VoidCallback onRetry;
 
   const _ExpandableCommitTile({
     required this.commit,
     required this.repoKey,
     required this.apiClient,
     required this.diffCache,
+    required this.failedDiffs,
     required this.onExpand,
+    required this.onRetry,
   });
 
   @override
@@ -519,12 +568,34 @@ class _ExpandableCommitTileState extends State<_ExpandableCommitTile> {
 
             // Expanded: diff view (lazy-loaded)
             if (_isExpanded)
-              cachedDiff == null
-                  ? const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator()),
+              widget.failedDiffs.contains(widget.commit.hash)
+                  ? Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: theme.colorScheme.error, size: 32),
+                            const SizedBox(height: 8),
+                            Text('Failed to load diff',
+                                style: TextStyle(color: theme.colorScheme.error)),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: widget.onRetry,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     )
-                  : DiffView(diff: cachedDiff),
+                  : cachedDiff == null
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      : DiffView(diff: cachedDiff),
           ],
         ),
       ),

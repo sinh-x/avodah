@@ -38,6 +38,7 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   int _total = 0;
   final ScrollController _scrollController = ScrollController();
   final Map<String, RepoDiff?> _diffCache = {};
+  final Set<String> _failedDiffs = {};
 
   /// Extracts ticket key from branch name (e.g., 'AVO-067' from 'feature/AVO-067-branch-commit-ui').
   /// Returns null if no ticket key can be extracted.
@@ -151,28 +152,39 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   }
 
   Future<void> _loadDiff(String commitHash) async {
-    if (_diffCache.containsKey(commitHash)) return;
+    if (_diffCache.containsKey(commitHash) && !_failedDiffs.contains(commitHash)) return;
 
     try {
       final diff = await widget.apiClient.getRepoDiff(widget.repoKey, commitHash);
       if (mounted) {
         setState(() {
+          _failedDiffs.remove(commitHash);
           _diffCache[commitHash] = diff;
         });
       }
     } on AgentApiException {
       if (mounted) {
         setState(() {
-          _diffCache[commitHash] = null;
+          _diffCache.remove(commitHash);
+          _failedDiffs.add(commitHash);
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _diffCache[commitHash] = null;
+          _diffCache.remove(commitHash);
+          _failedDiffs.add(commitHash);
         });
       }
     }
+  }
+
+  void _retryDiff(String commitHash) {
+    setState(() {
+      _failedDiffs.remove(commitHash);
+      _diffCache.remove(commitHash);
+    });
+    _loadDiff(commitHash);
   }
 
   @override
@@ -237,7 +249,9 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
             repoKey: widget.repoKey,
             apiClient: widget.apiClient,
             diffCache: _diffCache,
+            failedDiffs: _failedDiffs,
             onExpand: () => _loadDiff(_filteredCommits[index].hash),
+            onRetry: () => _retryDiff(_filteredCommits[index].hash),
           );
         },
       ),
@@ -250,14 +264,18 @@ class _ExpandableCommitTile extends StatefulWidget {
   final String repoKey;
   final AgentApiClient apiClient;
   final Map<String, RepoDiff?> diffCache;
+  final Set<String> failedDiffs;
   final VoidCallback onExpand;
+  final VoidCallback onRetry;
 
   const _ExpandableCommitTile({
     required this.commit,
     required this.repoKey,
     required this.apiClient,
     required this.diffCache,
+    required this.failedDiffs,
     required this.onExpand,
+    required this.onRetry,
   });
 
   @override
@@ -367,12 +385,34 @@ class _ExpandableCommitTileState extends State<_ExpandableCommitTile> {
 
             // Expanded: diff view (lazy-loaded)
             if (_isExpanded)
-              cachedDiff == null
-                  ? const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator()),
+              widget.failedDiffs.contains(widget.commit.hash)
+                  ? Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: theme.colorScheme.error, size: 32),
+                            const SizedBox(height: 8),
+                            Text('Failed to load diff',
+                                style: TextStyle(color: theme.colorScheme.error)),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: widget.onRetry,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     )
-                  : DiffView(diff: cachedDiff),
+                  : cachedDiff == null
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      : DiffView(diff: cachedDiff),
           ],
         ),
       ),
