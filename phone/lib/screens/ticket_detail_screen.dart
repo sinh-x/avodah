@@ -1573,41 +1573,6 @@ Color _deploymentStatusColor(String status) {
   }
 }
 
-/// Displays an assignee string with team/agent parsing.
-/// If [assignee] contains '/', renders "team/" in muted text + "agent" in bold.
-class _AssigneeText extends StatelessWidget {
-  final String assignee;
-  const _AssigneeText({required this.assignee});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (!assignee.contains('/')) {
-      return Text(assignee, style: theme.textTheme.bodySmall);
-    }
-    final idx = assignee.indexOf('/');
-    final teamPart = assignee.substring(0, idx + 1); // includes '/'
-    final agentPart = assignee.substring(idx + 1);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          teamPart,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-        Text(
-          agentPart,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// A tappable row displaying a single [DocRef] with a type badge, optional
 /// star for primary, and the ref path.
 class _DocRefRow extends StatelessWidget {

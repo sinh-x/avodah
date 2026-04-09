@@ -529,7 +529,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       if (index == currentIndex) {
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: WipSummaryWidget(wip: wip!),
+                          child: WipSummaryWidget(wip: wip),
                         );
                       }
                       currentIndex += 1;
