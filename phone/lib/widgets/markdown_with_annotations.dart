@@ -89,49 +89,55 @@ class _MarkdownWithAnnotationsState extends State<MarkdownWithAnnotations> {
               ),
             ),
           ),
-        // Line numbers + Markdown
+        // Line numbers + Markdown (line numbers are tappable)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Line numbers column
+            // Line numbers column - tappable
             SizedBox(
               width: 32,
               child: Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: RichText(
-                  text: TextSpan(
-                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                    children: List.generate(lines.length, (index) {
-                      return TextSpan(text: '${index + 1}\n');
-                    }),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(lines.length, (index) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedText = lines[index];
+                        });
+                      },
+                      child: Container(
+                        height: 24, // Fixed height per line
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '${index + 1}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
                 ),
               ),
             ),
-            // Markdown content - selectable
+            // Markdown content
             Expanded(
-              child: SelectionArea(
-                onSelectionChanged: (selection) {
-                  if (selection != null && selection.plainText.isNotEmpty) {
-                    setState(() {
-                      _selectedText = selection.plainText;
-                    });
-                  }
+              child: Markdown(
+                data: widget.data,
+                shrinkWrap: true,
+                styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
+                builders: {
+                  'blockquote': _AnnotationBlockquoteBuilder(
+                    onLineTapped: widget.onLineTapped,
+                    sourceLines: lines,
+                  ),
                 },
-                child: Markdown(
-                  data: widget.data,
-                  shrinkWrap: true,
-                  styleSheet: widget.styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
-                  builders: {
-                    'blockquote': _AnnotationBlockquoteBuilder(
-                      onLineTapped: widget.onLineTapped,
-                      sourceLines: lines,
-                    ),
-                  },
-                  onTapLink: (text, href, title) {
-                    // Allow link taps to open URLs
-                  },
-                ),
+                onTapLink: (text, href, title) {
+                  // Allow link taps to open URLs
+                },
               ),
             ),
           ],
