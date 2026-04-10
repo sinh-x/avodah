@@ -162,11 +162,12 @@ Future<String?> _computeFingerprint(List<int> certBytes) async {
     List<int> derBytes;
 
     if (pem.contains('-----BEGIN CERTIFICATE-----')) {
-      // PEM format — extract base64 content and decode
-      final base64Content = pem
-          .replaceAll('-----BEGIN CERTIFICATE-----', '')
-          .replaceAll('-----END CERTIFICATE-----', '')
-          .replaceAll(RegExp(r'\s'), '');
+      // PEM format — extract first certificate only (chain may have multiple)
+      final beginMarker = '-----BEGIN CERTIFICATE-----';
+      final endMarker = '-----END CERTIFICATE-----';
+      final start = pem.indexOf(beginMarker) + beginMarker.length;
+      final end = pem.indexOf(endMarker);
+      final base64Content = pem.substring(start, end).replaceAll(RegExp(r'\s'), '');
       derBytes = base64.decode(base64Content);
     } else {
       // Assume DER format
@@ -197,16 +198,32 @@ Future<void> _handleRequest(
   String agentApiUrl,
 ) async {
   try {
-    // WebSocket upgrade requests → proxy to AGENT_API_URL
+    // WebSocket upgrade requests → proxy to AGENT_API_URL (requires auth)
     if (WebSocketTransformer.isUpgradeRequest(request)) {
+      final nodeId = request.headers.value('X-Av-Node-Id');
+      final token = request.headers.value('X-Av-Pair-Token');
+      if (nodeId == null || token == null ||
+          !await pairingService.verifyPairToken(nodeId, token)) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Invalid or expired pairing token'});
+        return;
+      }
       await _proxyWebSocket(request, agentApiUrl);
       return;
     }
 
     final path = request.uri.path;
 
-    // Self-update endpoints
+    // Self-update endpoints (requires auth)
     if (path == '/api/self-update' || path == '/api/self-update/status') {
+      final nodeId = request.headers.value('X-Av-Node-Id');
+      final token = request.headers.value('X-Av-Pair-Token');
+      if (nodeId == null || token == null ||
+          !await pairingService.verifyPairToken(nodeId, token)) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Invalid or expired pairing token'});
+        return;
+      }
       await _handleSelfUpdate(request, selfUpdateService);
       return;
     }
@@ -233,8 +250,31 @@ Future<void> _handleRequest(
     final syncHandled = await syncApi.handleRequest(request);
     if (syncHandled) return;
 
-    // /api/* → proxy to AGENT_API_URL
+    // /api/* → proxy to AGENT_API_URL (requires valid pairing token)
     if (path.startsWith('/api/')) {
+      // CORS preflight passes through without auth
+      if (request.method == 'OPTIONS') {
+        _setSyncCors(request);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..close();
+        return;
+      }
+
+      final nodeId = request.headers.value('X-Av-Node-Id');
+      final token = request.headers.value('X-Av-Pair-Token');
+      if (nodeId == null || token == null) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Missing X-Av-Node-Id or X-Av-Pair-Token header'});
+        return;
+      }
+      final valid = await pairingService.verifyPairToken(nodeId, token);
+      if (!valid) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Invalid or expired pairing token'});
+        return;
+      }
+
       await _proxyHttp(request, agentApiUrl);
       return;
     }

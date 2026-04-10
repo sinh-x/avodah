@@ -229,7 +229,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final url = _controller.text.trim();
-      final uri = Uri.parse('$url/api/health');
+      // Use root health endpoint (no auth required)
+      final uri = Uri.parse('$url/');
       final response =
           await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
@@ -332,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   decoration: const InputDecoration(
                     hintText: kDefaultServerUrl,
                     border: OutlineInputBorder(),
-                    helperText: 'Use your Tailscale IP, e.g. http://100.x.y.z:9847',
+                    helperText: 'e.g. https://your-host.ts.net:9847',
                   ),
                   keyboardType: TextInputType.url,
                   autocorrect: false,

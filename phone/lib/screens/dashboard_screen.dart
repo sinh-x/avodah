@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/snapshot.dart';
 import '../services/local_dashboard_provider.dart';
 import '../services/local_write_service.dart';
-import '../services/crdt_sync_service.dart' show SyncConnectionState;
+import '../services/crdt_sync_service.dart' show CrdtSyncService, SyncConnectionState;
 import '../services/agent_api_client.dart';
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
@@ -24,12 +24,15 @@ class DashboardScreen extends StatefulWidget {
   /// Fire-and-forget — errors are handled by the caller.
   final Future<void> Function(List<Map<String, dynamic>> deltas)? onPushDeltas;
 
+  final CrdtSyncService? crdtSyncService;
+
   const DashboardScreen({
     super.key,
     required this.dashboardProvider,
     required this.writeService,
     this.apiClient,
     this.onPushDeltas,
+    this.crdtSyncService,
   });
 
   @override
@@ -328,7 +331,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                MaterialPageRoute(builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
               );
             },
           ),

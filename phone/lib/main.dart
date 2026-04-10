@@ -48,6 +48,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   BoardProvider? _boardProvider;
   FocusProvider? _focusProvider;
   Timer? _syncTimer;
+  bool _pairingInProgress = false;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -93,8 +95,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     );
     await crdtSyncService.loadPersistedState();
 
-    // Agent workflow API
-    final apiClient = AgentApiClient(baseUrl: httpBaseUrl);
+    // Agent workflow API — inject pairing credentials for authenticated proxy
+    final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
+      ..pairingToken = cryptoSyncService.pairingToken
+      ..nodeId = nodeId;
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -175,8 +179,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     if (fingerprint == null) return false;
 
     if (!mounted) return false;
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return false;
     final approved = await showDialog<bool>(
-      context: context,
+      context: navContext,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         icon: const Icon(Icons.security, color: Colors.amber, size: 48),
@@ -232,35 +238,47 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
 
   /// Called when sync reports needsPairing:true or HTTP 403.
   Future<void> _onNeedsPairing() async {
+    // Guard against re-entrant calls from the periodic sync timer
+    if (_pairingInProgress) return;
     if (!mounted) return;
     final crypto = _cryptoSyncService;
     final crdt = _crdtSyncService;
     if (crypto == null || crdt == null) return;
 
-    // Handle pending cert approval if any
-    await _handlePendingCertApproval();
+    _pairingInProgress = true;
+    try {
+      // Handle pending cert approval if any
+      await _handlePendingCertApproval();
 
-    final nodeId = await CrdtSyncService.getOrCreateNodeId();
-    if (!mounted) return;
+      final nodeId = await CrdtSyncService.getOrCreateNodeId();
+      if (!mounted) return;
 
-    // Push the pairing screen as a blocking route
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PairingScreen(
-          args: PairingScreenArgs(
-            cryptoClient: crypto,
-            nodeId: nodeId,
+      final nav = _navigatorKey.currentState;
+      if (nav == null) return;
+
+      // Push the pairing screen as a blocking route
+      final result = await nav.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PairingScreen(
+            args: PairingScreenArgs(
+              cryptoClient: crypto,
+              nodeId: nodeId,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (result == true) {
-      // Pairing succeeded — reload persisted state and trigger sync
-      await crdt.loadPersistedState();
-      await _syncAndRefresh();
+      if (result == true) {
+        // Pairing succeeded — reload persisted state and trigger sync
+        await crdt.loadPersistedState();
+        // Update API client with new pairing token
+        _apiClient?.pairingToken = crypto.pairingToken;
+        await _syncAndRefresh();
+      }
+    } finally {
+      _pairingInProgress = false;
     }
   }
 
@@ -283,6 +301,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Avodah',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -380,12 +399,14 @@ class _HomeShellState extends State<_HomeShell> {
               dashboardProvider: widget.dashboardProvider,
               focusProvider: widget.focusProvider,
               deploymentProvider: widget.deploymentProvider,
+              crdtSyncService: widget.crdtSyncService,
             ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
             apiClient: widget.apiClient,
             onPushDeltas: widget.onPushDeltas,
+            crdtSyncService: widget.crdtSyncService,
           ),
           Scaffold(
             appBar: AppBar(

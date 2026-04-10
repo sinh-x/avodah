@@ -32,8 +32,20 @@ class AgentApiClient {
   final String baseUrl;
   final http.Client _client;
 
+  /// Pairing token for authenticated proxy requests.
+  String? pairingToken;
+
+  /// Node ID for authenticated proxy requests.
+  String? nodeId;
+
   AgentApiClient({required this.baseUrl, http.Client? client})
       : _client = client ?? http.Client();
+
+  /// Auth headers for proxy requests via the sync server.
+  Map<String, String> get _authHeaders => {
+        if (pairingToken != null) 'X-Av-Pair-Token': pairingToken!,
+        if (nodeId != null) 'X-Av-Node-Id': nodeId!,
+      };
 
   /// Construct from the WebSocket server URL.
   ///
@@ -817,6 +829,7 @@ class AgentApiClient {
     final uri = Uri.parse('$baseUrl/api/tickets/$encodedId/attachments/upload');
 
     final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(_authHeaders);
 
     // Add the file
     request.files.add(
@@ -891,7 +904,7 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _get(String path) async {
     final response = await _client
-        .get(Uri.parse('$baseUrl$path'))
+        .get(Uri.parse('$baseUrl$path'), headers: _authHeaders)
         .timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
@@ -904,7 +917,7 @@ class AgentApiClient {
     final response = await _client
         .post(
           Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ..._authHeaders},
           body: jsonEncode(body ?? {}),
         )
         .timeout(const Duration(seconds: 10));
@@ -919,7 +932,7 @@ class AgentApiClient {
     final response = await _client
         .patch(
           Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ..._authHeaders},
           body: jsonEncode(body ?? {}),
         )
         .timeout(const Duration(seconds: 10));
@@ -933,6 +946,7 @@ class AgentApiClient {
       {Map<String, dynamic>? body}) async {
     final request = http.Request('DELETE', Uri.parse('$baseUrl$path'));
     request.headers['Content-Type'] = 'application/json';
+    request.headers.addAll(_authHeaders);
     if (body != null) request.body = jsonEncode(body);
     final streamed = await _client.send(request).timeout(const Duration(seconds: 10));
     final response = await http.Response.fromStream(streamed);
