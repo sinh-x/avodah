@@ -44,8 +44,15 @@ IconData changeIcon(String changeType) {
 
 class DiffView extends StatelessWidget {
   final RepoDiff diff;
+  final bool shrinkWrap;
+  final ScrollPhysics? physics;
 
-  const DiffView({super.key, required this.diff});
+  const DiffView({
+    super.key,
+    required this.diff,
+    this.shrinkWrap = false,
+    this.physics,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +61,8 @@ class DiffView extends StatelessWidget {
     final theme = Theme.of(context);
 
     return ListView(
+      shrinkWrap: shrinkWrap,
+      physics: physics,
       padding: const EdgeInsets.only(bottom: 32),
       children: [
         // Diff summary header

@@ -574,7 +574,7 @@ class _ExpandableCommitTileState extends State<_ExpandableCommitTile> {
                           padding: EdgeInsets.all(16),
                           child: Center(child: CircularProgressIndicator()),
                         )
-                      : DiffView(diff: cachedDiff),
+                      : DiffView(diff: cachedDiff, shrinkWrap: true, physics: const NeverScrollableScrollPhysics()),
           ],
         ),
       ),
