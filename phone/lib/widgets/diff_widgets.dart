@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_diff.dart';
+import 'diff_stat_bar.dart';
 
 // ---------------------------------------------------------------------------
 // Helper functions (extracted from commit_diff_screen.dart)
@@ -59,6 +60,7 @@ class DiffView extends StatelessWidget {
     final meta = diff.meta;
     final entries = diff.diffEntries;
     final theme = Theme.of(context);
+    final maxChanges = maxChangesInDiff(entries);
 
     return ListView(
       shrinkWrap: shrinkWrap,
@@ -104,7 +106,7 @@ class DiffView extends StatelessWidget {
         ),
 
         // Diff entries
-        ...entries.map((entry) => DiffEntryTile(entry: entry)),
+        ...entries.map((entry) => DiffEntryTile(entry: entry, maxChanges: maxChanges)),
       ],
     );
   }
@@ -116,8 +118,9 @@ class DiffView extends StatelessWidget {
 
 class DiffEntryTile extends StatelessWidget {
   final DiffEntry entry;
+  final int? maxChanges;
 
-  const DiffEntryTile({super.key, required this.entry});
+  const DiffEntryTile({super.key, required this.entry, this.maxChanges});
 
   String get _displayPath {
     if (entry.changeType == 'renamed') {
@@ -162,6 +165,13 @@ class DiffEntryTile extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            if (!entry.binary)
+              DiffStatBar(
+                insertions: calcFileStats(entry).insertions,
+                deletions: calcFileStats(entry).deletions,
+                maxChanges: maxChanges,
+              ),
           ],
         ),
         children: [
