@@ -18,8 +18,8 @@ class MarkdownWithAnnotations extends StatelessWidget {
   final String data;
 
   /// Called when the user taps a line or paragraph of rendered markdown.
-  /// Passes the 0-based line index, the tapped text, and the 1-based line number.
-  final void Function(int lineIndex, String tappedText, int lineNumber) onLineTapped;
+  /// Passes the 0-based line index and the tapped text.
+  final void Function(int lineIndex, String tappedText) onLineTapped;
 
   /// Optional style for annotation markers. Falls back to default amber
   /// blockquote styling.
@@ -85,7 +85,7 @@ class MarkdownWithAnnotations extends StatelessWidget {
 
 /// Custom builder for blockquote elements that detects annotation markers.
 class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
-  final void Function(int lineIndex, String tappedText, int lineNumber) onLineTapped;
+  final void Function(int lineIndex, String tappedText) onLineTapped;
   final List<String> sourceLines;
 
   _AnnotationBlockquoteBuilder({

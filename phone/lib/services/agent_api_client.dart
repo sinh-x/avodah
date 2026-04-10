@@ -141,16 +141,15 @@ class AgentApiClient {
         body: {'action': 'append-section', 'title': title, 'content': content});
   }
 
-  /// Append an inline comment section to a document at a specific line number.
+  /// Append an inline comment section to a document using server-side text matching.
   ///
-  /// Uses the PA-1119 location-aware endpoint: POST /api/folders/:folderId/files/:fileId/sections
-  /// Inserts a blockquote comment after the reference line.
+  /// Uses POST /api/folders/:folderId/files/:fileId/sections with lineText field.
+  /// Server finds the last occurrence of exact lineText and inserts comment after it.
   /// Format: "> [!NOTE] Sinh comment: <content> <timestamp>"
   Future<void> appendInlineSection(
     String path,
-    String title, // The reference line text
-    String content, // User's comment
-    int lineNumber,
+    String lineText,
+    String comment,
   ) async {
     // Parse path into folderId and fileId
     final parts = path.split('/');
@@ -166,21 +165,15 @@ class AgentApiClient {
 
     // Format: > [!NOTE] Sinh comment: <content> <timestamp>
     final timestamp = DateTime.now().toIso8601String();
-    final commentLine = '> [!NOTE] Sinh comment: $content $timestamp';
+    final commentLine = '> [!NOTE] Sinh comment: $comment $timestamp';
 
-    try {
-      await _post(
-        '/api/folders/$encodedFolder/files/$encodedFile/sections',
-        body: {
-          'title': '', // empty title - just insert content after reference line
-          'content': commentLine,
-          'location': lineNumber, // lineNumber is already the target insertion point
-        },
-      );
-    } catch (e) {
-      // Fallback: use append-section at end
-      throw AgentApiException(500, 'Failed to add inline comment: $e');
-    }
+    await _post(
+      '/api/folders/$encodedFolder/files/$encodedFile/sections',
+      body: {
+        'content': commentLine,
+        'lineText': lineText,
+      },
+    );
   }
 
   /// Fetch feedback chip labels from server config.
