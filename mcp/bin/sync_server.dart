@@ -14,12 +14,14 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
+import 'package:avodah_mcp/services/self_update_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -70,6 +72,9 @@ Future<void> main(List<String> args) async {
     paths: paths,
   );
 
+  // Self-update service for phone-triggered APK builds
+  final selfUpdateService = SelfUpdateService();
+
   // Start HTTP server
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   stderr.writeln('Avodah Sync Server listening on 0.0.0.0:$port');
@@ -89,19 +94,27 @@ Future<void> main(List<String> args) async {
 
   // Accept connections — handle each request concurrently
   await for (final request in server) {
-    unawaited(_handleRequest(request, syncApi, agentApiUrl));
+    unawaited(_handleRequest(request, syncApi, selfUpdateService, agentApiUrl));
   }
 }
 
 Future<void> _handleRequest(
   HttpRequest request,
   SyncApiService syncApi,
+  SelfUpdateService selfUpdateService,
   String agentApiUrl,
 ) async {
   try {
     // WebSocket upgrade requests → proxy to AGENT_API_URL
     if (WebSocketTransformer.isUpgradeRequest(request)) {
       await _proxyWebSocket(request, agentApiUrl);
+      return;
+    }
+
+    // Self-update endpoints
+    final path = request.uri.path;
+    if (path == '/api/self-update' || path == '/api/self-update/status') {
+      await _handleSelfUpdate(request, selfUpdateService);
       return;
     }
 
@@ -123,6 +136,77 @@ Future<void> _handleRequest(
       ..close();
   } catch (e, stack) {
     stderr.writeln('Unhandled request error: $e\n$stack');
+  }
+}
+
+Future<void> _handleSelfUpdate(
+  HttpRequest request,
+  SelfUpdateService selfUpdateService,
+) async {
+  // CORS
+  request.response.headers.add('Access-Control-Allow-Origin', '*');
+  request.response.headers
+      .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  request.response.headers
+      .add('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (request.method == 'OPTIONS') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..close();
+    return;
+  }
+
+  final path = request.uri.path;
+
+  if (path == '/api/self-update') {
+    if (request.method == 'POST') {
+      // F1/F3: Trigger build (async), return 202 Accepted
+      final started = selfUpdateService.triggerIfIdle();
+      if (started) {
+        final state = selfUpdateService.state;
+        request.response
+          ..statusCode = HttpStatus.accepted
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'status': 'building',
+            'startedAt': state.startedAt?.toIso8601String(),
+          }))
+          ..close();
+      } else {
+        // F5: Mutex — build already running
+        request.response
+          ..statusCode = HttpStatus.conflict
+          ..headers.contentType = ContentType.json
+          ..write('{"error":"Build already in progress","code":"CONFLICT"}')
+          ..close();
+      }
+    } else {
+      request.response
+        ..statusCode = HttpStatus.methodNotAllowed
+        ..write('{"error":"Method not allowed"}')
+        ..close();
+    }
+  } else if (path == '/api/self-update/status') {
+    if (request.method == 'GET') {
+      // F4: Return current status
+      final state = selfUpdateService.state;
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode(state.toJson()))
+        ..close();
+    } else {
+      request.response
+        ..statusCode = HttpStatus.methodNotAllowed
+        ..write('{"error":"Method not allowed"}')
+        ..close();
+    }
+  } else {
+    request.response
+      ..statusCode = HttpStatus.notFound
+      ..write('{"error":"Not found"}')
+      ..close();
   }
 }
 

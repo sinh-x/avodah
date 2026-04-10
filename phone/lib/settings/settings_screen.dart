@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,6 +57,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Whether chip data is being loaded.
   bool _loadingChips = false;
+
+  /// Self-update build state.
+  bool _updateBuilding = false;
+  String? _updateStatus;
+  List<String> _updateLog = [];
+
+  /// Polling timer for build status.
+  Timer? _statusPollTimer;
 
   @override
   void initState() {
@@ -182,7 +192,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _controller.dispose();
     _chipController.dispose();
+    _statusPollTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _triggerSelfUpdate() async {
+    final url = await SettingsScreen.loadServerUrl();
+    final client = AgentApiClient(baseUrl: url);
+
+    final result = await client.triggerSelfUpdate();
+    if (result == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to trigger update')),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _updateBuilding = true;
+      _updateStatus = 'Building...';
+      _updateLog = ['Started at ${result.startedAt}'];
+    });
+
+    _startStatusPolling(url);
+  }
+
+  void _startStatusPolling(String url) {
+    _statusPollTimer?.cancel();
+    _statusPollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      final client = AgentApiClient(baseUrl: url);
+      final status = await client.getSelfUpdateStatus();
+
+      if (status == null) return;
+
+      setState(() {
+        _updateLog = status.log;
+        if (status.isBuilding) {
+          _updateStatus = 'Building...';
+        } else if (status.isSuccess) {
+          _updateStatus = 'Update complete!';
+          _updateBuilding = false;
+          timer.cancel();
+        } else if (status.isError) {
+          _updateStatus = 'Build failed';
+          _updateBuilding = false;
+          timer.cancel();
+        }
+      });
+
+      if (!status.isBuilding) {
+        timer.cancel();
+        if (mounted) {
+          final snackMsg = status.isSuccess
+              ? 'Update complete!'
+              : 'Build failed. Check logs for details.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(snackMsg)),
+          );
+        }
+      }
+    });
   }
 
   @override
@@ -336,6 +407,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.info_outline),
             title: const Text('About'),
             subtitle: Text('Avodah v$avodahVersion'),
+          ),
+          const Divider(),
+          // Update App section
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('App Updates',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text(
+                  'Build and install the latest version on your device.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                if (_updateBuilding || _updateStatus != null) ...[
+                  // Status display
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _updateStatus == 'Update complete!'
+                          ? Colors.green.shade50
+                          : _updateStatus == 'Build failed'
+                              ? Colors.red.shade50
+                              : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _updateStatus == 'Update complete!'
+                            ? Colors.green.shade200
+                            : _updateStatus == 'Build failed'
+                                ? Colors.red.shade200
+                                : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (_updateBuilding)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            else
+                              Icon(
+                                _updateStatus == 'Update complete!'
+                                    ? Icons.check_circle
+                                    : Icons.error,
+                                size: 16,
+                                color: _updateStatus == 'Update complete!'
+                                    ? Colors.green
+                                    : Colors.red,
+                              ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _updateStatus ?? '',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: _updateStatus == 'Update complete!'
+                                      ? Colors.green.shade700
+                                      : _updateStatus == 'Build failed'
+                                          ? Colors.red.shade700
+                                          : Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_updateLog.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _updateLog.take(5).join('\n'),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _updateBuilding ? null : _triggerSelfUpdate,
+                    icon: const Icon(Icons.system_update),
+                    label: Text(_updateBuilding ? 'Building...' : 'Update App'),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
         ],
