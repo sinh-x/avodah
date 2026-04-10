@@ -397,7 +397,7 @@ class _DeploySheetState extends State<DeploySheet> {
                   ? null
                   : (bool selected) {
                         setState(() {
-                          _selectedMode = selected ? null : mode.id;
+                          _selectedMode = selected ? mode.id : null;
                         });
                         _saveDraft();
                       },
