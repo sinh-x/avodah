@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_diff.dart';
+import '../utils/syntax_highlight.dart';
+import '../utils/word_diff.dart';
+import 'diff_stat_bar.dart';
 
 // ---------------------------------------------------------------------------
 // Helper functions (extracted from commit_diff_screen.dart)
@@ -59,6 +62,7 @@ class DiffView extends StatelessWidget {
     final meta = diff.meta;
     final entries = diff.diffEntries;
     final theme = Theme.of(context);
+    final maxChanges = maxChangesInDiff(entries);
 
     return ListView(
       shrinkWrap: shrinkWrap,
@@ -104,7 +108,7 @@ class DiffView extends StatelessWidget {
         ),
 
         // Diff entries
-        ...entries.map((entry) => DiffEntryTile(entry: entry)),
+        ...entries.map((entry) => DiffEntryTile(entry: entry, maxChanges: maxChanges)),
       ],
     );
   }
@@ -116,8 +120,9 @@ class DiffView extends StatelessWidget {
 
 class DiffEntryTile extends StatelessWidget {
   final DiffEntry entry;
+  final int? maxChanges;
 
-  const DiffEntryTile({super.key, required this.entry});
+  const DiffEntryTile({super.key, required this.entry, this.maxChanges});
 
   String get _displayPath {
     if (entry.changeType == 'renamed') {
@@ -162,13 +167,23 @@ class DiffEntryTile extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            if (!entry.binary)
+              DiffStatBar(
+                insertions: calcFileStats(entry).insertions,
+                deletions: calcFileStats(entry).deletions,
+                maxChanges: maxChanges,
+              ),
           ],
         ),
         children: [
           if (entry.binary)
             const BinaryFileIndicator()
           else
-            ...entry.hunks.map((hunk) => DiffHunkView(hunk: hunk)),
+            ...entry.hunks.map((hunk) => DiffHunkView(
+              hunk: hunk,
+              filePath: entry.oldPath.isNotEmpty ? entry.oldPath : entry.newPath,
+            )),
         ],
       ),
     );
@@ -215,16 +230,22 @@ class BinaryFileIndicator extends StatelessWidget {
 
 class DiffHunkView extends StatelessWidget {
   final DiffHunk hunk;
+  final String filePath;
 
-  const DiffHunkView({super.key, required this.hunk});
+  const DiffHunkView({super.key, required this.hunk, required this.filePath});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final language = inferLanguage(filePath);
 
     // Calculate line number offsets
     int oldLine = hunk.oldStart;
     int newLine = hunk.newStart;
+
+    // Precompute word diffs for paired del/add sequences
+    final lineTypes = hunk.lines.map((l) => (type: l.type, content: l.content)).toList();
+    final wordDiffs = computeHunkWordDiffs(lineTypes);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -244,14 +265,18 @@ class DiffHunkView extends StatelessWidget {
         ),
 
         // Diff lines
-        ...hunk.lines.map((line) {
+        ...List.generate(hunk.lines.length, (idx) {
+          final line = hunk.lines[idx];
           final oldLineNum = line.type == 'del' ? oldLine++ : oldLine;
           final newLineNum = line.type == 'add' ? newLine++ : newLine;
+          final wordDiff = wordDiffs[idx];
 
           return DiffLineView(
             line: line,
             oldLineNum: oldLineNum,
             newLineNum: newLineNum,
+            wordDiff: wordDiff,
+            language: language,
           );
         }),
       ],
@@ -267,12 +292,16 @@ class DiffLineView extends StatelessWidget {
   final DiffLine line;
   final int oldLineNum;
   final int newLineNum;
+  final WordDiffResult? wordDiff;
+  final String? language;
 
   const DiffLineView({
     super.key,
     required this.line,
     required this.oldLineNum,
     required this.newLineNum,
+    this.wordDiff,
+    this.language,
   });
 
   Color _backgroundColor() {
@@ -294,6 +323,20 @@ class DiffLineView extends StatelessWidget {
         return '-';
       default:
         return ' ';
+    }
+  }
+
+  /// Returns the word-level background color for a segment.
+  Color _wordSegmentColor(String segmentType) {
+    switch (segmentType) {
+      case 'added':
+        // Stronger green for word-level highlighting
+        return Colors.green.withAlpha(80);
+      case 'deleted':
+        // Stronger red for word-level highlighting
+        return Colors.red.withAlpha(80);
+      default:
+        return Colors.transparent;
     }
   }
 
@@ -356,19 +399,95 @@ class DiffLineView extends StatelessWidget {
             ),
           ),
 
-          // Content
+          // Content (with word-level highlighting if available)
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Text(
-                line.content,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
+            child: _buildContent(context),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // If we have word diff segments and the line is add/del, render with highlighting
+    if (wordDiff != null &&
+        !wordDiff!.skipped &&
+        wordDiff!.segments.isNotEmpty &&
+        (line.type == 'add' || line.type == 'del')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Wrap(
+          children: wordDiff!.segments.map((segment) {
+            final bgColor = _wordSegmentColor(segment.type);
+            final isHighlighted = segment.type != 'unchanged';
+
+            // For unchanged segments, apply syntax highlighting
+            // For added/deleted segments, use plain text with muted color
+            if (!isHighlighted && language != null) {
+              final syntaxSpans = parseSyntaxHighlighted(segment.text, language);
+              return Container(
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: RichText(
+                  text: TextSpan(
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                    children: syntaxSpans,
+                  ),
+                ),
+              );
+            }
+
+            return Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: isHighlighted ? BorderRadius.circular(2) : null,
+              ),
+              padding: isHighlighted ? const EdgeInsets.symmetric(horizontal: 1) : null,
+              child: Text(
+                segment.text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  // White text for highlighted segments (sufficient contrast on green/red bg)
+                  color: isHighlighted ? const Color(0xFFFFFFFF) : null,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Fallback: render with syntax highlighting if language is available
+    if (language != null) {
+      final syntaxSpans = parseSyntaxHighlighted(line.content, language);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: RichText(
+          text: TextSpan(
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+            ),
+            children: syntaxSpans,
+          ),
+        ),
+      );
+    }
+
+    // Plain content without syntax highlighting
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Text(
+        line.content,
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontFamily: 'monospace',
+        ),
       ),
     );
   }

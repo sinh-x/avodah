@@ -24,6 +24,7 @@ dependencies:
   # Shared core (CRDT, storage, documents)
   avodah_core:
     path: ../packages/avodah_core
+  highlight: ^0.7.0
 
 dependency_overrides:
   # 2.3.0 pulls in jni/jni_flutter which requires NDK 28 (not available in Nix env)
