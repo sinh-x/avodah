@@ -25,10 +25,14 @@ class ImageAttachmentPicker extends StatefulWidget {
   /// Whether uploads are currently in progress.
   final ValueChanged<bool>? onUploadingChanged;
 
+  /// Called when the selected images list changes (image added or removed).
+  final VoidCallback? onSelectionChanged;
+
   const ImageAttachmentPicker({
     super.key,
     required this.onUpload,
     this.onUploadingChanged,
+    this.onSelectionChanged,
   });
 
   @override
@@ -114,6 +118,7 @@ class ImageAttachmentPickerState extends State<ImageAttachmentPicker> {
         setState(() {
           _selectedImages.add(image);
         });
+        widget.onSelectionChanged?.call();
       }
     } catch (e) {
       if (mounted) {
@@ -128,10 +133,14 @@ class ImageAttachmentPickerState extends State<ImageAttachmentPicker> {
     setState(() {
       _selectedImages.removeAt(index);
     });
+    widget.onSelectionChanged?.call();
   }
 
   /// Returns the selected images for upload after ticket creation.
   List<XFile> get selectedImages => List.unmodifiable(_selectedImages);
+
+  /// Whether an upload is currently in progress.
+  bool get uploading => _uploading;
 
   /// Clears all selected images (after successful upload).
   void clear() {

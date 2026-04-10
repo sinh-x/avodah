@@ -53,6 +53,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   // Per-field saving state (field name → true while saving)
   final Set<String> _savingFields = {};
 
+  // Image attachment selection state
+  bool _hasSelectedImages = false;
+
   // Deploy state
   DeployRouting? _deployRouting;
   DateTime? _deployRoutingFetchedAt;
@@ -107,6 +110,39 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _uploadAttachments() async {
+    final picker = _imagePickerKey.currentState;
+    if (picker == null || _ticket == null) return;
+    final images = picker.selectedImages;
+    if (images.isEmpty) return;
+
+    picker.setUploading(true);
+    try {
+      final (successes: successes, failures: failures) =
+          await picker.widget.onUpload(images, _ticket!.id);
+      if (mounted) {
+        if (successes.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${successes.length} image(s) attached')),
+          );
+          picker.clear();
+          setState(() {
+            _hasSelectedImages = false;
+          });
+          _loadTicket();
+        }
+        if (failures.isNotEmpty) {
+          final names = failures.map((p) => p.split('/').last).join(', ');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload: $names')),
+          );
+        }
+      }
+    } finally {
+      picker.setUploading(false);
     }
   }
 
@@ -1259,7 +1295,31 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             onUploadingChanged: (uploading) {
               setState(() {});
             },
+            onSelectionChanged: () {
+              setState(() {
+                _hasSelectedImages =
+                    _imagePickerKey.currentState?.selectedImages.isNotEmpty ??
+                        false;
+              });
+            },
           ),
+          // Upload button — visible when images are selected
+          if (_hasSelectedImages ||
+              (_imagePickerKey.currentState?.uploading ?? false))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: FilledButton.icon(
+                onPressed: _imagePickerKey.currentState?.uploading ?? false
+                    ? null
+                    : _uploadAttachments,
+                icon: const Icon(Icons.cloud_upload, size: 18),
+                label: Text(
+                  _imagePickerKey.currentState?.uploading ?? false
+                      ? 'Uploading...'
+                      : 'Upload',
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
           TicketDeploymentsSection(
             deployments: _ticketDeployments ?? [],
