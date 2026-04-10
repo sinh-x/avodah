@@ -1884,6 +1884,9 @@ class AgentApiService {
     final mode = json['mode'] as String?;
     final objective = json['objective'] as String?;
     final repo = json['repo'] as String?;
+    final provider = json['provider'] as String?;
+    final teamModel = json['team_model'] as String?;
+    final ticket = json['ticket'] as String?;
 
     if (team == null || team.isEmpty) {
       _jsonResponse(
@@ -1908,6 +1911,33 @@ class AgentApiService {
       if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(repo)) {
         _jsonResponse(
             request, HttpStatus.badRequest, {'error': 'Invalid repo name'});
+        return;
+      }
+    }
+
+    // Validate provider (alphanumeric + hyphens/underscores only — no shell injection)
+    if (provider != null && provider.isNotEmpty) {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(provider)) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'Invalid provider name'});
+        return;
+      }
+    }
+
+    // Validate team_model (alphanumeric + hyphens/underscores only — no shell injection)
+    if (teamModel != null && teamModel.isNotEmpty) {
+      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(teamModel)) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'Invalid team_model name'});
+        return;
+      }
+    }
+
+    // Validate ticket ID format (e.g., AVO-075)
+    if (ticket != null && ticket.isNotEmpty) {
+      if (!RegExp(r'^[A-Z]+-\d+$').hasMatch(ticket)) {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'Invalid ticket ID format'});
         return;
       }
     }
@@ -1972,6 +2002,17 @@ class AgentApiService {
     // Append --objective flag if provided
     if (objective != null && objective.isNotEmpty) {
       args.addAll(['--objective', objective]);
+    }
+
+    // Append optional provider, team_model, and ticket flags
+    if (provider != null && provider.isNotEmpty) {
+      args.addAll(['--provider', provider]);
+    }
+    if (teamModel != null && teamModel.isNotEmpty) {
+      args.addAll(['--team-model', teamModel]);
+    }
+    if (ticket != null && ticket.isNotEmpty) {
+      args.addAll(['--ticket', ticket]);
     }
 
     // Start subprocess and read first line for deployment ID
