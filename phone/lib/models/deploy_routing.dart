@@ -33,11 +33,15 @@ class RoutingTeam {
   final String name;
   final String description;
   final List<RoutingMode> modes;
+  final String? defaultProvider;
+  final String? defaultModel;
 
   const RoutingTeam({
     required this.name,
     required this.description,
     required this.modes,
+    this.defaultProvider,
+    this.defaultModel,
   });
 
   factory RoutingTeam.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,8 @@ class RoutingTeam {
               ?.map((e) => RoutingMode.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      defaultProvider: json['default_provider'] as String?,
+      defaultModel: json['default_model'] as String?,
     );
   }
 
@@ -58,6 +64,8 @@ class RoutingTeam {
         deployModes: modes
             .map((m) => DeployMode(id: m.id, label: m.label, modeType: m.modeType))
             .toList(),
+        defaultProvider: defaultProvider,
+        defaultModel: defaultModel,
       );
 }
 
