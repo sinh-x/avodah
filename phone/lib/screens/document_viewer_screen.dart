@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../services/agent_api_client.dart';
+import '../widgets/inline_comment_sheet.dart';
+import '../widgets/markdown_with_annotations.dart';
 
 /// Full-screen document viewer.
 ///
 /// Fetches the document at [path] via [AgentApiClient.getDocument] and renders
-/// it based on file type: markdown (.md/.markdown) → [MarkdownBody],
+/// it based on file type: markdown (.md/.markdown) → [MarkdownWithAnnotations],
 /// directory → entry list. PDF and image viewing require a raw binary API
 /// endpoint (PA-902) and show an informative placeholder until then.
 class DocumentViewerScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   DocumentContent? _document;
   bool _loading = true;
   String? _error;
+  String _selectedText = '';
 
   String get _filename {
     final parts = widget.path.split('/');
@@ -81,6 +83,125 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
   }
 
+  void _showCommentSheet(String selectedText) {
+    if (selectedText.isEmpty) return;
+
+    final lines = _document?.content?.split('\n') ?? [];
+
+    List<int> matchingLineIndices = [];
+
+    // Try exact match first
+    for (int i = 0; i < lines.length; i++) {
+      if (lines[i].contains(selectedText)) {
+        matchingLineIndices.add(i);
+      }
+    }
+
+    // If no exact match, try partial word match
+    if (matchingLineIndices.isEmpty) {
+      final words = selectedText.split(' ').where((w) => w.length > 3).toList();
+      for (int i = 0; i < lines.length; i++) {
+        for (final word in words) {
+          if (lines[i].toLowerCase().contains(word.toLowerCase())) {
+            matchingLineIndices.add(i);
+            break;
+          }
+        }
+      }
+    }
+
+    // If still no match, use first non-empty line
+    if (matchingLineIndices.isEmpty) {
+      for (int i = 0; i < lines.length; i++) {
+        if (lines[i].trim().isNotEmpty) {
+          matchingLineIndices.add(i);
+          break;
+        }
+      }
+    }
+
+    // If still empty, can't determine line - abort
+    if (matchingLineIndices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find line for comment')),
+      );
+      setState(() {
+        _selectedText = '';
+      });
+      return;
+    }
+
+    // Use LAST match (user likely selected text near where they want to comment)
+    final lineIndex = matchingLineIndices.last;
+    setState(() {
+      _selectedText = '';
+    });
+    _onLineTapped(lineIndex, selectedText);
+  }
+
+  void _onLineTapped(int lineIndex, String selectedText) {
+    final lines = _document?.content?.split('\n') ?? [];
+    final surroundingText =
+        lineIndex > 0 ? lines[lineIndex - 1] : (lineIndex < lines.length - 1 ? lines[lineIndex + 1] : null);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => InlineCommentSheet(
+        contextText: selectedText,
+        surroundingText: surroundingText,
+        onSubmit: (comment) => _submitInlineComment(selectedText, comment),
+      ),
+    );
+  }
+
+  Future<void> _submitInlineComment(String lineText, String comment) async {
+    try {
+      await widget.client.appendInlineSection(widget.path, lineText, comment);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Comment added')),
+        );
+        _loadDocument(); // Refresh
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add comment: $e')),
+        );
+      }
+    }
+  }
+
+  void _onAddSection() async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => const _AddSectionDialog(),
+    );
+
+    if (result == null || !mounted) return;
+
+    try {
+      await widget.client.appendSection(
+        widget.path,
+        result['title']!,
+        result['content']!,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Section added')),
+        );
+        _loadDocument(); // Refresh
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add section: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,6 +211,21 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          if (_selectedText.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.comment),
+              tooltip: 'Add Comment',
+              onPressed: () => _showCommentSheet(_selectedText),
+            ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: _selectedText.isNotEmpty ? 'Add Comment' : 'Add Section',
+            onPressed: _selectedText.isNotEmpty
+                ? () => _showCommentSheet(_selectedText)
+                : _onAddSection,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -133,12 +269,54 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Widget _buildMarkdown(String content) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: MarkdownBody(
-        data: content,
-        selectable: true,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected text indicator
+        if (_selectedText.isNotEmpty)
+          GestureDetector(
+            onTap: () => _showCommentSheet(_selectedText),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.comment_outlined, size: 16, color: Colors.amber.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Comment on: "$_selectedText"',
+                      style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // Markdown content with long press to select
+        Expanded(
+          child: SelectionArea(
+            onSelectionChanged: (selection) {
+              if (selection != null && selection.plainText.isNotEmpty) {
+                setState(() {
+                  _selectedText = selection.plainText;
+                });
+              }
+            },
+            child: MarkdownWithAnnotations(
+              data: content,
+              onLineTapped: _onLineTapped,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -192,6 +370,83 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _AddSectionDialog extends StatefulWidget {
+  const _AddSectionDialog();
+
+  @override
+  State<_AddSectionDialog> createState() => _AddSectionDialogState();
+}
+
+class _AddSectionDialogState extends State<_AddSectionDialog> {
+  final _titleController = TextEditingController();
+  final _contentController = TextEditingController();
+
+  bool get _canAdd =>
+      _titleController.text.trim().isNotEmpty &&
+      _contentController.text.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Section'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Section title'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. "Follow-up Notes"',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 16),
+            const Text('Section content'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _contentController,
+              decoration: const InputDecoration(
+                hintText: 'Enter markdown content...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+              minLines: 3,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _canAdd
+              ? () => Navigator.pop(context, {
+                    'title': _titleController.text.trim(),
+                    'content': _contentController.text.trim(),
+                  })
+              : null,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }

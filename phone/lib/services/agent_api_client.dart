@@ -141,6 +141,41 @@ class AgentApiClient {
         body: {'action': 'append-section', 'title': title, 'content': content});
   }
 
+  /// Append an inline comment section to a document using server-side text matching.
+  ///
+  /// Uses POST /api/folders/:folderId/files/:fileId/sections with lineText field.
+  /// Server finds the last occurrence of exact lineText and inserts comment after it.
+  /// Format: "> [!NOTE] Sinh comment: <content> <timestamp>"
+  Future<void> appendInlineSection(
+    String path,
+    String lineText,
+    String comment,
+  ) async {
+    // Parse path into folderId and fileId
+    final parts = path.split('/');
+    if (parts.length < 2) {
+      throw AgentApiException(400, 'Invalid path format: $path');
+    }
+    final fileId = parts.last;
+    final folderParts = parts.sublist(0, parts.length - 1);
+    final folderId = folderParts.join('/');
+
+    final encodedFolder = Uri.encodeComponent(folderId);
+    final encodedFile = Uri.encodeComponent(fileId);
+
+    // Format: > [!NOTE] Sinh comment: <content> <timestamp>
+    final timestamp = DateTime.now().toIso8601String();
+    final commentLine = '> [!NOTE] Sinh comment: $comment $timestamp';
+
+    await _post(
+      '/api/folders/$encodedFolder/files/$encodedFile/sections',
+      body: {
+        'content': commentLine,
+        'lineText': lineText,
+      },
+    );
+  }
+
   /// Fetch feedback chip labels from server config.
   ///
   /// Returns empty list if config is missing or malformed.
