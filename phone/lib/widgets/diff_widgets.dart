@@ -454,8 +454,8 @@ class DiffLineView extends StatelessWidget {
                 segment.text,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
-                  // Muted color for changed segments to not compete with bg
-                  color: isHighlighted ? const Color(0xFFBBBBBB) : null,
+                  // White text for highlighted segments (sufficient contrast on green/red bg)
+                  color: isHighlighted ? const Color(0xFFFFFFFF) : null,
                 ),
               ),
             );
