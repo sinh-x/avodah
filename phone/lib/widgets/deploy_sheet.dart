@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/pa_team.dart';
+import '../services/deploy_draft_service.dart';
 
 /// A reusable deploy bottom sheet.
 ///
@@ -96,6 +97,45 @@ class _DeploySheetState extends State<DeploySheet> {
 
     // Pre-select provider and model from team's configured defaults.
     _applyTeamDefaults();
+
+    // Restore draft after setting initial values; draft values override call-site
+    // defaults so the user can resume after switching away.
+    _loadDraft();
+  }
+
+  Future<void> _loadDraft() async {
+    final draft = await DeployDraftService.loadDraft();
+    if (draft == null || !mounted) return;
+    setState(() {
+      if (draft.team != null &&
+          widget.paTeams.any((t) => t.name == draft.team)) {
+        _selectedTeam = draft.team;
+        _autoSelectMode();
+        _applyTeamDefaults();
+      }
+      if (draft.mode != null) _selectedMode = draft.mode;
+      if (draft.repo != null &&
+          widget.paRepos.any((r) => r.name == draft.repo)) {
+        _selectedRepo = draft.repo;
+      }
+      if (draft.provider != null) _selectedProvider = draft.provider;
+      if (draft.model != null) _selectedModel = draft.model;
+      if (draft.objective != null && draft.objective!.isNotEmpty) {
+        _objectiveController.text = draft.objective!;
+        _objectiveTouched = true;
+      }
+    });
+  }
+
+  void _saveDraft() {
+    DeployDraftService.saveDraft(DeployDraft(
+      team: _selectedTeam,
+      mode: _selectedMode,
+      repo: _selectedRepo,
+      provider: _selectedProvider,
+      model: _selectedModel,
+      objective: _objectiveController.text.isEmpty ? null : _objectiveController.text,
+    ));
   }
 
   void _applyTeamDefaults() {
@@ -125,6 +165,7 @@ class _DeploySheetState extends State<DeploySheet> {
       _objectiveTouched = true;
     }
     setState(() {});
+    _saveDraft();
   }
 
   /// Sanitize objective text: replace & with 'and', strip blocked chars.
@@ -216,6 +257,7 @@ class _DeploySheetState extends State<DeploySheet> {
                       _autoSelectMode();
                       _applyTeamDefaults();
                     });
+                    _saveDraft();
                   },
                 ),
                 const SizedBox(height: 16),
@@ -234,7 +276,10 @@ class _DeploySheetState extends State<DeploySheet> {
                     paRepos: widget.paRepos,
                     selectedRepo: _selectedRepo,
                     enabled: !_deploying,
-                    onChanged: (repo) => setState(() => _selectedRepo = repo),
+                    onChanged: (repo) {
+                      setState(() => _selectedRepo = repo);
+                      _saveDraft();
+                    },
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -246,8 +291,10 @@ class _DeploySheetState extends State<DeploySheet> {
                   _ProviderSelector(
                     selectedProvider: _selectedProvider,
                     enabled: !_deploying,
-                    onChanged: (p) =>
-                        setState(() => _selectedProvider = p),
+                    onChanged: (p) {
+                        setState(() => _selectedProvider = p);
+                        _saveDraft();
+                      },
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -259,7 +306,10 @@ class _DeploySheetState extends State<DeploySheet> {
                   _ModelSelector(
                     selectedModel: _selectedModel,
                     enabled: !_deploying,
-                    onChanged: (m) => setState(() => _selectedModel = m),
+                    onChanged: (m) {
+                        setState(() => _selectedModel = m);
+                        _saveDraft();
+                      },
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -345,9 +395,12 @@ class _DeploySheetState extends State<DeploySheet> {
                   : null,
               onSelected: _deploying
                   ? null
-                  : (_) => setState(() {
-                        _selectedMode = selected ? null : mode.id;
-                      }),
+                  : (bool selected) {
+                        setState(() {
+                          _selectedMode = selected ? null : mode.id;
+                        });
+                        _saveDraft();
+                      },
             );
           }).toList(),
         ),
@@ -368,6 +421,7 @@ class _DeploySheetState extends State<DeploySheet> {
         provider: _selectedProvider,
         teamModel: _selectedModel,
       );
+      await DeployDraftService.clearDraft();
     } finally {
       if (mounted) setState(() => _deploying = false);
     }
