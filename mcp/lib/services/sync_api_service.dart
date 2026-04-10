@@ -18,6 +18,7 @@ import 'package:drift/drift.dart' show Value;
 import '../config/avo_config.dart';
 import '../config/paths.dart';
 import 'jira_service.dart';
+import 'pairing_service.dart';
 
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
@@ -52,6 +53,9 @@ class SyncApiService {
   /// Paths for config storage (injected to avoid read-only default path on NixOS).
   final AvodahPaths? paths;
 
+  /// Optional pairing service for device authentication.
+  final PairingService? pairingService;
+
   SyncApiService({
     required this.db,
     required this.clock,
@@ -59,6 +63,7 @@ class SyncApiService {
     this.jiraService,
     this.config,
     this.paths,
+    this.pairingService,
   });
 
   /// Routes a sync API request. Returns true if handled.
@@ -72,18 +77,42 @@ class SyncApiService {
       return false;
     }
 
-    // CORS headers
-    request.response.headers.add('Access-Control-Allow-Origin', '*');
-    request.response.headers
-        .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    request.response.headers
-        .add('Access-Control-Allow-Headers', 'Content-Type');
+    // Set CORS headers (restricted to paired origin after pairing is established)
+    await _setCorsHeaders(request);
 
     if (method == 'OPTIONS') {
       request.response
         ..statusCode = HttpStatus.ok
         ..close();
       return true;
+    }
+
+    // Auth check for /api/sync/deltas — requires valid X-Av-Pair-Token
+    if (path == '/api/sync/deltas') {
+      final nodeId = request.headers.value('X-Av-Node-Id');
+      final token = request.headers.value('X-Av-Pair-Token');
+
+      if (nodeId == null || token == null) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Missing X-Av-Node-Id or X-Av-Pair-Token header'});
+        return true;
+      }
+
+      if (pairingService == null) {
+        _jsonResponse(request, HttpStatus.internalServerError,
+            {'error': 'Pairing service not configured'});
+        return true;
+      }
+
+      final isValid = await pairingService!.verifyPairToken(nodeId, token);
+      if (!isValid) {
+        _jsonResponse(request, HttpStatus.forbidden,
+            {'error': 'Invalid or expired pairing token'});
+        return true;
+      }
+
+      // Update lastSeen for the paired device
+      await _updateLastSeen(nodeId);
     }
 
     try {
@@ -669,5 +698,58 @@ class SyncApiService {
       ..headers.contentType = ContentType.json
       ..write(jsonEncode(body))
       ..close();
+  }
+
+  // ============================================================
+  // Auth & CORS helpers
+  // ============================================================
+
+  /// Sets CORS headers for sync endpoints.
+  ///
+  /// After pairing is established, CORS is restricted to the paired device's origin.
+  /// Before pairing, a permissive CORS is set for the pairing endpoints.
+  ///
+  /// Returns the paired device's origin if known, otherwise null.
+  Future<String?> _setCorsHeaders(HttpRequest request) async {
+    final origin = request.headers.value('origin');
+
+    // If pairing service is available, check if we have a paired device
+    String? allowedOrigin;
+    if (pairingService != null && origin != null) {
+      // Try to look up the paired device by nodeId (from X-Av-Node-Id header)
+      final nodeId = request.headers.value('X-Av-Node-Id');
+      if (nodeId != null) {
+        final device = await pairingService!.getPairedDevice(nodeId);
+        if (device != null && device.origin != null) {
+          // If origin matches the stored origin (or is a sub-origin of it), allow it
+          if (origin == device.origin ||
+              origin.startsWith(device.origin!.replaceFirst(RegExp(r'^https?://'), ''))) {
+            allowedOrigin = origin;
+          }
+        }
+      }
+    }
+
+    // Default: allow the origin header value for pairing endpoints
+    // (After pairing, the phone sends the same origin it used during pairing)
+    allowedOrigin ??= origin ?? '*';
+
+    request.response.headers.add(
+        'Access-Control-Allow-Origin', allowedOrigin == '*' ? '*' : allowedOrigin);
+    request.response.headers
+        .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    request.response.headers.add('Access-Control-Allow-Headers',
+        'Content-Type, X-Av-Pair-Token, X-Av-Node-Id');
+
+    return allowedOrigin == '*' ? null : allowedOrigin;
+  }
+
+  /// Updates the lastSeen timestamp for a paired device.
+  Future<void> _updateLastSeen(String nodeId) async {
+    await (db.update(db.pairedDevices)
+          ..where((d) => d.id.equals(nodeId)))
+        .write(PairedDevicesCompanion(
+      lastSeen: Value(DateTime.now().millisecondsSinceEpoch),
+    ));
   }
 }

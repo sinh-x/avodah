@@ -7570,6 +7570,15 @@ class $PairedDevicesTable extends PairedDevices
     type: DriftSqlType.blob,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdMeta = const VerificationMeta(
     'created',
   );
@@ -7597,6 +7606,7 @@ class $PairedDevicesTable extends PairedDevices
     id,
     publicKey,
     privateKey,
+    origin,
     created,
     lastSeen,
   ];
@@ -7629,6 +7639,12 @@ class $PairedDevicesTable extends PairedDevices
       context.handle(
         _privateKeyMeta,
         privateKey.isAcceptableOrUnknown(data['private_key']!, _privateKeyMeta),
+      );
+    }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
       );
     }
     if (data.containsKey('created')) {
@@ -7666,6 +7682,10 @@ class $PairedDevicesTable extends PairedDevices
         DriftSqlType.blob,
         data['${effectivePrefix}private_key'],
       ),
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       created: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created'],
@@ -7687,12 +7707,14 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
   final String id;
   final Uint8List publicKey;
   final Uint8List? privateKey;
+  final String? origin;
   final int created;
   final int? lastSeen;
   const PairedDevice({
     required this.id,
     required this.publicKey,
     this.privateKey,
+    this.origin,
     required this.created,
     this.lastSeen,
   });
@@ -7703,6 +7725,9 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
     map['public_key'] = Variable<Uint8List>(publicKey);
     if (!nullToAbsent || privateKey != null) {
       map['private_key'] = Variable<Uint8List>(privateKey);
+    }
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
     }
     map['created'] = Variable<int>(created);
     if (!nullToAbsent || lastSeen != null) {
@@ -7718,6 +7743,9 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
       privateKey: privateKey == null && nullToAbsent
           ? const Value.absent()
           : Value(privateKey),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       created: Value(created),
       lastSeen: lastSeen == null && nullToAbsent
           ? const Value.absent()
@@ -7734,6 +7762,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
       id: serializer.fromJson<String>(json['id']),
       publicKey: serializer.fromJson<Uint8List>(json['publicKey']),
       privateKey: serializer.fromJson<Uint8List?>(json['privateKey']),
+      origin: serializer.fromJson<String?>(json['origin']),
       created: serializer.fromJson<int>(json['created']),
       lastSeen: serializer.fromJson<int?>(json['lastSeen']),
     );
@@ -7745,6 +7774,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
       'id': serializer.toJson<String>(id),
       'publicKey': serializer.toJson<Uint8List>(publicKey),
       'privateKey': serializer.toJson<Uint8List?>(privateKey),
+      'origin': serializer.toJson<String?>(origin),
       'created': serializer.toJson<int>(created),
       'lastSeen': serializer.toJson<int?>(lastSeen),
     };
@@ -7754,12 +7784,14 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
     String? id,
     Uint8List? publicKey,
     Value<Uint8List?> privateKey = const Value.absent(),
+    Value<String?> origin = const Value.absent(),
     int? created,
     Value<int?> lastSeen = const Value.absent(),
   }) => PairedDevice(
     id: id ?? this.id,
     publicKey: publicKey ?? this.publicKey,
     privateKey: privateKey.present ? privateKey.value : this.privateKey,
+    origin: origin.present ? origin.value : this.origin,
     created: created ?? this.created,
     lastSeen: lastSeen.present ? lastSeen.value : this.lastSeen,
   );
@@ -7770,6 +7802,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
       privateKey: data.privateKey.present
           ? data.privateKey.value
           : this.privateKey,
+      origin: data.origin.present ? data.origin.value : this.origin,
       created: data.created.present ? data.created.value : this.created,
       lastSeen: data.lastSeen.present ? data.lastSeen.value : this.lastSeen,
     );
@@ -7781,6 +7814,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
           ..write('id: $id, ')
           ..write('publicKey: $publicKey, ')
           ..write('privateKey: $privateKey, ')
+          ..write('origin: $origin, ')
           ..write('created: $created, ')
           ..write('lastSeen: $lastSeen')
           ..write(')'))
@@ -7792,6 +7826,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
     id,
     $driftBlobEquality.hash(publicKey),
     $driftBlobEquality.hash(privateKey),
+    origin,
     created,
     lastSeen,
   );
@@ -7802,6 +7837,7 @@ class PairedDevice extends DataClass implements Insertable<PairedDevice> {
           other.id == this.id &&
           $driftBlobEquality.equals(other.publicKey, this.publicKey) &&
           $driftBlobEquality.equals(other.privateKey, this.privateKey) &&
+          other.origin == this.origin &&
           other.created == this.created &&
           other.lastSeen == this.lastSeen);
 }
@@ -7810,6 +7846,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
   final Value<String> id;
   final Value<Uint8List> publicKey;
   final Value<Uint8List?> privateKey;
+  final Value<String?> origin;
   final Value<int> created;
   final Value<int?> lastSeen;
   final Value<int> rowid;
@@ -7817,6 +7854,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
     this.id = const Value.absent(),
     this.publicKey = const Value.absent(),
     this.privateKey = const Value.absent(),
+    this.origin = const Value.absent(),
     this.created = const Value.absent(),
     this.lastSeen = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -7825,6 +7863,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
     required String id,
     required Uint8List publicKey,
     this.privateKey = const Value.absent(),
+    this.origin = const Value.absent(),
     required int created,
     this.lastSeen = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -7835,6 +7874,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
     Expression<String>? id,
     Expression<Uint8List>? publicKey,
     Expression<Uint8List>? privateKey,
+    Expression<String>? origin,
     Expression<int>? created,
     Expression<int>? lastSeen,
     Expression<int>? rowid,
@@ -7843,6 +7883,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
       if (id != null) 'id': id,
       if (publicKey != null) 'public_key': publicKey,
       if (privateKey != null) 'private_key': privateKey,
+      if (origin != null) 'origin': origin,
       if (created != null) 'created': created,
       if (lastSeen != null) 'last_seen': lastSeen,
       if (rowid != null) 'rowid': rowid,
@@ -7853,6 +7894,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
     Value<String>? id,
     Value<Uint8List>? publicKey,
     Value<Uint8List?>? privateKey,
+    Value<String?>? origin,
     Value<int>? created,
     Value<int?>? lastSeen,
     Value<int>? rowid,
@@ -7861,6 +7903,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
       id: id ?? this.id,
       publicKey: publicKey ?? this.publicKey,
       privateKey: privateKey ?? this.privateKey,
+      origin: origin ?? this.origin,
       created: created ?? this.created,
       lastSeen: lastSeen ?? this.lastSeen,
       rowid: rowid ?? this.rowid,
@@ -7878,6 +7921,9 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
     }
     if (privateKey.present) {
       map['private_key'] = Variable<Uint8List>(privateKey.value);
+    }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
     }
     if (created.present) {
       map['created'] = Variable<int>(created.value);
@@ -7897,6 +7943,7 @@ class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
           ..write('id: $id, ')
           ..write('publicKey: $publicKey, ')
           ..write('privateKey: $privateKey, ')
+          ..write('origin: $origin, ')
           ..write('created: $created, ')
           ..write('lastSeen: $lastSeen, ')
           ..write('rowid: $rowid')
@@ -11486,6 +11533,7 @@ typedef $$PairedDevicesTableCreateCompanionBuilder =
       required String id,
       required Uint8List publicKey,
       Value<Uint8List?> privateKey,
+      Value<String?> origin,
       required int created,
       Value<int?> lastSeen,
       Value<int> rowid,
@@ -11495,6 +11543,7 @@ typedef $$PairedDevicesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<Uint8List> publicKey,
       Value<Uint8List?> privateKey,
+      Value<String?> origin,
       Value<int> created,
       Value<int?> lastSeen,
       Value<int> rowid,
@@ -11521,6 +11570,11 @@ class $$PairedDevicesTableFilterComposer
 
   ColumnFilters<Uint8List> get privateKey => $composableBuilder(
     column: $table.privateKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11559,6 +11613,11 @@ class $$PairedDevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get created => $composableBuilder(
     column: $table.created,
     builder: (column) => ColumnOrderings(column),
@@ -11589,6 +11648,9 @@ class $$PairedDevicesTableAnnotationComposer
     column: $table.privateKey,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
 
   GeneratedColumn<int> get created =>
       $composableBuilder(column: $table.created, builder: (column) => column);
@@ -11631,6 +11693,7 @@ class $$PairedDevicesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<Uint8List> publicKey = const Value.absent(),
                 Value<Uint8List?> privateKey = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<int?> lastSeen = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -11638,6 +11701,7 @@ class $$PairedDevicesTableTableManager
                 id: id,
                 publicKey: publicKey,
                 privateKey: privateKey,
+                origin: origin,
                 created: created,
                 lastSeen: lastSeen,
                 rowid: rowid,
@@ -11647,6 +11711,7 @@ class $$PairedDevicesTableTableManager
                 required String id,
                 required Uint8List publicKey,
                 Value<Uint8List?> privateKey = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 required int created,
                 Value<int?> lastSeen = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -11654,6 +11719,7 @@ class $$PairedDevicesTableTableManager
                 id: id,
                 publicKey: publicKey,
                 privateKey: privateKey,
+                origin: origin,
                 created: created,
                 lastSeen: lastSeen,
                 rowid: rowid,

@@ -16,8 +16,10 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
@@ -27,6 +29,10 @@ import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
 import 'package:http/http.dart' as http;
+
+/// Server fingerprint computed from the TLS certificate (SHA-256, base64).
+/// Set during TLS binding and used in the /api/sync/status response.
+String? serverFingerprint;
 
 Future<void> main(List<String> args) async {
   final paths = AvodahPaths();
@@ -58,30 +64,75 @@ Future<void> main(List<String> args) async {
   final nodeId = paths.getNodeIdSync();
   final clock = HybridLogicalClock(nodeId: nodeId);
 
+  // Pairing service for secure sync device authentication
+  final pairingService = PairingService(db: db);
+
   // Jira service — only when JIRA_ENABLED=true
   JiraService? jiraService;
   if (jiraEnabled) {
     jiraService = JiraService(db: db, clock: clock, paths: paths);
   }
 
-  // CRDT delta sync API service
+  // CRDT delta sync API service (needs pairingService for auth middleware)
   final syncApi = SyncApiService(
     db: db,
     clock: clock,
     jiraService: jiraService,
     config: config,
     paths: paths,
+    pairingService: pairingService,
   );
-
-  // Pairing service for secure sync device authentication
-  final pairingService = PairingService(db: db);
 
   // Self-update service for phone-triggered APK builds
   final selfUpdateService = SelfUpdateService();
 
-  // Start HTTP server
-  final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-  stderr.writeln('Avodah Sync Server listening on 0.0.0.0:$port');
+  // Start server (TLS or plain HTTP)
+  HttpServer server;
+  final tlsCertPath = config.syncTlsCertPath;
+  final tlsKeyPath = config.syncTlsKeyPath;
+
+  if (tlsCertPath != null && tlsKeyPath != null) {
+    // TLS mode: load certificate and bind securely
+    final certFile = File(tlsCertPath);
+    final keyFile = File(tlsKeyPath);
+
+    if (!await certFile.exists()) {
+      stderr.writeln('ERROR: TLS certificate not found: $tlsCertPath');
+      stderr.writeln('Please provide valid TLS cert and key files, or remove syncTls config.');
+      exit(1);
+    }
+    if (!await keyFile.exists()) {
+      stderr.writeln('ERROR: TLS key not found: $tlsKeyPath');
+      stderr.writeln('Please provide valid TLS cert and key files, or remove syncTls config.');
+      exit(1);
+    }
+
+    final context = SecurityContext();
+    try {
+      context.useCertificateChainBytes(await certFile.readAsBytes());
+      context.usePrivateKeyBytes(await keyFile.readAsBytes());
+    } catch (e) {
+      stderr.writeln('ERROR: Failed to load TLS certificate/key: $e');
+      exit(1);
+    }
+
+    // Compute server fingerprint from the certificate (SHA-256, base64)
+    serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
+
+    server = await HttpServer.bindSecure(
+      InternetAddress.anyIPv4,
+      port,
+      context,
+    );
+    stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on 0.0.0.0:$port');
+    stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
+  } else {
+    // Plain HTTP mode (no TLS — for development or local-only networks)
+    server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    stderr.writeln('Avodah Sync Server (HTTP) listening on 0.0.0.0:$port');
+    stderr.writeln('WARNING: HTTP mode — sync traffic is NOT encrypted. Use TLS for production.');
+  }
+
   stderr.writeln(
       'Agent API proxy → $agentApiUrl (Jira: ${jiraEnabled ? "enabled" : "disabled"})');
 
@@ -101,6 +152,41 @@ Future<void> main(List<String> args) async {
     unawaited(_handleRequest(
         request, syncApi, pairingService, selfUpdateService, agentApiUrl));
   }
+}
+
+/// Computes a SHA-256 fingerprint from a PEM-encoded certificate.
+Future<String?> _computeFingerprint(List<int> certBytes) async {
+  try {
+    // Extract the certificate der bytes from PEM if needed
+    String pem = String.fromCharCodes(certBytes);
+    List<int> derBytes;
+
+    if (pem.contains('-----BEGIN CERTIFICATE-----')) {
+      // PEM format — extract base64 content and decode
+      final base64Content = pem
+          .replaceAll('-----BEGIN CERTIFICATE-----', '')
+          .replaceAll('-----END CERTIFICATE-----', '')
+          .replaceAll(RegExp(r'\s'), '');
+      derBytes = base64.decode(base64Content);
+    } else {
+      // Assume DER format
+      derBytes = certBytes;
+    }
+
+    // SHA-256 hash and base64 encode
+    final fingerprint = await _sha256(Uint8List.fromList(derBytes));
+    return base64.encode(fingerprint);
+  } catch (e) {
+    stderr.writeln('Warning: could not compute TLS fingerprint: $e');
+    return null;
+  }
+}
+
+/// SHA-256 digest helper.
+Future<Uint8List> _sha256(Uint8List data) async {
+  final sha256 = crypto.Sha256();
+  final digest = await sha256.hash(data);
+  return Uint8List.fromList(digest.bytes);
 }
 
 Future<void> _handleRequest(
@@ -171,7 +257,9 @@ Future<void> _handleRequest(
 /// GET /api/sync/status — Returns pairing status.
 Future<void> _handleSyncStatus(
     HttpRequest request, PairingService pairingService) async {
-  _setSyncCors(request);
+  final paired = await pairingService.listPairedDevices();
+  final pairedOrigin = paired.isNotEmpty ? paired.first.origin : null;
+  _setSyncCors(request, pairedOrigin: pairedOrigin);
   if (request.method == 'OPTIONS') {
     request.response
       ..statusCode = HttpStatus.ok
@@ -180,6 +268,10 @@ Future<void> _handleSyncStatus(
   }
 
   final status = await pairingService.getStatus();
+  // Include serverFingerprint if TLS is configured
+  if (serverFingerprint != null) {
+    status['serverFingerprint'] = serverFingerprint;
+  }
   _jsonResponse(request, HttpStatus.ok, status);
 }
 
@@ -237,6 +329,8 @@ Future<void> _handlePairConfirm(
     final nodeId = json['nodeId'] as String? ?? 'phone';
     final phonePubKey = json['phonePubKey'] as String?;
     final hmacProof = json['hmacProof'] as String?;
+    // Capture origin for CORS restriction (e.g. "https://100.64.0.1:9847")
+    final origin = request.headers.value('origin');
 
     if (phonePubKey == null || hmacProof == null) {
       _jsonResponse(request, HttpStatus.badRequest,
@@ -248,6 +342,7 @@ Future<void> _handlePairConfirm(
       nodeId: nodeId,
       phonePubKeyBase64: phonePubKey,
       hmacProofBase64: hmacProof,
+      origin: origin,
     );
 
     if (result['success'] == true) {
@@ -294,12 +389,17 @@ Future<void> _handlePairRevoke(
 }
 
 /// Sets CORS headers for sync endpoints.
-void _setSyncCors(HttpRequest request) {
-  request.response.headers.add('Access-Control-Allow-Origin', '*');
+///
+/// After pairing is established, restricts CORS to the paired device's origin.
+void _setSyncCors(HttpRequest request, {String? pairedOrigin}) {
+  final origin = request.headers.value('origin');
+  final allowedOrigin = pairedOrigin ?? origin ?? '*';
+  request.response.headers.add(
+      'Access-Control-Allow-Origin', allowedOrigin == '*' ? '*' : allowedOrigin);
   request.response.headers
       .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   request.response.headers.add('Access-Control-Allow-Headers',
-      'Content-Type, X-Av-Pair-Token');
+      'Content-Type, X-Av-Pair-Token, X-Av-Node-Id');
 }
 
 /// Sends a JSON response.

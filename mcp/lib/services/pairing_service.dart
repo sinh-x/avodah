@@ -103,12 +103,13 @@ class PairingService {
 
   /// POST /api/sync/pair/confirm
   ///
-  /// Accepts {phonePubKey, hmacProof}.
+  /// Accepts {phonePubKey, hmacProof, origin?}.
   /// Derives shared secret, stores pairing key, returns {success, error?}.
   Future<Map<String, dynamic>> confirmPairing({
     required String nodeId,
     required String phonePubKeyBase64,
     required String hmacProofBase64,
+    String? origin,
   }) async {
     final state = _handshakes[nodeId];
     if (state == null || state.isExpired) {
@@ -134,12 +135,13 @@ class PairingService {
     // Derive pairing key: HMAC-SHA256(sharedSecret, "avodah-pair-v1")
     final pairingKey = await derivePairingKey(sharedSecret);
 
-    // Store pairing: phone's public key + pairing key
+    // Store pairing: phone's public key + pairing key + origin for CORS
     await db.into(db.pairedDevices).insertOnConflictUpdate(
           PairedDevicesCompanion.insert(
             id: nodeId,
             publicKey: Uint8List.fromList(phonePubKey),
             privateKey: Value(Uint8List.fromList(pairingKey)),
+            origin: Value(origin),
             created: DateTime.now().millisecondsSinceEpoch,
             lastSeen: Value(DateTime.now().millisecondsSinceEpoch),
           ),

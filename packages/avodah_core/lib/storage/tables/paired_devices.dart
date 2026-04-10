@@ -12,6 +12,9 @@ class PairedDevices extends Table {
   // Optional encrypted private key reference (for key recovery)
   BlobColumn get privateKey => blob().nullable()();
 
+  // Origin (e.g. "https://100.64.0.1:9847") for CORS restriction
+  TextColumn get origin => text().nullable()();
+
   // Timestamps
   IntColumn get created => integer()(); // Unix ms
   IntColumn get lastSeen => integer().nullable()(); // Unix ms
