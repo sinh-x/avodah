@@ -122,9 +122,14 @@ class _PairingScreenState extends State<PairingScreen> {
     if (!mounted) return;
 
     if (!status.needsPairing) {
-      // Already paired — just go back
-      Navigator.of(context).pop(true);
-      return;
+      // Server thinks it's paired but we got here (likely 403 — phone lost
+      // its token). Revoke the stale pairing so we can re-pair cleanly.
+      debugPrint('[PairingScreen] Server paired but phone token missing — revoking stale pairing');
+      try {
+        await _pairingService.revokePairing();
+      } catch (e) {
+        debugPrint('[PairingScreen] Revoke failed (non-fatal): $e');
+      }
     }
 
     // Store fingerprint if provided
