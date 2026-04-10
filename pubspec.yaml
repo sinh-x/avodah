@@ -1,7 +1,7 @@
 name: avodah
 description: "Local-first productivity app with CRDT sync"
 publish_to: 'none'
-version: 0.4.2+61
+version: 0.4.2+62
 
 environment:
   sdk: ^3.10.8
