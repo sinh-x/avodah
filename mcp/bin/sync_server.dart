@@ -21,6 +21,7 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
+import 'package:avodah_mcp/services/pairing_service.dart';
 import 'package:avodah_mcp/services/self_update_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
@@ -72,6 +73,9 @@ Future<void> main(List<String> args) async {
     paths: paths,
   );
 
+  // Pairing service for secure sync device authentication
+  final pairingService = PairingService(db: db);
+
   // Self-update service for phone-triggered APK builds
   final selfUpdateService = SelfUpdateService();
 
@@ -94,13 +98,15 @@ Future<void> main(List<String> args) async {
 
   // Accept connections — handle each request concurrently
   await for (final request in server) {
-    unawaited(_handleRequest(request, syncApi, selfUpdateService, agentApiUrl));
+    unawaited(_handleRequest(
+        request, syncApi, pairingService, selfUpdateService, agentApiUrl));
   }
 }
 
 Future<void> _handleRequest(
   HttpRequest request,
   SyncApiService syncApi,
+  PairingService pairingService,
   SelfUpdateService selfUpdateService,
   String agentApiUrl,
 ) async {
@@ -111,19 +117,38 @@ Future<void> _handleRequest(
       return;
     }
 
-    // Self-update endpoints
     final path = request.uri.path;
+
+    // Self-update endpoints
     if (path == '/api/self-update' || path == '/api/self-update/status') {
       await _handleSelfUpdate(request, selfUpdateService);
       return;
     }
 
-    // Sync API handles its own paths (e.g. /sync/*)
+    // Pairing endpoints (before auth check — pairing doesn't require auth)
+    if (path == '/api/sync/status') {
+      await _handleSyncStatus(request, pairingService);
+      return;
+    }
+    if (path == '/api/sync/pair/start' && request.method == 'POST') {
+      await _handlePairStart(request, pairingService);
+      return;
+    }
+    if (path == '/api/sync/pair/confirm' && request.method == 'POST') {
+      await _handlePairConfirm(request, pairingService);
+      return;
+    }
+    if (path == '/api/sync/pair' && request.method == 'DELETE') {
+      await _handlePairRevoke(request, pairingService);
+      return;
+    }
+
+    // Sync API handles its own paths (e.g. /api/sync/deltas)
     final syncHandled = await syncApi.handleRequest(request);
     if (syncHandled) return;
 
     // /api/* → proxy to AGENT_API_URL
-    if (request.uri.path.startsWith('/api/')) {
+    if (path.startsWith('/api/')) {
       await _proxyHttp(request, agentApiUrl);
       return;
     }
@@ -137,6 +162,154 @@ Future<void> _handleRequest(
   } catch (e, stack) {
     stderr.writeln('Unhandled request error: $e\n$stack');
   }
+}
+
+// ============================================================
+// Pairing handlers
+// ============================================================
+
+/// GET /api/sync/status — Returns pairing status.
+Future<void> _handleSyncStatus(
+    HttpRequest request, PairingService pairingService) async {
+  _setSyncCors(request);
+  if (request.method == 'OPTIONS') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..close();
+    return;
+  }
+
+  final status = await pairingService.getStatus();
+  _jsonResponse(request, HttpStatus.ok, status);
+}
+
+/// POST /api/sync/pair/start — Initiates pairing handshake.
+Future<void> _handlePairStart(
+    HttpRequest request, PairingService pairingService) async {
+  _setSyncCors(request);
+  if (request.method == 'OPTIONS') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..close();
+    return;
+  }
+
+  if (request.method != 'POST') {
+    _jsonResponse(request, HttpStatus.methodNotAllowed,
+        {'error': 'Method not allowed'});
+    return;
+  }
+
+  try {
+    final body = await utf8.decoder.bind(request).join();
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    final nodeId = json['nodeId'] as String? ?? 'phone';
+
+    final result = await pairingService.startPairing(nodeId);
+    _jsonResponse(request, HttpStatus.ok, result);
+  } catch (e) {
+    stderr.writeln('Pair start error: $e');
+    _jsonResponse(request, HttpStatus.internalServerError,
+        {'error': 'Pairing start failed: $e'});
+  }
+}
+
+/// POST /api/sync/pair/confirm — Completes pairing handshake.
+Future<void> _handlePairConfirm(
+    HttpRequest request, PairingService pairingService) async {
+  _setSyncCors(request);
+  if (request.method == 'OPTIONS') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..close();
+    return;
+  }
+
+  if (request.method != 'POST') {
+    _jsonResponse(request, HttpStatus.methodNotAllowed,
+        {'error': 'Method not allowed'});
+    return;
+  }
+
+  try {
+    final body = await utf8.decoder.bind(request).join();
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    final nodeId = json['nodeId'] as String? ?? 'phone';
+    final phonePubKey = json['phonePubKey'] as String?;
+    final hmacProof = json['hmacProof'] as String?;
+
+    if (phonePubKey == null || hmacProof == null) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Missing phonePubKey or hmacProof'});
+      return;
+    }
+
+    final result = await pairingService.confirmPairing(
+      nodeId: nodeId,
+      phonePubKeyBase64: phonePubKey,
+      hmacProofBase64: hmacProof,
+    );
+
+    if (result['success'] == true) {
+      _jsonResponse(request, HttpStatus.ok, result);
+    } else {
+      _jsonResponse(request, HttpStatus.forbidden, result);
+    }
+  } catch (e) {
+    stderr.writeln('Pair confirm error: $e');
+    _jsonResponse(request, HttpStatus.internalServerError,
+        {'error': 'Pairing confirm failed: $e'});
+  }
+}
+
+/// DELETE /api/sync/pair — Revokes pairing.
+Future<void> _handlePairRevoke(
+    HttpRequest request, PairingService pairingService) async {
+  _setSyncCors(request);
+  if (request.method == 'OPTIONS') {
+    request.response
+      ..statusCode = HttpStatus.ok
+      ..close();
+    return;
+  }
+
+  if (request.method != 'DELETE') {
+    _jsonResponse(request, HttpStatus.methodNotAllowed,
+        {'error': 'Method not allowed'});
+    return;
+  }
+
+  try {
+    final body = await utf8.decoder.bind(request).join();
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    final nodeId = json['nodeId'] as String? ?? 'phone';
+
+    await pairingService.revokePairing(nodeId);
+    _jsonResponse(request, HttpStatus.ok, {'success': true});
+  } catch (e) {
+    stderr.writeln('Pair revoke error: $e');
+    _jsonResponse(request, HttpStatus.internalServerError,
+        {'error': 'Pairing revoke failed: $e'});
+  }
+}
+
+/// Sets CORS headers for sync endpoints.
+void _setSyncCors(HttpRequest request) {
+  request.response.headers.add('Access-Control-Allow-Origin', '*');
+  request.response.headers
+      .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  request.response.headers.add('Access-Control-Allow-Headers',
+      'Content-Type, X-Av-Pair-Token');
+}
+
+/// Sends a JSON response.
+void _jsonResponse(
+    HttpRequest request, int statusCode, Map<String, dynamic> body) {
+  request.response
+    ..statusCode = statusCode
+    ..headers.contentType = ContentType.json
+    ..write(jsonEncode(body))
+    ..close();
 }
 
 Future<void> _handleSelfUpdate(
