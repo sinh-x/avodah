@@ -26,6 +26,10 @@ dependencies:
     path: ../packages/avodah_core
   highlight: ^0.7.0
 
+  # Secure sync (Phase 4 - AVO-065)
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.2
+
 dependency_overrides:
   # 2.3.0 pulls in jni/jni_flutter which requires NDK 28 (not available in Nix env)
   path_provider_android: 2.2.23

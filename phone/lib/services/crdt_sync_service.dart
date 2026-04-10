@@ -9,6 +9,13 @@
 ///
 /// Watermark tracking: phone stores the desktop's watermark in
 /// [AppDatabase.syncWatermarks] with nodeId='desktop' and direction='received'.
+///
+/// ## Pairing Integration (AVO-065 Phase 4)
+///
+/// Uses [CryptoSyncService] for TLS 1.2+ transport with certificate
+/// verification and [PhonePairingService] for pairing flow. On sync error
+/// 403 or when server reports needsPairing:true, the [onNeedsPairing]
+/// callback is invoked to trigger the pairing UI.
 library;
 
 import 'dart:convert';
@@ -18,6 +25,9 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'crypto_sync_service.dart';
+import 'pairing_service.dart';
 
 const _kDesktopNodeId = 'desktop';
 const _kPhoneNodeIdKey = 'crdt_node_id';
@@ -37,19 +47,57 @@ class _SyncDocType {
   static const String dayPlanTask = 'dayPlanTask';
 }
 
+/// Callback type invoked when the server indicates pairing is required.
+typedef OnNeedsPairingCallback = Future<void> Function();
+
 /// Sync service that pulls CRDT deltas from the desktop via HTTP.
+///
+/// Uses [cryptoClient] for TLS + auth transport when provided.
+/// Falls back to plain [http.Client] if not supplied (for non-TLS connections).
+///
+/// Triggers [onNeedsPairing] when:
+/// - Sync returns HTTP 403 (unpaired or invalid token)
+/// - GET /api/sync/status returns needsPairing:true
 class CrdtSyncService {
   final String baseUrl;
   final AppDatabase db;
   final HybridLogicalClock clock;
-  final http.Client _client;
+  final http.Client _plainClient;
+  final CryptoSyncService? _cryptoClient;
+
+  /// Phone-side pairing service (initialized after pairing).
+  PhonePairingService? get pairingService => _pairingService;
+  PhonePairingService? _pairingService;
+
+  /// Called when the server reports needsPairing:true or returns HTTP 403.
+  final OnNeedsPairingCallback? onNeedsPairing;
 
   CrdtSyncService({
     required this.baseUrl,
     required this.db,
     required this.clock,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+    CryptoSyncService? cryptoClient,
+    this.onNeedsPairing,
+    required String nodeId,
+  })  : _plainClient = client ?? http.Client(),
+        _cryptoClient = cryptoClient {
+    if (_cryptoClient != null) {
+      _pairingService = PhonePairingService(
+        cryptoClient: _cryptoClient,
+        nodeId: nodeId,
+      );
+    }
+  }
+
+  /// Loads persisted pairing state from secure storage.
+  Future<void> loadPersistedState() async {
+    await _cryptoClient?.loadPersistedState();
+    await _pairingService?.loadPersistedState();
+  }
+
+  /// Returns true if a pairing token is stored.
+  bool get isPaired => _cryptoClient?.isPaired ?? false;
 
   /// Returns or creates the phone's persistent node ID.
   static Future<String> getOrCreateNodeId() async {
@@ -66,17 +114,51 @@ class CrdtSyncService {
   /// Pull all CRDT deltas from the desktop since the last known watermark.
   ///
   /// Returns the number of deltas merged, or throws on HTTP error.
+  /// Triggers [onNeedsPairing] if the server returns HTTP 403 or reports
+  /// needsPairing:true.
   Future<int> pullFromDesktop() async {
+    // Only check server pairing status if we DON'T have a local token.
+    // If we do have a token, skip the network call and let the actual
+    // /api/sync/deltas 403 response be the authoritative signal.
+    if (_cryptoClient != null && !isPaired) {
+      final status = await _pairingService?.checkPairingStatus();
+      if (status != null && status.needsPairing) {
+        debugPrint('[CrdtSync] Server needs pairing — triggering pairing flow');
+        await onNeedsPairing?.call();
+        throw Exception('Pairing required');
+      }
+    }
+
     final watermark = await _getDesktopWatermark();
-
     final nodeId = await getOrCreateNodeId();
-    final uri = Uri.parse(
-      '$baseUrl/api/sync/deltas?since=${Uri.encodeComponent(watermark)}&node=${Uri.encodeComponent(nodeId)}',
-    );
 
-    debugPrint('[CrdtSync] Pulling deltas since $watermark from $uri');
+    debugPrint('[CrdtSync] Pulling deltas since $watermark');
 
-    final response = await _client.get(uri).timeout(const Duration(seconds: 10));
+    final http.Response response;
+    if (_cryptoClient != null) {
+      // Use TLS client — auth headers applied automatically
+      final httpResponse = await _cryptoClient.get(
+        'api/sync/deltas',
+        queryParams: {
+          'since': watermark,
+          'node': nodeId,
+        },
+      );
+      final body = await httpResponse.transform(utf8.decoder).join();
+      response = http.Response(body, httpResponse.statusCode);
+    } else {
+      final uri = Uri.parse(
+        '$baseUrl/api/sync/deltas?since=${Uri.encodeComponent(watermark)}&node=${Uri.encodeComponent(nodeId)}',
+      );
+      response = await _plainClient.get(uri).timeout(const Duration(seconds: 10));
+    }
+
+    if (response.statusCode == 403) {
+      debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
+      await onNeedsPairing?.call();
+      throw Exception('Pairing required (HTTP 403)');
+    }
+
     if (response.statusCode != 200) {
       throw Exception('Sync pull failed: HTTP ${response.statusCode}');
     }
@@ -239,21 +321,40 @@ class CrdtSyncService {
   /// Protocol: POST /api/sync/deltas
   /// Body: `{"node": "<node-id>", "deltas": [...]}`
   /// Returns the number of deltas merged by the desktop, or throws on HTTP error.
+  /// Triggers [onNeedsPairing] on HTTP 403.
   Future<int> pushToDesktop(List<Map<String, dynamic>> deltas) async {
     if (deltas.isEmpty) return 0;
 
     final nodeId = await getOrCreateNodeId();
-    final uri = Uri.parse('$baseUrl/api/sync/deltas');
+    final body = jsonEncode({'node': nodeId, 'deltas': deltas});
 
-    debugPrint('[CrdtSync] Pushing ${deltas.length} delta(s) to $uri');
+    debugPrint('[CrdtSync] Pushing ${deltas.length} delta(s)');
 
-    final response = await _client
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'node': nodeId, 'deltas': deltas}),
-        )
-        .timeout(const Duration(seconds: 10));
+    final http.Response response;
+    if (_cryptoClient != null) {
+      final httpResponse = await _cryptoClient.post(
+        'api/sync/deltas',
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+      final responseBody = await httpResponse.transform(utf8.decoder).join();
+      response = http.Response(responseBody, httpResponse.statusCode);
+    } else {
+      final uri = Uri.parse('$baseUrl/api/sync/deltas');
+      response = await _plainClient
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+    }
+
+    if (response.statusCode == 403) {
+      debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
+      await onNeedsPairing?.call();
+      throw Exception('Pairing required (HTTP 403)');
+    }
 
     if (response.statusCode != 200) {
       throw Exception('Sync push failed: HTTP ${response.statusCode}');
@@ -299,7 +400,20 @@ class CrdtSyncService {
         );
   }
 
+  /// Revokes pairing with the desktop server.
+  ///
+  /// Calls DELETE /api/sync/pair to notify the server, then clears local
+  /// pairing state. After revocation, the next sync attempt will trigger
+  /// the pairing flow again.
+  ///
+  /// Does nothing if not currently paired.
+  Future<void> revokePairing() async {
+    await _pairingService?.revokePairing();
+    debugPrint('[CrdtSync] Pairing revoked. Service reset to unpaired state.');
+  }
+
   void dispose() {
-    _client.close();
+    _plainClient.close();
+    _cryptoClient?.dispose();
   }
 }

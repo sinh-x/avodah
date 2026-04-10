@@ -6,12 +6,14 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
+import 'screens/pairing_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
 import 'services/board_provider.dart';
 import 'services/crdt_sync_service.dart';
+import 'services/crypto_sync_service.dart';
 import 'services/deployment_provider.dart';
 import 'services/focus_provider.dart';
 import 'services/local_dashboard_provider.dart';
@@ -38,6 +40,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   LocalDashboardProvider? _dashboardProvider;
   LocalWriteService? _writeService;
   CrdtSyncService? _crdtSyncService;
+  CryptoSyncService? _cryptoSyncService;
   AgentApiClient? _apiClient;
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
@@ -45,6 +48,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   BoardProvider? _boardProvider;
   FocusProvider? _focusProvider;
   Timer? _syncTimer;
+  bool _pairingInProgress = false;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -72,15 +77,28 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     // Load stored server URL (already HTTP format)
     final httpBaseUrl = await SettingsScreen.loadServerUrl();
 
-    // CRDT sync service pulls deltas from desktop via HTTP
+    // TLS-capable HTTP client with certificate verification
+    final cryptoSyncService = CryptoSyncService(
+      baseUrl: httpBaseUrl,
+      nodeId: nodeId,
+    );
+    await cryptoSyncService.loadPersistedState();
+
+    // CRDT sync service with TLS + pairing integration
     final crdtSyncService = CrdtSyncService(
       baseUrl: httpBaseUrl,
       db: db,
       clock: clock,
+      cryptoClient: cryptoSyncService,
+      nodeId: nodeId,
+      onNeedsPairing: _onNeedsPairing,
     );
+    await crdtSyncService.loadPersistedState();
 
-    // Agent workflow API
-    final apiClient = AgentApiClient(baseUrl: httpBaseUrl);
+    // Agent workflow API — inject pairing credentials for authenticated proxy
+    final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
+      ..pairingToken = cryptoSyncService.pairingToken
+      ..nodeId = nodeId;
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -103,6 +121,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
       _dashboardProvider = dashboardProvider;
       _writeService = writeService;
       _crdtSyncService = crdtSyncService;
+      _cryptoSyncService = cryptoSyncService;
       _apiClient = apiClient;
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
@@ -149,6 +168,120 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     }
   }
 
+  /// Shows the certificate approval dialog if a cert is pending approval.
+  ///
+  /// Returns true if approved, false if rejected.
+  Future<bool> _handlePendingCertApproval() async {
+    final crypto = _cryptoSyncService;
+    if (crypto == null) return false;
+
+    final fingerprint = crypto.checkPendingCertFingerprint();
+    if (fingerprint == null) return false;
+
+    if (!mounted) return false;
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return false;
+    final approved = await showDialog<bool>(
+      context: navContext,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.security, color: Colors.amber, size: 48),
+        title: const Text('Certificate Not Trusted'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The server\'s TLS certificate could not be verified. '
+              'This may happen with self-signed certificates.',
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'SHA-256 Fingerprint:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                fingerprint,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Reject'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+
+    final result = approved ?? false;
+    if (result) {
+      await crypto.approveCert(fingerprint);
+    } else {
+      crypto.rejectCert();
+    }
+    return result;
+  }
+
+  /// Called when sync reports needsPairing:true or HTTP 403.
+  Future<void> _onNeedsPairing() async {
+    // Guard against re-entrant calls from the periodic sync timer
+    if (_pairingInProgress) return;
+    if (!mounted) return;
+    final crypto = _cryptoSyncService;
+    final crdt = _crdtSyncService;
+    if (crypto == null || crdt == null) return;
+
+    _pairingInProgress = true;
+    try {
+      // Handle pending cert approval if any
+      await _handlePendingCertApproval();
+
+      final nodeId = await CrdtSyncService.getOrCreateNodeId();
+      if (!mounted) return;
+
+      final nav = _navigatorKey.currentState;
+      if (nav == null) return;
+
+      // Push the pairing screen as a blocking route
+      final result = await nav.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PairingScreen(
+            args: PairingScreenArgs(
+              cryptoClient: crypto,
+              nodeId: nodeId,
+            ),
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (result == true) {
+        // Pairing succeeded — reload persisted state and trigger sync
+        await crdt.loadPersistedState();
+        // Update API client with new pairing token
+        _apiClient?.pairingToken = crypto.pairingToken;
+        await _syncAndRefresh();
+      }
+    } finally {
+      _pairingInProgress = false;
+    }
+  }
+
   @override
   void dispose() {
     _syncTimer?.cancel();
@@ -159,6 +292,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     _reviewProvider?.dispose();
     _apiClient?.dispose();
     _crdtSyncService?.dispose();
+    _cryptoSyncService?.dispose();
     _dashboardProvider?.dispose();
     _db?.close();
     super.dispose();
@@ -167,6 +301,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Avodah',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -193,6 +328,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               boardProvider: _boardProvider!,
               focusProvider: _focusProvider,
               onPushDeltas: _pushDeltas,
+              crdtSyncService: _crdtSyncService,
             ),
     );
   }
@@ -209,6 +345,7 @@ class _HomeShell extends StatefulWidget {
   final BoardProvider boardProvider;
   final FocusProvider? focusProvider;
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
+  final CrdtSyncService? crdtSyncService;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -220,6 +357,7 @@ class _HomeShell extends StatefulWidget {
     required this.boardProvider,
     this.focusProvider,
     this.onPushDeltas,
+    this.crdtSyncService,
   });
 
   @override
@@ -261,12 +399,14 @@ class _HomeShellState extends State<_HomeShell> {
               dashboardProvider: widget.dashboardProvider,
               focusProvider: widget.focusProvider,
               deploymentProvider: widget.deploymentProvider,
+              crdtSyncService: widget.crdtSyncService,
             ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
             apiClient: widget.apiClient,
             onPushDeltas: widget.onPushDeltas,
+            crdtSyncService: widget.crdtSyncService,
           ),
           Scaffold(
             appBar: AppBar(
@@ -284,7 +424,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
               ],
@@ -310,7 +450,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(
@@ -340,7 +480,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(

@@ -38,6 +38,7 @@ class KanbanBoardScreen extends StatefulWidget {
   final LocalDashboardProvider dashboardProvider;
   final FocusProvider? focusProvider;
   final DeploymentProvider? deploymentProvider;
+  final CrdtSyncService? crdtSyncService;
 
   const KanbanBoardScreen({
     super.key,
@@ -45,6 +46,7 @@ class KanbanBoardScreen extends StatefulWidget {
     required this.dashboardProvider,
     this.focusProvider,
     this.deploymentProvider,
+    this.crdtSyncService,
   });
 
   @override
@@ -167,7 +169,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              MaterialPageRoute(builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
             ),
           ),
           IconButton(

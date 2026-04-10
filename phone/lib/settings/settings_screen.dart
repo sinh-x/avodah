@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:avodah_core/version.dart';
 import '../services/agent_api_client.dart';
+import '../services/crdt_sync_service.dart';
 
 const kServerUrlKey = 'sync_server_url';
 const kDefaultServerUrl = 'http://100.64.0.1:9847';
@@ -15,7 +16,11 @@ class SettingsScreen extends StatefulWidget {
   /// using the current saved server URL.
   final AgentApiClient? apiClient;
 
-  const SettingsScreen({super.key, this.apiClient});
+  /// Optional CRDT sync service for Forget Server functionality.
+  /// If not provided, the Forget This Server button is hidden.
+  final CrdtSyncService? crdtSyncService;
+
+  const SettingsScreen({super.key, this.apiClient, this.crdtSyncService});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -65,6 +70,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Polling timer for build status.
   Timer? _statusPollTimer;
+
+  /// Whether Forget Server is in progress.
+  bool _forgetting = false;
+
+  /// Triggers the Forget Server confirmation and revocation flow.
+  Future<void> _forgetServer() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Forget This Server?'),
+        content: const Text(
+          'This will remove pairing with the current sync server. '
+          'You will need to pair again to resume sync.\n\n'
+          'Your local data will NOT be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Forget Server'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _forgetting = true);
+
+    try {
+      await widget.crdtSyncService?.revokePairing();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Server forgotten. Please restart the app.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to forget server: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _forgetting = false);
+    }
+  }
 
   @override
   void initState() {
@@ -172,7 +229,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final url = _controller.text.trim();
-      final uri = Uri.parse('$url/api/health');
+      // Use root health endpoint (no auth required)
+      final uri = Uri.parse('$url/');
       final response =
           await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
@@ -275,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   decoration: const InputDecoration(
                     hintText: kDefaultServerUrl,
                     border: OutlineInputBorder(),
-                    helperText: 'Use your Tailscale IP, e.g. http://100.x.y.z:9847',
+                    helperText: 'e.g. https://your-host.ts.net:9847',
                   ),
                   keyboardType: TextInputType.url,
                   autocorrect: false,
@@ -313,6 +371,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          const Divider(),
+          if (widget.crdtSyncService != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Server Connection',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Remove pairing with the current sync server.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _forgetting ? null : _forgetServer,
+                      icon: _forgetting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.link_off, color: Colors.red),
+                      label: Text(
+                          _forgetting ? 'Forgetting...' : 'Forget This Server'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(16),
