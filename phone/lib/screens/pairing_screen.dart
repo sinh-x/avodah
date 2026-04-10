@@ -5,10 +5,9 @@
 /// Flow:
 /// 1. [PairingScreen] checks pairing status
 /// 2. If unpaired, initiates pairing via [PhonePairingService.startPairing]
-/// 3. Displays the server's 6-digit passcode + TLS fingerprint for verification
-/// 4. User confirms on phone after verifying match on server screen
-/// 5. [PhonePairingService.confirmPairing] completes the handshake
-/// 6. On success, navigates back to resume sync
+/// 3. User manually enters the 6-digit passcode shown on the server console
+/// 4. [PhonePairingService.confirmPairing] completes the handshake
+/// 5. On success, navigates back to resume sync
 ///
 /// AC2: Phone app shows "Pair with Server" screen when needsPairing:true
 /// AC8: If self-signed cert not approved, phone shows cert fingerprint dialog
@@ -47,7 +46,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   /// Pairing state machine states.
   static const _kStateLoading = 'loading';
-  static const _kStateShowPasscode = 'show_passcode';
+  static const _kStateEnterPasscode = 'enter_passcode';
   static const _kStatePairing = 'pairing';
   static const _kStateError = 'error';
   static const _kStateSuccess = 'success';
@@ -55,8 +54,8 @@ class _PairingScreenState extends State<PairingScreen> {
   String _state = _kStateLoading;
   String? _errorMessage;
 
-  // Passcode info (populated after startPairing)
-  String? _passcode;
+  // Passcode input (user keys in manually from server console)
+  final _passcodeController = TextEditingController();
   String? _serverFingerprint;
   List<int>? _serverPubKeyBytes;
 
@@ -64,6 +63,12 @@ class _PairingScreenState extends State<PairingScreen> {
   void initState() {
     super.initState();
     _initPairing();
+  }
+
+  @override
+  void dispose() {
+    _passcodeController.dispose();
+    super.dispose();
   }
 
   void _initPairing() {
@@ -125,14 +130,14 @@ class _PairingScreenState extends State<PairingScreen> {
     // Store fingerprint if provided
     _serverFingerprint = status.serverFingerprint;
 
-    // Initiate pairing to get passcode
+    // Initiate pairing to get server public key
     try {
       final result = await _pairingService.startPairing();
       if (!mounted) return;
 
-      _passcode = result['passcode'] as String;
       _serverPubKeyBytes = base64Decode(result['serverPubKey'] as String);
-      setState(() => _state = _kStateShowPasscode);
+      _passcodeController.clear();
+      setState(() => _state = _kStateEnterPasscode);
     } catch (e) {
       debugPrint('[PairingScreen] Start pairing error: $e');
       if (!mounted) return;
@@ -153,13 +158,14 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   Future<void> _confirmPairing() async {
-    if (_passcode == null || _serverPubKeyBytes == null) return;
+    final passcode = _passcodeController.text.trim();
+    if (passcode.length != 6 || _serverPubKeyBytes == null) return;
 
     setState(() => _state = _kStatePairing);
 
     try {
       final result = await _pairingService.confirmPairing(
-        passcode: _passcode!,
+        passcode: passcode,
         serverPubKeyBytes: _serverPubKeyBytes!,
       );
 
@@ -213,7 +219,7 @@ class _PairingScreenState extends State<PairingScreen> {
           ),
         );
 
-      case _kStateShowPasscode:
+      case _kStateEnterPasscode:
         return _buildPasscodeView();
 
       case _kStatePairing:
@@ -291,7 +297,6 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Widget _buildPasscodeView() {
     final theme = Theme.of(context);
-    final passcode = _passcode ?? '------';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -302,19 +307,19 @@ class _PairingScreenState extends State<PairingScreen> {
           const Icon(Icons.lock_outline, size: 48, color: Colors.blue),
           const SizedBox(height: 16),
           Text(
-            'Verify Server',
+            'Enter Pairing Code',
             style: theme.textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          Text(
-            'Compare the code below with your server screen,\nthen tap Confirm to pair.',
-            style: const TextStyle(color: Colors.grey),
+          const Text(
+            'Enter the 6-digit code shown on your\nserver console to pair this device.',
+            style: TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
 
-          // Passcode display
+          // Passcode input
           Container(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             decoration: BoxDecoration(
@@ -324,7 +329,7 @@ class _PairingScreenState extends State<PairingScreen> {
             child: Column(
               children: [
                 const Text(
-                  'SERVER PASSCODE',
+                  'PAIRING CODE',
                   style: TextStyle(
                     letterSpacing: 2,
                     fontWeight: FontWeight.w500,
@@ -332,30 +337,31 @@ class _PairingScreenState extends State<PairingScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Display passcode with spacing
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: passcode.split('').map((char) {
-                    return Container(
-                      width: 40,
-                      height: 56,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          char,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                TextField(
+                  controller: _passcodeController,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  autofocus: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 12,
+                  ),
+                  decoration: const InputDecoration(
+                    counterText: '',
+                    hintText: '------',
+                    hintStyle: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 12,
+                      color: Colors.grey,
+                    ),
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
               ],
             ),
@@ -406,9 +412,11 @@ class _PairingScreenState extends State<PairingScreen> {
             const SizedBox(height: 24),
           ],
 
-          // Confirm button
+          // Confirm button — only enabled when 6 digits entered
           FilledButton.icon(
-            onPressed: _confirmPairing,
+            onPressed: _passcodeController.text.trim().length == 6
+                ? _confirmPairing
+                : null,
             icon: const Icon(Icons.check),
             label: const Text('Confirm & Pair'),
             style: FilledButton.styleFrom(

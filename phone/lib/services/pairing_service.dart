@@ -6,7 +6,7 @@
 /// ## Pairing Flow
 ///
 /// 1. [checkPairingStatus] — GET /api/sync/status → {needsPairing, serverFingerprint?}
-/// 2. [startPairing] — POST /api/sync/pair/start → {passcode, serverPubKey, expiresIn}
+/// 2. [startPairing] — POST /api/sync/pair/start → {serverPubKey, expiresIn}
 /// 3. [confirmPairing] — POST /api/sync/pair/confirm → {success, error?}
 ///    - Generates X25519 keypair
 ///    - Computes HMAC-SHA256(passcode, phonePubKey)
@@ -118,10 +118,10 @@ class PhonePairingService {
   ///
   /// POST /api/sync/pair/start
   /// Body: {nodeId: string}
-  /// Returns {passcode: string, serverPubKey: string, expiresIn: int}
+  /// Returns {serverPubKey: string, expiresIn: int}
   ///
-  /// The passcode is displayed on the server console. The user must
-  /// confirm this passcode on the phone UI.
+  /// The passcode is displayed ONLY on the server console. The user must
+  /// manually enter it on the phone to complete pairing.
   Future<Map<String, dynamic>> startPairing() async {
     final body = jsonEncode({'nodeId': nodeId});
     final response = await _cryptoClient.post(

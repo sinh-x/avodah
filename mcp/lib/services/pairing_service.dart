@@ -7,8 +7,9 @@
 /// ### POST /api/sync/pair/start
 /// - Generates a random 6-digit passcode (valid 5 minutes)
 /// - Generates an ephemeral X25519 keypair
-/// - Returns {passcode, serverPubKey, expiresIn}
-/// - Passcode is displayed to user on server console
+/// - Returns {serverPubKey, expiresIn}
+/// - Passcode is ONLY displayed on the server console (not sent to phone)
+/// - User must manually enter the passcode on the phone
 ///
 /// ### POST /api/sync/pair/confirm
 /// - Accepts {phonePubKey, hmacProof}
@@ -72,7 +73,11 @@ class PairingService {
   /// POST /api/sync/pair/start
   ///
   /// Generates a 6-digit passcode and ephemeral X25519 keypair.
-  /// Returns {passcode, serverPubKey, expiresIn}.
+  /// Returns {serverPubKey, expiresIn}.
+  ///
+  /// The passcode is only displayed on the server console — it is NOT
+  /// sent to the phone. The user must manually key it in on the phone
+  /// for multi-level authentication.
   Future<Map<String, dynamic>> startPairing(String nodeId) async {
     // Clean up expired handshakes
     _handshakes.removeWhere((_, state) => state.isExpired);
@@ -88,14 +93,14 @@ class PairingService {
     );
     _handshakes[nodeId] = state;
 
-    // Log passcode to console for user to see
+    // Log passcode to console — the ONLY place it is shown
     stderr.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     stderr.writeln('  PAIRING CODE: $passcode');
-    stderr.writeln('  Valid for 5 minutes. Confirm on phone.');
+    stderr.writeln('  Enter this code on your phone to pair.');
+    stderr.writeln('  Valid for 5 minutes.');
     stderr.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return {
-      'passcode': passcode,
       'serverPubKey': base64Encode(keyPair.publicKey),
       'expiresIn': 300,
     };
