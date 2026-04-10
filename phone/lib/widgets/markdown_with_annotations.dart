@@ -28,11 +28,15 @@ class MarkdownWithAnnotations extends StatelessWidget {
   /// blockquote styling.
   final MarkdownStyleSheet? styleSheet;
 
+  /// Optional scroll controller for preserving scroll position.
+  final ScrollController? controller;
+
   const MarkdownWithAnnotations({
     super.key,
     required this.data,
     required this.onLineTapped,
     this.styleSheet,
+    this.controller,
   });
 
   @override
@@ -44,7 +48,8 @@ class MarkdownWithAnnotations extends StatelessWidget {
 
     return Markdown(
       data: data,
-      shrinkWrap: true,
+      shrinkWrap: false,
+      controller: controller,
       styleSheet: styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
       builders: {
         'blockquote': _GfmAlertBlockquoteBuilder(
