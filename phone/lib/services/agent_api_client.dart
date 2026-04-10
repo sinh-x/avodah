@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show HttpStatus;
 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
@@ -536,6 +537,46 @@ class AgentApiClient {
         .toList();
   }
 
+  // --- Self-Update ---
+
+  /// Triggers a self-update build (phone → server → APK push).
+  ///
+  /// POST /api/self-update → 202 Accepted with {status: building, startedAt}
+  /// Returns null on network error.
+  Future<SelfUpdateResult?> triggerSelfUpdate() async {
+    try {
+      final response = await _client
+          .post(Uri.parse('$baseUrl/api/self-update'))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == HttpStatus.accepted) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        return SelfUpdateResult.fromJson(json);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Gets the current self-update build status.
+  ///
+  /// GET /api/self-update/status → {status, log, startedAt, completedAt}
+  /// Returns null on network error.
+  Future<SelfUpdateStatus?> getSelfUpdateStatus() async {
+    try {
+      final response = await _client
+          .get(Uri.parse('$baseUrl/api/self-update/status'))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == HttpStatus.ok) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        return SelfUpdateStatus.fromJson(json);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // --- Repo Detail ---
 
   /// Fetch git info for a repository.
@@ -972,4 +1013,57 @@ class PagedFolderResult {
     required this.total,
     required this.hasMore,
   });
+}
+
+/// Result of triggering a self-update build.
+class SelfUpdateResult {
+  final String status;
+  final DateTime? startedAt;
+
+  const SelfUpdateResult({required this.status, this.startedAt});
+
+  factory SelfUpdateResult.fromJson(Map<String, dynamic> json) {
+    return SelfUpdateResult(
+      status: json['status'] as String? ?? 'unknown',
+      startedAt: json['startedAt'] != null
+          ? DateTime.tryParse(json['startedAt'] as String)
+          : null,
+    );
+  }
+}
+
+/// Current self-update build status.
+class SelfUpdateStatus {
+  final String status;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final List<String> log;
+
+  const SelfUpdateStatus({
+    required this.status,
+    this.startedAt,
+    this.completedAt,
+    this.log = const [],
+  });
+
+  factory SelfUpdateStatus.fromJson(Map<String, dynamic> json) {
+    return SelfUpdateStatus(
+      status: json['status'] as String? ?? 'idle',
+      startedAt: json['startedAt'] != null
+          ? DateTime.tryParse(json['startedAt'] as String)
+          : null,
+      completedAt: json['completedAt'] != null
+          ? DateTime.tryParse(json['completedAt'] as String)
+          : null,
+      log: (json['log'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+    );
+  }
+
+  bool get isBuilding => status == 'building';
+  bool get isSuccess => status == 'success';
+  bool get isError => status == 'error';
+  bool get isIdle => status == 'idle';
 }
