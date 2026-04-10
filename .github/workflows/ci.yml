@@ -34,7 +34,7 @@ jobs:
       - name: Build Linux (debug)
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libsecret-1-dev
           cd phone
           flutter build linux --debug
 
