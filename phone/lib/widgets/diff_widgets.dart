@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_diff.dart';
+import '../utils/word_diff.dart';
 import 'diff_stat_bar.dart';
 
 // ---------------------------------------------------------------------------
@@ -236,6 +237,10 @@ class DiffHunkView extends StatelessWidget {
     int oldLine = hunk.oldStart;
     int newLine = hunk.newStart;
 
+    // Precompute word diffs for paired del/add sequences
+    final lineTypes = hunk.lines.map((l) => (type: l.type, content: l.content)).toList();
+    final wordDiffs = computeHunkWordDiffs(lineTypes);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -254,14 +259,17 @@ class DiffHunkView extends StatelessWidget {
         ),
 
         // Diff lines
-        ...hunk.lines.map((line) {
+        ...List.generate(hunk.lines.length, (idx) {
+          final line = hunk.lines[idx];
           final oldLineNum = line.type == 'del' ? oldLine++ : oldLine;
           final newLineNum = line.type == 'add' ? newLine++ : newLine;
+          final wordDiff = wordDiffs[idx];
 
           return DiffLineView(
             line: line,
             oldLineNum: oldLineNum,
             newLineNum: newLineNum,
+            wordDiff: wordDiff,
           );
         }),
       ],
@@ -277,12 +285,14 @@ class DiffLineView extends StatelessWidget {
   final DiffLine line;
   final int oldLineNum;
   final int newLineNum;
+  final WordDiffResult? wordDiff;
 
   const DiffLineView({
     super.key,
     required this.line,
     required this.oldLineNum,
     required this.newLineNum,
+    this.wordDiff,
   });
 
   Color _backgroundColor() {
@@ -304,6 +314,20 @@ class DiffLineView extends StatelessWidget {
         return '-';
       default:
         return ' ';
+    }
+  }
+
+  /// Returns the word-level background color for a segment.
+  Color _wordSegmentColor(String segmentType) {
+    switch (segmentType) {
+      case 'added':
+        // Stronger green for word-level highlighting
+        return Colors.green.withAlpha(80);
+      case 'deleted':
+        // Stronger red for word-level highlighting
+        return Colors.red.withAlpha(80);
+      default:
+        return Colors.transparent;
     }
   }
 
@@ -366,19 +390,56 @@ class DiffLineView extends StatelessWidget {
             ),
           ),
 
-          // Content
+          // Content (with word-level highlighting if available)
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: _buildContent(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // If we have word diff segments and the line is add/del, render with highlighting
+    if (wordDiff != null &&
+        !wordDiff!.skipped &&
+        wordDiff!.segments.isNotEmpty &&
+        (line.type == 'add' || line.type == 'del')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Wrap(
+          children: wordDiff!.segments.map((segment) {
+            final bgColor = _wordSegmentColor(segment.type);
+            final isHighlighted = segment.type != 'unchanged';
+
+            return Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: isHighlighted ? BorderRadius.circular(2) : null,
+              ),
+              padding: isHighlighted ? const EdgeInsets.symmetric(horizontal: 1) : null,
               child: Text(
-                line.content,
+                segment.text,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
                 ),
               ),
-            ),
-          ),
-        ],
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Fallback: render plain content
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Text(
+        line.content,
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontFamily: 'monospace',
+        ),
       ),
     );
   }
