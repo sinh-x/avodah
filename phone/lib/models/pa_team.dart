@@ -39,13 +39,26 @@ class DeployMode {
   /// Execution mode type from team YAML (`work`, `housekeeping`, `interactive`, etc.).
   final String? modeType;
 
-  const DeployMode({required this.id, required this.label, this.modeType});
+  /// Provider override for this mode (null = use team default).
+  final String? provider;
+
+  /// Model override for this mode (null = use team default).
+  final String? model;
+
+  const DeployMode(
+      {required this.id,
+      required this.label,
+      this.modeType,
+      this.provider,
+      this.model});
 
   factory DeployMode.fromJson(Map<String, dynamic> json) {
     return DeployMode(
       id: json['id'] as String,
       label: json['label'] as String,
       modeType: json['mode_type'] as String?,
+      provider: json['provider'] as String?,
+      model: json['model'] as String?,
     );
   }
 }

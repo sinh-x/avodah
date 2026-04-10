@@ -102,6 +102,16 @@ class _DeploySheetState extends State<DeploySheet> {
     if (_selectedTeam == null) return;
     final paTeam = _paTeamFor(_selectedTeam!);
     if (paTeam == null) return;
+
+    // Find the selected mode's provider/model, falling back to team defaults.
+    if (_selectedMode != null) {
+      final mode = paTeam.deployModes.where((m) => m.id == _selectedMode).firstOrNull;
+      if (mode != null) {
+        _selectedProvider = mode.provider ?? paTeam.defaultProvider;
+        _selectedModel = mode.model ?? paTeam.defaultModel;
+        return;
+      }
+    }
     _selectedProvider = paTeam.defaultProvider;
     _selectedModel = paTeam.defaultModel;
   }
