@@ -142,14 +142,14 @@ class AgentApiClient {
         body: {'action': 'append-section', 'title': title, 'content': content});
   }
 
-  /// Append an inline comment section to a document using server-side text matching.
+  /// Append an inline comment section to a document.
   ///
-  /// Uses POST /api/folders/:folderId/files/:fileId/sections with lineText field.
-  /// Server finds the last occurrence of exact lineText and inserts comment after it.
-  /// Format: "> [!NOTE] Sinh comment: <content> <timestamp>"
+  /// The server appends at document end (no lineText). title: null suppresses
+  /// the header. Content is formatted as a GFM alert with the selected text
+  /// as a quoted Re: reference.
   Future<void> appendInlineSection(
     String path,
-    String lineText,
+    String selectedText,
     String comment,
   ) async {
     // Parse path into folderId and fileId
@@ -164,15 +164,15 @@ class AgentApiClient {
     final encodedFolder = Uri.encodeComponent(folderId);
     final encodedFile = Uri.encodeComponent(fileId);
 
-    // Format: > [!NOTE] Sinh comment: <content> <timestamp>
+    // Format: GFM alert with Re: quoted reference and timestamp
     final timestamp = DateTime.now().toIso8601String();
-    final commentLine = '> [!NOTE] Sinh comment: $comment $timestamp';
+    final content = '> [!NOTE] Sinh comment:\n> **Re:** "$selectedText"\n>\n> $comment\n>\n> _$timestamp"_';
 
     await _post(
       '/api/folders/$encodedFolder/files/$encodedFile/sections',
       body: {
-        'content': commentLine,
-        'lineText': lineText,
+        'title': null,
+        'content': content,
       },
     );
   }

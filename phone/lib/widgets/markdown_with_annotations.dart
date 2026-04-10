@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-/// Pattern to detect inline comment annotation sections.
-///
-/// Matches markdown headings with format: ## N: Title
-/// where N is a line/section number.
-final _annotationPattern = RegExp(r'^##\s+(\d+):\s+(.*)$');
+/// GFM alert type detected in blockquote text content.
+enum _GfmAlertType {
+  note,
+  tip,
+  important,
+  warning,
+  caution,
+}
 
 /// A markdown widget with tap detection for inline commenting and
 /// annotation marker rendering.
 ///
 /// Wraps [Markdown] to detect taps on individual lines/paragraphs and
-/// renders inline comment annotation markers (## N: Title sections) as
-/// visually distinct styled blockquotes with amber/yellow left border.
+/// renders GFM alert blockquotes ([!NOTE], [!TIP], etc.) as visually
+/// distinct styled blocks with per-type icon and color.
 class MarkdownWithAnnotations extends StatelessWidget {
   /// The markdown content to render.
   final String data;
@@ -25,11 +28,15 @@ class MarkdownWithAnnotations extends StatelessWidget {
   /// blockquote styling.
   final MarkdownStyleSheet? styleSheet;
 
+  /// Optional scroll controller for preserving scroll position.
+  final ScrollController? controller;
+
   const MarkdownWithAnnotations({
     super.key,
     required this.data,
     required this.onLineTapped,
     this.styleSheet,
+    this.controller,
   });
 
   @override
@@ -41,10 +48,11 @@ class MarkdownWithAnnotations extends StatelessWidget {
 
     return Markdown(
       data: data,
-      shrinkWrap: true,
+      shrinkWrap: false,
+      controller: controller,
       styleSheet: styleSheet ?? _buildAnnotationStyleSheet(context, defaultStyleSheet),
       builders: {
-        'blockquote': _AnnotationBlockquoteBuilder(
+        'blockquote': _GfmAlertBlockquoteBuilder(
           onLineTapped: onLineTapped,
           sourceLines: data.split('\n'),
         ),
@@ -83,29 +91,158 @@ class MarkdownWithAnnotations extends StatelessWidget {
   }
 }
 
-/// Custom builder for blockquote elements that detects annotation markers.
-class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
+/// Pattern to detect GFM alert syntax: [!TYPE] body
+final _gfmAlertPattern = RegExp(
+  r'^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)',
+  multiLine: true,
+  dotAll: true,
+);
+
+/// Pattern to detect Sinh comments: [!NOTE] Sinh comment: body
+final _sinhCommentPattern = RegExp(r'^Sinh comment:\s*(.*)', multiLine: true);
+
+/// Custom builder for blockquote elements that detects GFM alert syntax
+/// ([!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION]) and renders them
+/// with per-type icon and color styling.
+class _GfmAlertBlockquoteBuilder extends MarkdownElementBuilder {
   final void Function(int lineIndex, String tappedText) onLineTapped;
   final List<String> sourceLines;
 
-  _AnnotationBlockquoteBuilder({
+  _GfmAlertBlockquoteBuilder({
     required this.onLineTapped,
     required this.sourceLines,
   });
 
   @override
   Widget? visitElementAfter(element, TextStyle? preferredStyle) {
-    // Get the text content of the blockquote
     final textContent = element.textContent;
 
-    // Check if this blockquote matches the annotation pattern ## N: Title
-    final match = _annotationPattern.firstMatch(textContent);
-    if (match == null) {
+    // Try to match GFM alert syntax
+    final alertMatch = _gfmAlertPattern.firstMatch(textContent);
+    if (alertMatch == null) {
       // Regular blockquote — return null to use default styling
       return null;
     }
 
-    // This is an annotation marker — apply distinct amber styling
+    final alertTypeStr = alertMatch.group(1)!;
+    final body = alertMatch.group(2) ?? '';
+
+    // Check if this is a Sinh comment (special amber styling)
+    if (alertTypeStr == 'NOTE') {
+      final sinhMatch = _sinhCommentPattern.firstMatch(body);
+      if (sinhMatch != null) {
+        return _buildSinhComment(sinhMatch.group(1)!, preferredStyle);
+      }
+    }
+
+    // Map string to enum
+    final alertType = switch (alertTypeStr) {
+      'NOTE' => _GfmAlertType.note,
+      'TIP' => _GfmAlertType.tip,
+      'IMPORTANT' => _GfmAlertType.important,
+      'WARNING' => _GfmAlertType.warning,
+      'CAUTION' => _GfmAlertType.caution,
+      _ => null,
+    };
+
+    if (alertType == null) return null;
+
+    return _buildGfmAlert(alertType, body, preferredStyle);
+  }
+
+  Widget _buildGfmAlert(
+    _GfmAlertType type,
+    String body,
+    TextStyle? preferredStyle,
+  ) {
+    final (icon, iconColor, bgColor, borderColor, label) = switch (type) {
+      _GfmAlertType.note => (
+          Icons.info_outline,
+          Colors.blue.shade700,
+          Colors.blue.shade50,
+          Colors.blue.shade400,
+          'Note',
+        ),
+      _GfmAlertType.tip => (
+          Icons.lightbulb_outline,
+          Colors.green.shade700,
+          Colors.green.shade50,
+          Colors.green.shade400,
+          'Tip',
+        ),
+      _GfmAlertType.important => (
+          Icons.priority_high,
+          Colors.purple.shade700,
+          Colors.purple.shade50,
+          Colors.purple.shade400,
+          'Important',
+        ),
+      _GfmAlertType.warning => (
+          Icons.warning_amber,
+          Colors.orange.shade700,
+          Colors.orange.shade50,
+          Colors.orange.shade400,
+          'Warning',
+        ),
+      _GfmAlertType.caution => (
+          Icons.dangerous,
+          Colors.red.shade700,
+          Colors.red.shade50,
+          Colors.red.shade400,
+          'Caution',
+        ),
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.only(
+        left: 12,
+        top: 8,
+        bottom: 8,
+        right: 12,
+      ),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border(
+          left: BorderSide(color: borderColor, width: 4),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: iconColor),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: iconColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              body,
+              style: preferredStyle?.copyWith(
+                color: iconColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSinhComment(String body, TextStyle? preferredStyle) {
     const amberAccent = Color(0xFFFFC107);
     final amberDark = Colors.amber.shade700;
     final amberLight = Colors.amber.shade50;
@@ -135,7 +272,7 @@ class _AnnotationBlockquoteBuilder extends MarkdownElementBuilder {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              textContent,
+              body,
               style: preferredStyle?.copyWith(
                 color: amberDark,
                 fontWeight: FontWeight.w500,

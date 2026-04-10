@@ -29,6 +29,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   bool _loading = true;
   String? _error;
   String _selectedText = '';
+  final _scrollController = ScrollController();
 
   String get _filename {
     final parts = widget.path.split('/');
@@ -155,14 +156,20 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
-  Future<void> _submitInlineComment(String lineText, String comment) async {
+  Future<void> _submitInlineComment(String selectedText, String comment) async {
+    final scrollOffset = _scrollController.offset;
     try {
-      await widget.client.appendInlineSection(widget.path, lineText, comment);
+      await widget.client.appendInlineSection(widget.path, selectedText, comment);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Comment added')),
         );
-        _loadDocument(); // Refresh
+        _loadDocument();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(scrollOffset);
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -312,6 +319,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
             },
             child: MarkdownWithAnnotations(
               data: content,
+              controller: _scrollController,
               onLineTapped: _onLineTapped,
             ),
           ),
@@ -371,6 +379,12 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }
 
