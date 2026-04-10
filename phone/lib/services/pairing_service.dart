@@ -109,8 +109,10 @@ class PhonePairingService {
       }
     } catch (e) {
       debugPrint('[PhonePairing] Status check error: $e');
-      // Network error — assume needs pairing
-      return PairingStatus(needsPairing: true);
+      // Network error — DON'T assume needs pairing. Transient network
+      // failures (Android doze, Tailscale blip) should not trigger the
+      // pairing screen. The 403 on /api/sync/deltas is the real signal.
+      return PairingStatus(needsPairing: false);
     }
   }
 

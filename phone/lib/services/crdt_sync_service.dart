@@ -117,8 +117,10 @@ class CrdtSyncService {
   /// Triggers [onNeedsPairing] if the server returns HTTP 403 or reports
   /// needsPairing:true.
   Future<int> pullFromDesktop() async {
-    // Check pairing status first if we have the crypto client
-    if (_cryptoClient != null) {
+    // Only check server pairing status if we DON'T have a local token.
+    // If we do have a token, skip the network call and let the actual
+    // /api/sync/deltas 403 response be the authoritative signal.
+    if (_cryptoClient != null && !isPaired) {
       final status = await _pairingService?.checkPairingStatus();
       if (status != null && status.needsPairing) {
         debugPrint('[CrdtSync] Server needs pairing — triggering pairing flow');
