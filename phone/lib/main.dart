@@ -309,6 +309,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
               boardProvider: _boardProvider!,
               focusProvider: _focusProvider,
               onPushDeltas: _pushDeltas,
+              crdtSyncService: _crdtSyncService,
             ),
     );
   }
@@ -325,6 +326,7 @@ class _HomeShell extends StatefulWidget {
   final BoardProvider boardProvider;
   final FocusProvider? focusProvider;
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
+  final CrdtSyncService? crdtSyncService;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -336,6 +338,7 @@ class _HomeShell extends StatefulWidget {
     required this.boardProvider,
     this.focusProvider,
     this.onPushDeltas,
+    this.crdtSyncService,
   });
 
   @override
@@ -400,7 +403,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
               ],
@@ -426,7 +429,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(
@@ -456,7 +459,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const SettingsScreen()),
+                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(

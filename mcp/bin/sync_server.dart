@@ -357,7 +357,10 @@ Future<void> _handlePairConfirm(
   }
 }
 
-/// DELETE /api/sync/pair — Revokes pairing.
+/// DELETE /api/sync/pair — Revokes pairing (authenticated via headers).
+///
+/// Requires X-Av-Pair-Token and X-Av-Node-Id headers.
+/// Returns success even if already unpaired (idempotent).
 Future<void> _handlePairRevoke(
     HttpRequest request, PairingService pairingService) async {
   _setSyncCors(request);
@@ -374,11 +377,25 @@ Future<void> _handlePairRevoke(
     return;
   }
 
-  try {
-    final body = await utf8.decoder.bind(request).join();
-    final json = jsonDecode(body) as Map<String, dynamic>;
-    final nodeId = json['nodeId'] as String? ?? 'phone';
+  // Auth via headers
+  final nodeId = request.headers.value('X-Av-Node-Id');
+  final token = request.headers.value('X-Av-Pair-Token');
 
+  if (nodeId == null || token == null) {
+    _jsonResponse(request, HttpStatus.forbidden,
+        {'error': 'Missing X-Av-Node-Id or X-Av-Pair-Token header'});
+    return;
+  }
+
+  // Verify token before revoking (authenticated revocation)
+  final valid = await pairingService.verifyPairToken(nodeId, token);
+  if (!valid) {
+    _jsonResponse(request, HttpStatus.forbidden,
+        {'error': 'Invalid pairing token'});
+    return;
+  }
+
+  try {
     await pairingService.revokePairing(nodeId);
     _jsonResponse(request, HttpStatus.ok, {'success': true});
   } catch (e) {

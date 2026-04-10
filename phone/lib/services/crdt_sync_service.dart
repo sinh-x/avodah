@@ -398,6 +398,18 @@ class CrdtSyncService {
         );
   }
 
+  /// Revokes pairing with the desktop server.
+  ///
+  /// Calls DELETE /api/sync/pair to notify the server, then clears local
+  /// pairing state. After revocation, the next sync attempt will trigger
+  /// the pairing flow again.
+  ///
+  /// Does nothing if not currently paired.
+  Future<void> revokePairing() async {
+    await _pairingService?.revokePairing();
+    debugPrint('[CrdtSync] Pairing revoked. Service reset to unpaired state.');
+  }
+
   void dispose() {
     _plainClient.close();
     _cryptoClient?.dispose();
