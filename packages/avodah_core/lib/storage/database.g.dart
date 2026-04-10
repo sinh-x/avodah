@@ -7533,6 +7533,378 @@ class SyncWatermarksCompanion extends UpdateCompanion<SyncWatermark> {
   }
 }
 
+class $PairedDevicesTable extends PairedDevices
+    with TableInfo<$PairedDevicesTable, PairedDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairedDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _publicKeyMeta = const VerificationMeta(
+    'publicKey',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> publicKey = GeneratedColumn<Uint8List>(
+    'public_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _privateKeyMeta = const VerificationMeta(
+    'privateKey',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> privateKey = GeneratedColumn<Uint8List>(
+    'private_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdMeta = const VerificationMeta(
+    'created',
+  );
+  @override
+  late final GeneratedColumn<int> created = GeneratedColumn<int>(
+    'created',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastSeenMeta = const VerificationMeta(
+    'lastSeen',
+  );
+  @override
+  late final GeneratedColumn<int> lastSeen = GeneratedColumn<int>(
+    'last_seen',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    publicKey,
+    privateKey,
+    created,
+    lastSeen,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'paired_devices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairedDevice> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('public_key')) {
+      context.handle(
+        _publicKeyMeta,
+        publicKey.isAcceptableOrUnknown(data['public_key']!, _publicKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_publicKeyMeta);
+    }
+    if (data.containsKey('private_key')) {
+      context.handle(
+        _privateKeyMeta,
+        privateKey.isAcceptableOrUnknown(data['private_key']!, _privateKeyMeta),
+      );
+    }
+    if (data.containsKey('created')) {
+      context.handle(
+        _createdMeta,
+        created.isAcceptableOrUnknown(data['created']!, _createdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMeta);
+    }
+    if (data.containsKey('last_seen')) {
+      context.handle(
+        _lastSeenMeta,
+        lastSeen.isAcceptableOrUnknown(data['last_seen']!, _lastSeenMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PairedDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairedDevice(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      publicKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}public_key'],
+      )!,
+      privateKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}private_key'],
+      ),
+      created: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created'],
+      )!,
+      lastSeen: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_seen'],
+      ),
+    );
+  }
+
+  @override
+  $PairedDevicesTable createAlias(String alias) {
+    return $PairedDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class PairedDevice extends DataClass implements Insertable<PairedDevice> {
+  final String id;
+  final Uint8List publicKey;
+  final Uint8List? privateKey;
+  final int created;
+  final int? lastSeen;
+  const PairedDevice({
+    required this.id,
+    required this.publicKey,
+    this.privateKey,
+    required this.created,
+    this.lastSeen,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['public_key'] = Variable<Uint8List>(publicKey);
+    if (!nullToAbsent || privateKey != null) {
+      map['private_key'] = Variable<Uint8List>(privateKey);
+    }
+    map['created'] = Variable<int>(created);
+    if (!nullToAbsent || lastSeen != null) {
+      map['last_seen'] = Variable<int>(lastSeen);
+    }
+    return map;
+  }
+
+  PairedDevicesCompanion toCompanion(bool nullToAbsent) {
+    return PairedDevicesCompanion(
+      id: Value(id),
+      publicKey: Value(publicKey),
+      privateKey: privateKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(privateKey),
+      created: Value(created),
+      lastSeen: lastSeen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSeen),
+    );
+  }
+
+  factory PairedDevice.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairedDevice(
+      id: serializer.fromJson<String>(json['id']),
+      publicKey: serializer.fromJson<Uint8List>(json['publicKey']),
+      privateKey: serializer.fromJson<Uint8List?>(json['privateKey']),
+      created: serializer.fromJson<int>(json['created']),
+      lastSeen: serializer.fromJson<int?>(json['lastSeen']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'publicKey': serializer.toJson<Uint8List>(publicKey),
+      'privateKey': serializer.toJson<Uint8List?>(privateKey),
+      'created': serializer.toJson<int>(created),
+      'lastSeen': serializer.toJson<int?>(lastSeen),
+    };
+  }
+
+  PairedDevice copyWith({
+    String? id,
+    Uint8List? publicKey,
+    Value<Uint8List?> privateKey = const Value.absent(),
+    int? created,
+    Value<int?> lastSeen = const Value.absent(),
+  }) => PairedDevice(
+    id: id ?? this.id,
+    publicKey: publicKey ?? this.publicKey,
+    privateKey: privateKey.present ? privateKey.value : this.privateKey,
+    created: created ?? this.created,
+    lastSeen: lastSeen.present ? lastSeen.value : this.lastSeen,
+  );
+  PairedDevice copyWithCompanion(PairedDevicesCompanion data) {
+    return PairedDevice(
+      id: data.id.present ? data.id.value : this.id,
+      publicKey: data.publicKey.present ? data.publicKey.value : this.publicKey,
+      privateKey: data.privateKey.present
+          ? data.privateKey.value
+          : this.privateKey,
+      created: data.created.present ? data.created.value : this.created,
+      lastSeen: data.lastSeen.present ? data.lastSeen.value : this.lastSeen,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairedDevice(')
+          ..write('id: $id, ')
+          ..write('publicKey: $publicKey, ')
+          ..write('privateKey: $privateKey, ')
+          ..write('created: $created, ')
+          ..write('lastSeen: $lastSeen')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    $driftBlobEquality.hash(publicKey),
+    $driftBlobEquality.hash(privateKey),
+    created,
+    lastSeen,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairedDevice &&
+          other.id == this.id &&
+          $driftBlobEquality.equals(other.publicKey, this.publicKey) &&
+          $driftBlobEquality.equals(other.privateKey, this.privateKey) &&
+          other.created == this.created &&
+          other.lastSeen == this.lastSeen);
+}
+
+class PairedDevicesCompanion extends UpdateCompanion<PairedDevice> {
+  final Value<String> id;
+  final Value<Uint8List> publicKey;
+  final Value<Uint8List?> privateKey;
+  final Value<int> created;
+  final Value<int?> lastSeen;
+  final Value<int> rowid;
+  const PairedDevicesCompanion({
+    this.id = const Value.absent(),
+    this.publicKey = const Value.absent(),
+    this.privateKey = const Value.absent(),
+    this.created = const Value.absent(),
+    this.lastSeen = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairedDevicesCompanion.insert({
+    required String id,
+    required Uint8List publicKey,
+    this.privateKey = const Value.absent(),
+    required int created,
+    this.lastSeen = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       publicKey = Value(publicKey),
+       created = Value(created);
+  static Insertable<PairedDevice> custom({
+    Expression<String>? id,
+    Expression<Uint8List>? publicKey,
+    Expression<Uint8List>? privateKey,
+    Expression<int>? created,
+    Expression<int>? lastSeen,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (publicKey != null) 'public_key': publicKey,
+      if (privateKey != null) 'private_key': privateKey,
+      if (created != null) 'created': created,
+      if (lastSeen != null) 'last_seen': lastSeen,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairedDevicesCompanion copyWith({
+    Value<String>? id,
+    Value<Uint8List>? publicKey,
+    Value<Uint8List?>? privateKey,
+    Value<int>? created,
+    Value<int?>? lastSeen,
+    Value<int>? rowid,
+  }) {
+    return PairedDevicesCompanion(
+      id: id ?? this.id,
+      publicKey: publicKey ?? this.publicKey,
+      privateKey: privateKey ?? this.privateKey,
+      created: created ?? this.created,
+      lastSeen: lastSeen ?? this.lastSeen,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (publicKey.present) {
+      map['public_key'] = Variable<Uint8List>(publicKey.value);
+    }
+    if (privateKey.present) {
+      map['private_key'] = Variable<Uint8List>(privateKey.value);
+    }
+    if (created.present) {
+      map['created'] = Variable<int>(created.value);
+    }
+    if (lastSeen.present) {
+      map['last_seen'] = Variable<int>(lastSeen.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairedDevicesCompanion(')
+          ..write('id: $id, ')
+          ..write('publicKey: $publicKey, ')
+          ..write('privateKey: $privateKey, ')
+          ..write('created: $created, ')
+          ..write('lastSeen: $lastSeen, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7550,6 +7922,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $DayPlanTasksTable dayPlanTasks = $DayPlanTasksTable(this);
   late final $SyncWatermarksTable syncWatermarks = $SyncWatermarksTable(this);
+  late final $PairedDevicesTable pairedDevices = $PairedDevicesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7565,6 +7938,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dailyPlanEntries,
     dayPlanTasks,
     syncWatermarks,
+    pairedDevices,
   ];
 }
 
@@ -11107,6 +11481,208 @@ typedef $$SyncWatermarksTableProcessedTableManager =
       SyncWatermark,
       PrefetchHooks Function()
     >;
+typedef $$PairedDevicesTableCreateCompanionBuilder =
+    PairedDevicesCompanion Function({
+      required String id,
+      required Uint8List publicKey,
+      Value<Uint8List?> privateKey,
+      required int created,
+      Value<int?> lastSeen,
+      Value<int> rowid,
+    });
+typedef $$PairedDevicesTableUpdateCompanionBuilder =
+    PairedDevicesCompanion Function({
+      Value<String> id,
+      Value<Uint8List> publicKey,
+      Value<Uint8List?> privateKey,
+      Value<int> created,
+      Value<int?> lastSeen,
+      Value<int> rowid,
+    });
+
+class $$PairedDevicesTableFilterComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get publicKey => $composableBuilder(
+    column: $table.publicKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get privateKey => $composableBuilder(
+    column: $table.privateKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSeen => $composableBuilder(
+    column: $table.lastSeen,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairedDevicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get publicKey => $composableBuilder(
+    column: $table.publicKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get privateKey => $composableBuilder(
+    column: $table.privateKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get created => $composableBuilder(
+    column: $table.created,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSeen => $composableBuilder(
+    column: $table.lastSeen,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairedDevicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PairedDevicesTable> {
+  $$PairedDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get publicKey =>
+      $composableBuilder(column: $table.publicKey, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get privateKey => $composableBuilder(
+    column: $table.privateKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get created =>
+      $composableBuilder(column: $table.created, builder: (column) => column);
+
+  GeneratedColumn<int> get lastSeen =>
+      $composableBuilder(column: $table.lastSeen, builder: (column) => column);
+}
+
+class $$PairedDevicesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PairedDevicesTable,
+          PairedDevice,
+          $$PairedDevicesTableFilterComposer,
+          $$PairedDevicesTableOrderingComposer,
+          $$PairedDevicesTableAnnotationComposer,
+          $$PairedDevicesTableCreateCompanionBuilder,
+          $$PairedDevicesTableUpdateCompanionBuilder,
+          (
+            PairedDevice,
+            BaseReferences<_$AppDatabase, $PairedDevicesTable, PairedDevice>,
+          ),
+          PairedDevice,
+          PrefetchHooks Function()
+        > {
+  $$PairedDevicesTableTableManager(_$AppDatabase db, $PairedDevicesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairedDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PairedDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PairedDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<Uint8List> publicKey = const Value.absent(),
+                Value<Uint8List?> privateKey = const Value.absent(),
+                Value<int> created = const Value.absent(),
+                Value<int?> lastSeen = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairedDevicesCompanion(
+                id: id,
+                publicKey: publicKey,
+                privateKey: privateKey,
+                created: created,
+                lastSeen: lastSeen,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required Uint8List publicKey,
+                Value<Uint8List?> privateKey = const Value.absent(),
+                required int created,
+                Value<int?> lastSeen = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairedDevicesCompanion.insert(
+                id: id,
+                publicKey: publicKey,
+                privateKey: privateKey,
+                created: created,
+                lastSeen: lastSeen,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairedDevicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PairedDevicesTable,
+      PairedDevice,
+      $$PairedDevicesTableFilterComposer,
+      $$PairedDevicesTableOrderingComposer,
+      $$PairedDevicesTableAnnotationComposer,
+      $$PairedDevicesTableCreateCompanionBuilder,
+      $$PairedDevicesTableUpdateCompanionBuilder,
+      (
+        PairedDevice,
+        BaseReferences<_$AppDatabase, $PairedDevicesTable, PairedDevice>,
+      ),
+      PairedDevice,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -11130,4 +11706,6 @@ class $AppDatabaseManager {
       $$DayPlanTasksTableTableManager(_db, _db.dayPlanTasks);
   $$SyncWatermarksTableTableManager get syncWatermarks =>
       $$SyncWatermarksTableTableManager(_db, _db.syncWatermarks);
+  $$PairedDevicesTableTableManager get pairedDevices =>
+      $$PairedDevicesTableTableManager(_db, _db.pairedDevices);
 }

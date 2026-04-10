@@ -10,6 +10,7 @@ import 'tables/timer.dart';
 import 'tables/daily_plans.dart';
 import 'tables/day_plan_tasks.dart';
 import 'tables/sync_watermarks.dart';
+import 'tables/paired_devices.dart';
 
 part 'database.g.dart';
 
@@ -30,6 +31,7 @@ part 'database.g.dart';
   DailyPlanEntries,
   DayPlanTasks,
   SyncWatermarks,
+  PairedDevices,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -42,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration {
@@ -118,6 +120,10 @@ class AppDatabase extends _$AppDatabase {
           } on Exception catch (_) {
             // Column already exists
           }
+        }
+        if (from < 13) {
+          // v13: secure sync — add paired_devices table for secure pairing
+          await m.createTable(pairedDevices);
         }
       },
     );
