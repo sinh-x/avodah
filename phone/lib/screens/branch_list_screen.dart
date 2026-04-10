@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_branches.dart';
+import '../models/repo_git_info.dart';
 import '../services/agent_api_client.dart';
 import '../utils/date_helpers.dart';
-import 'commit_history_screen.dart';
+import 'branch_detail_screen.dart';
 
 /// Screen showing all local branches for a repository.
 ///
 /// Calls [AgentApiClient.getRepoBranches] on init to fetch the branch list.
-/// Supports pull-to-refresh. Tapping a branch navigates to [CommitHistoryScreen].
+/// Supports pull-to-refresh. Tapping a branch navigates to [BranchDetailScreen].
 class BranchListScreen extends StatefulWidget {
   final String repoKey;
   final AgentApiClient apiClient;
@@ -121,20 +122,31 @@ class _BranchListScreenState extends State<BranchListScreen> {
           final branch = branches[index];
           return _BranchTile(
             branch: branch,
-            onTap: () => _navigateToCommitHistory(branch),
+            onTap: () => _navigateToBranchDetail(branch),
           );
         },
       ),
     );
   }
 
-  void _navigateToCommitHistory(Branch branch) {
+  void _navigateToBranchDetail(Branch branch) {
+    // Convert Branch to FeatureBranch for BranchDetailScreen
+    final featureBranch = FeatureBranch(
+      name: branch.name,
+      latestCommit: BranchCommit(
+        hash: branch.latestCommit.hashShort, // Use hashShort as fallback for hash
+        hashShort: branch.latestCommit.hashShort,
+        message: branch.latestCommit.message,
+        date: branch.latestCommit.date,
+      ),
+    );
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CommitHistoryScreen(
+        builder: (_) => BranchDetailScreen(
           repoKey: widget.repoKey,
-          branch: branch.name,
+          branch: featureBranch,
           apiClient: widget.apiClient,
         ),
       ),

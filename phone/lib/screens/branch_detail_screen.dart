@@ -29,7 +29,6 @@ class BranchDetailScreen extends StatefulWidget {
 
 class _BranchDetailScreenState extends State<BranchDetailScreen> {
   List<RepoCommit> _commits = [];
-  List<RepoCommit> _filteredCommits = [];
   bool _loadingCommits = true;
   String? _commitsError;
   bool _loadingMore = false;
@@ -40,20 +39,6 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
   final Map<String, RepoDiff?> _diffCache = {};
   final Set<String> _failedDiffs = {};
   RepoCommit? _headerCommit;
-
-  /// Extracts ticket key from branch name (e.g., 'AVO-067' from 'feature/AVO-067-branch-commit-ui').
-  /// Returns null if no ticket key can be extracted.
-  String? get _ticketKey {
-    final match = RegExp(r'([A-Z]+-\d+)').firstMatch(widget.branch.name);
-    return match?.group(1);
-  }
-
-  /// Filters commits by ticket key if available.
-  List<RepoCommit> _filterByTicketKey(List<RepoCommit> commits) {
-    final key = _ticketKey;
-    if (key == null) return commits;
-    return commits.where((c) => c.message.contains(key)).toList();
-  }
 
   @override
   void initState() {
@@ -83,11 +68,9 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
     });
 
     try {
-      // Fetch more commits to ensure we have enough after local filtering
-      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch.name, limit: _limit * 3, offset: 0);
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch.name, limit: _limit, offset: 0);
 
       if (mounted) {
-        final filtered = _filterByTicketKey(result.commits);
         // If header has empty message (synthetic branch from linked branch),
         // find the matching commit from loaded commits
         RepoCommit? headerCommit;
@@ -102,8 +85,7 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
         }
         setState(() {
           _commits = result.commits;
-          _filteredCommits = filtered;
-          _total = filtered.length;
+          _total = result.commits.length;
           _loadingCommits = false;
           _headerCommit = headerCommit;
         });
@@ -133,11 +115,9 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
     });
 
     try {
-      // Fetch more commits and filter locally
-      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch.name, limit: _limit * 2, offset: _offset);
+      final result = await widget.apiClient.getRepoCommits(widget.repoKey, widget.branch.name, limit: _limit, offset: _offset);
 
       if (mounted) {
-        final newFiltered = _filterByTicketKey(result.commits);
         // Check for header commit in new commits if not already found
         RepoCommit? headerCommit;
         if (_headerCommit == null &&
@@ -152,9 +132,8 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
         }
         setState(() {
           _commits = [..._commits, ...result.commits];
-          _filteredCommits = [..._filteredCommits, ...newFiltered];
           _offset += result.commits.length;
-          _total = _filteredCommits.length;
+          _total = _commits.length;
           _loadingMore = false;
           if (headerCommit != null) _headerCommit = headerCommit;
         });
@@ -377,11 +356,11 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
   }
 
   Widget _buildCommitList() {
-    if (_loadingCommits && _filteredCommits.isEmpty) {
+    if (_loadingCommits && _commits.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_commitsError != null && _filteredCommits.isEmpty) {
+    if (_commitsError != null && _commits.isEmpty) {
       return RefreshIndicator(
         onRefresh: _onRefresh,
         child: ListView(
@@ -410,7 +389,7 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       );
     }
 
-    if (_filteredCommits.isEmpty) {
+    if (_commits.isEmpty) {
       return const Center(child: Text('No commits'));
     }
 
@@ -419,22 +398,22 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 32),
-        itemCount: _filteredCommits.length + (_loadingMore ? 1 : 0),
+        itemCount: _commits.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index >= _filteredCommits.length) {
+          if (index >= _commits.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
           return _ExpandableCommitTile(
-            commit: _filteredCommits[index],
+            commit: _commits[index],
             repoKey: widget.repoKey,
             apiClient: widget.apiClient,
             diffCache: _diffCache,
             failedDiffs: _failedDiffs,
-            onExpand: () => _loadDiff(_filteredCommits[index].hash),
-            onRetry: () => _retryDiff(_filteredCommits[index].hash),
+            onExpand: () => _loadDiff(_commits[index].hash),
+            onRetry: () => _retryDiff(_commits[index].hash),
           );
         },
       ),
