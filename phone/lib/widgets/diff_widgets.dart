@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_diff.dart';
+import '../utils/syntax_highlight.dart';
 import '../utils/word_diff.dart';
 import 'diff_stat_bar.dart';
 
@@ -179,7 +180,10 @@ class DiffEntryTile extends StatelessWidget {
           if (entry.binary)
             const BinaryFileIndicator()
           else
-            ...entry.hunks.map((hunk) => DiffHunkView(hunk: hunk)),
+            ...entry.hunks.map((hunk) => DiffHunkView(
+              hunk: hunk,
+              filePath: entry.oldPath.isNotEmpty ? entry.oldPath : entry.newPath,
+            )),
         ],
       ),
     );
@@ -226,12 +230,14 @@ class BinaryFileIndicator extends StatelessWidget {
 
 class DiffHunkView extends StatelessWidget {
   final DiffHunk hunk;
+  final String filePath;
 
-  const DiffHunkView({super.key, required this.hunk});
+  const DiffHunkView({super.key, required this.hunk, required this.filePath});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final language = inferLanguage(filePath);
 
     // Calculate line number offsets
     int oldLine = hunk.oldStart;
@@ -270,6 +276,7 @@ class DiffHunkView extends StatelessWidget {
             oldLineNum: oldLineNum,
             newLineNum: newLineNum,
             wordDiff: wordDiff,
+            language: language,
           );
         }),
       ],
@@ -286,6 +293,7 @@ class DiffLineView extends StatelessWidget {
   final int oldLineNum;
   final int newLineNum;
   final WordDiffResult? wordDiff;
+  final String? language;
 
   const DiffLineView({
     super.key,
@@ -293,6 +301,7 @@ class DiffLineView extends StatelessWidget {
     required this.oldLineNum,
     required this.newLineNum,
     this.wordDiff,
+    this.language,
   });
 
   Color _backgroundColor() {
@@ -414,6 +423,27 @@ class DiffLineView extends StatelessWidget {
             final bgColor = _wordSegmentColor(segment.type);
             final isHighlighted = segment.type != 'unchanged';
 
+            // For unchanged segments, apply syntax highlighting
+            // For added/deleted segments, use plain text with muted color
+            if (!isHighlighted && language != null) {
+              final syntaxSpans = parseSyntaxHighlighted(segment.text, language);
+              return Container(
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: RichText(
+                  text: TextSpan(
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                    children: syntaxSpans,
+                  ),
+                ),
+              );
+            }
+
             return Container(
               decoration: BoxDecoration(
                 color: bgColor,
@@ -424,6 +454,8 @@ class DiffLineView extends StatelessWidget {
                 segment.text,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
+                  // Muted color for changed segments to not compete with bg
+                  color: isHighlighted ? const Color(0xFFBBBBBB) : null,
                 ),
               ),
             );
@@ -432,7 +464,23 @@ class DiffLineView extends StatelessWidget {
       );
     }
 
-    // Fallback: render plain content
+    // Fallback: render with syntax highlighting if language is available
+    if (language != null) {
+      final syntaxSpans = parseSyntaxHighlighted(line.content, language);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: RichText(
+          text: TextSpan(
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+            ),
+            children: syntaxSpans,
+          ),
+        ),
+      );
+    }
+
+    // Plain content without syntax highlighting
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Text(

@@ -46,12 +46,18 @@ class DiffEntry {
   });
 
   factory DiffEntry.fromJson(Map<String, dynamic> json) {
+    final oldPath = json['old_path'] as String? ?? '';
     return DiffEntry(
-      oldPath: json['old_path'] as String? ?? '',
+      oldPath: oldPath,
       newPath: json['new_path'] as String? ?? '',
       changeType: json['change_type'] as String? ?? '',
       hunks: (json['hunks'] as List?)
-              ?.map((e) => DiffHunk.fromJson(e as Map<String, dynamic>))
+              ?.map((e) {
+                final hunkJson = e as Map<String, dynamic>;
+                // Inject old_path from entry level into hunk JSON for language inference
+                hunkJson['old_path'] = oldPath;
+                return DiffHunk.fromJson(hunkJson);
+              })
               .toList() ??
           const [],
       binary: json['binary'] as bool? ?? false,
@@ -66,6 +72,8 @@ class DiffHunk {
   final int newStart;
   final int newLines;
   final List<DiffLine> lines;
+  /// Path of the file this hunk belongs to (used for language inference).
+  final String oldPath;
 
   const DiffHunk({
     required this.oldStart,
@@ -73,6 +81,7 @@ class DiffHunk {
     required this.newStart,
     required this.newLines,
     required this.lines,
+    this.oldPath = '',
   });
 
   factory DiffHunk.fromJson(Map<String, dynamic> json) {
@@ -85,6 +94,7 @@ class DiffHunk {
               ?.map((e) => DiffLine.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      oldPath: json['old_path'] as String? ?? '',
     );
   }
 }
