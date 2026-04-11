@@ -568,8 +568,7 @@ class JiraService {
         updated++;
       } else {
         final doc = TaskDocument.create(clock: clock, title: summary);
-        doc.issueId = key;
-        doc.issueType = IssueType.jira;
+        doc.linkToIssue(issueId: key, providerId: config.id, type: IssueType.jira);
         _applyJiraFields(doc, fields,
             defaultCategory: config.defaultCategory);
         await _saveTask(doc);
@@ -1050,8 +1049,7 @@ class JiraService {
       final summary = fields['summary'] as String? ?? key;
 
       final doc = TaskDocument.create(clock: clock, title: summary);
-      doc.issueId = key;
-      doc.issueType = IssueType.jira;
+      doc.linkToIssue(issueId: key, providerId: config.id, type: IssueType.jira);
       _applyJiraFields(doc, fields,
           defaultCategory: config.defaultCategory);
       await _saveTask(doc);
