@@ -133,8 +133,8 @@ class TimerService {
     final timer = await _loadActiveTimer();
     if (timer == null) throw NoTimerRunningException();
 
-    // Capture values before stop() clears them
-    final taskId = timer.taskId!;
+    // Capture values before stop() clears them (taskId may be null for orphan timers)
+    final taskId = timer.taskId;
     final taskTitle = timer.taskTitle;
     final startedAt = timer.startedAt!;
     final note = timer.note;
