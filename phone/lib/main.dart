@@ -145,16 +145,28 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
+  ///
+  /// Push-before-pull (F5): all queued deltas are processed before pulling
+  /// new ones, ensuring the desktop has the phone's latest state before the
+  /// phone overwrites it with pulled data.
   Future<void> _syncAndRefresh() async {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
     if (sync == null || dashboard == null) return;
+
+    // Purge old failed entries once per sync cycle to prevent unbounded growth
+    try {
+      await sync.purgeOldFailedEntries();
+    } catch (_) {}
+
+    // Push all pending deltas before pulling (F5)
     var syncOk = false;
     try {
+      await sync.processQueue();
       await sync.pullFromDesktop();
       syncOk = true;
     } catch (e) {
-      debugPrint('[Sync] Pull failed: $e');
+      debugPrint('[Sync] Sync cycle failed: $e');
     }
     await dashboard.refresh();
     // Override the indicator to reflect actual sync status, not just local DB read
@@ -163,29 +175,18 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     }
   }
 
-  /// Push CRDT deltas from phone to desktop (non-fatal on failure).
+  /// Enqueues CRDT deltas for persistent retry on push failure.
+  ///
+  /// Deltas are enqueued to the sync queue so they survive app restarts
+  /// and will be retried on the next sync cycle with exponential backoff.
   Future<void> _pushDeltas(List<Map<String, dynamic>> deltas) async {
-    try {
-      await _crdtSyncService?.pushToDesktop(deltas);
-    } catch (e) {
-      debugPrint('[Sync] Push failed: $e');
-      // Surface failure to user via snackbar (not spam — ScaffoldMessenger
-      // only shows one snackbar at a time)
-      final messenger = _scaffoldMessengerKey.currentState;
-      if (messenger != null) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text('Sync failed — will retry on next cycle'),
-              duration: const Duration(seconds: 4),
-              action: SnackBarAction(
-                label: 'Retry',
-                onPressed: () => _pushDeltas(deltas),
-              ),
-            ),
-          );
-        });
+    final sync = _crdtSyncService;
+    if (sync == null) return;
+    for (final delta in deltas) {
+      try {
+        await sync.enqueueDelta(delta);
+      } catch (e) {
+        debugPrint('[Sync] Failed to enqueue delta: $e');
       }
     }
   }
