@@ -158,7 +158,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
     await Future.wait([
       _fetchRepoInfo(project),
-      _fetchDeployments(project, ticketId),
+      _fetchDeployments(ticketId),
     ]);
   }
 
@@ -182,13 +182,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
-  Future<void> _fetchDeployments(String project, String ticketId) async {
+  Future<void> _fetchDeployments(String ticketId) async {
     try {
-      final all = await widget.boardProvider.client.getRepoDeployments(project);
+      final deployments = await widget.boardProvider.client.listDeployments(ticketId: ticketId);
       if (mounted) {
         setState(() {
-          _ticketDeployments =
-              all.where((d) => d.ticketId == ticketId).toList();
+          _ticketDeployments = deployments;
           _deploymentsLoading = false;
         });
       }
