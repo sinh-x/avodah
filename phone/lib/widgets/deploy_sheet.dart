@@ -106,12 +106,21 @@ class _DeploySheetState extends State<DeploySheet> {
   Future<void> _loadDraft() async {
     final draft = await DeployDraftService.loadDraft();
     if (draft == null || !mounted) return;
+
+    // Always apply team defaults first so they take precedence when the draft
+    // has no explicit provider/model for the current team.
+    if (draft.team != null &&
+        widget.paTeams.any((t) => t.name == draft.team)) {
+      _selectedTeam = draft.team;
+      _autoSelectMode();
+    }
+    _applyTeamDefaults();
+
     setState(() {
       if (draft.team != null &&
           widget.paTeams.any((t) => t.name == draft.team)) {
         _selectedTeam = draft.team;
         _autoSelectMode();
-        _applyTeamDefaults();
       }
       if (draft.mode != null) _selectedMode = draft.mode;
       if (draft.repo != null &&
