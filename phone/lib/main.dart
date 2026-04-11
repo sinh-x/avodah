@@ -424,7 +424,9 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
+                        builder: (_) => SettingsScreen(
+                        apiClient: widget.apiClient,
+                        crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
               ],
@@ -450,7 +452,9 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
+                        builder: (_) => SettingsScreen(
+                        apiClient: widget.apiClient,
+                        crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(
@@ -480,7 +484,9 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
+                        builder: (_) => SettingsScreen(
+                        apiClient: widget.apiClient,
+                        crdtSyncService: widget.crdtSyncService)),
                   ),
                 ),
                 IconButton(
