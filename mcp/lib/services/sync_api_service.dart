@@ -690,6 +690,70 @@ class SyncApiService {
         .toList();
   }
 
+  /// Returns comprehensive sync diagnostics for CLI status display.
+  ///
+  /// Returns:
+  /// - phoneWatermark: the last HLC watermark received from the phone
+  /// - lastPhoneSync: epoch millis of last phone sync
+  /// - deltaCounts: per-document-type count of documents with deltas since watermark
+  Future<Map<String, dynamic>> syncDiagnostics() async {
+    // Get phone watermark (received from phone)
+    final phoneWatermark = await getWatermark('phone', direction: 'received');
+
+    // Get all watermarks to find last phone sync time
+    final allWatermarks = await getAllWatermarks();
+    int? lastPhoneSync;
+    for (final w in allWatermarks) {
+      if (w['nodeId'] == 'phone' && w['direction'] == 'received') {
+        final ts = w['updatedAt'] as int?;
+        if (ts != null && (lastPhoneSync == null || ts > lastPhoneSync)) {
+          lastPhoneSync = ts;
+        }
+      }
+    }
+
+    // Count deltas per document type (docs modified since zero watermark = all docs)
+    final zeroWatermark = HybridTimestamp(physicalTime: 0, counter: 0, nodeId: '');
+    final counts = <String, int>{
+      'dailyPlan': 0,
+      'dayPlanTask': 0,
+      'task': 0,
+      'worklog': 0,
+      'timer': 0,
+      'project': 0,
+    };
+
+    // Tasks
+    final tasks = await db.select(db.tasks).get();
+    counts['task'] = tasks.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    // Worklogs
+    final worklogs = await db.select(db.worklogEntries).get();
+    counts['worklog'] = worklogs.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    // Timers
+    final timers = await db.select(db.timerEntries).get();
+    counts['timer'] = timers.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    // Projects
+    final projects = await db.select(db.projects).get();
+    counts['project'] = projects.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    // Daily plans
+    final dailyPlans = await db.select(db.dailyPlanEntries).get();
+    counts['dailyPlan'] = dailyPlans.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    // Day plan tasks
+    final dayPlanTasks = await db.select(db.dayPlanTasks).get();
+    counts['dayPlanTask'] = dayPlanTasks.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+
+    return {
+      'phoneWatermark': phoneWatermark,
+      'lastPhoneSync': lastPhoneSync,
+      'deltaCounts': counts,
+    };
+  }
+
   /// Sends a JSON response.
   void _jsonResponse(
       HttpRequest request, int statusCode, Map<String, dynamic> body) {

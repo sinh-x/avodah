@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
@@ -35,7 +36,8 @@ class AvodahViewerApp extends StatefulWidget {
   State<AvodahViewerApp> createState() => _AvodahViewerAppState();
 }
 
-class _AvodahViewerAppState extends State<AvodahViewerApp> {
+class _AvodahViewerAppState extends State<AvodahViewerApp>
+    with WidgetsBindingObserver {
   AppDatabase? _db;
   LocalDashboardProvider? _dashboardProvider;
   LocalWriteService? _writeService;
@@ -50,10 +52,12 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   Timer? _syncTimer;
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initApp();
   }
 
@@ -164,7 +168,25 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
     try {
       await _crdtSyncService?.pushToDesktop(deltas);
     } catch (e) {
-      debugPrint('[Sync] Push failed (non-fatal): $e');
+      debugPrint('[Sync] Push failed: $e');
+      // Surface failure to user via snackbar (not spam — ScaffoldMessenger
+      // only shows one snackbar at a time)
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: const Text('Sync failed — will retry on next cycle'),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _pushDeltas(deltas),
+              ),
+            ),
+          );
+        });
+      }
     }
   }
 
@@ -283,7 +305,17 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Pull on resume: fetch any changes that happened on desktop
+      // while phone was backgrounded
+      _syncAndRefresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _syncTimer?.cancel();
     _focusProvider?.dispose();
     _boardProvider?.dispose();
@@ -301,6 +333,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       navigatorKey: _navigatorKey,
       title: 'Avodah',
       debugShowCheckedModeBanner: false,

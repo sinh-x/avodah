@@ -28,6 +28,7 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart' show HybridLogicalClock, avodahVersion, avodahBuildNumber;
 import 'package:avodah_mcp/cli/commands.dart';
+import 'package:avodah_mcp/cli/sync_commands.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
@@ -107,7 +108,8 @@ Future<void> main(List<String> args) async {
           worklogService: worklogService))
       ..addCommand(JiraCommand(jiraService, paths))
       ..addCommand(DbCommand(db: db, clock: clock, paths: paths))
-      ..addCommand(ConfigCommand(avoConfig, paths));
+      ..addCommand(ConfigCommand(avoConfig, paths))
+      ..addCommand(SyncCommand(db: db, clock: clock));
 
     // No args → run status + hint
     if (args.isEmpty) {

@@ -132,7 +132,7 @@ class CrdtSyncService {
     final watermark = await _getDesktopWatermark();
     final nodeId = await getOrCreateNodeId();
 
-    debugPrint('[CrdtSync] Pulling deltas since $watermark');
+    debugPrint('[Sync] Pulling deltas since watermark=$watermark');
 
     final http.Response response;
     if (_cryptoClient != null) {
@@ -190,7 +190,43 @@ class CrdtSyncService {
       await _setDesktopWatermark(newWatermark);
     }
 
-    debugPrint('[CrdtSync] Merged $merged/${deltas.length} deltas. New watermark: $newWatermark');
+    // Count merged deltas by type for diagnostic logging
+    var dailyPlanCount = 0;
+    var dayPlanTaskCount = 0;
+    var taskCount = 0;
+    var worklogCount = 0;
+    var timerCount = 0;
+    var projectCount = 0;
+    for (final deltaJson in deltas) {
+      final delta = deltaJson as Map<String, dynamic>;
+      switch (delta['type'] as String) {
+        case _SyncDocType.dailyPlan:
+          dailyPlanCount++;
+          break;
+        case _SyncDocType.dayPlanTask:
+          dayPlanTaskCount++;
+          break;
+        case _SyncDocType.task:
+          taskCount++;
+          break;
+        case _SyncDocType.worklog:
+          worklogCount++;
+          break;
+        case _SyncDocType.timer:
+          timerCount++;
+          break;
+        case _SyncDocType.project:
+          projectCount++;
+          break;
+        default:
+          break;
+      }
+    }
+
+    debugPrint('[Sync] Pulled $merged deltas '
+        '(dailyPlan=$dailyPlanCount, dayPlanTask=$dayPlanTaskCount, '
+        'task=$taskCount, worklog=$worklogCount, timer=$timerCount, project=$projectCount)');
+    debugPrint('[Sync] Merged $merged deltas into local DB. New watermark=$newWatermark');
     return merged;
   }
 
@@ -328,7 +364,7 @@ class CrdtSyncService {
     final nodeId = await getOrCreateNodeId();
     final body = jsonEncode({'node': nodeId, 'deltas': deltas});
 
-    debugPrint('[CrdtSync] Pushing ${deltas.length} delta(s)');
+    debugPrint('[Sync] Pushing ${deltas.length} deltas');
 
     final http.Response response;
     if (_cryptoClient != null) {
@@ -371,7 +407,7 @@ class CrdtSyncService {
       } catch (_) {}
     }
 
-    debugPrint('[CrdtSync] Push response: merged=$merged, watermark=$watermark');
+    debugPrint('[Sync] Push completed, server processed $merged deltas');
     return merged;
   }
 
