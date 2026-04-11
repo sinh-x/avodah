@@ -83,6 +83,7 @@ class JiraStatus {
   final String? baseUrl;
   final DateTime? lastSyncAt;
   final String? lastSyncError;
+  final String? lastPushError;
   final int pendingWorklogs;
   final int linkedTasks;
 
@@ -93,6 +94,7 @@ class JiraStatus {
     this.baseUrl,
     this.lastSyncAt,
     this.lastSyncError,
+    this.lastPushError,
     required this.pendingWorklogs,
     required this.linkedTasks,
   });
@@ -530,7 +532,9 @@ class JiraService {
         method: 'GET',
         path: '/issue/$issueKey/worklog?startAt=$startAt&maxResults=50',
       );
-      if (response.statusCode != 200) break;
+      if (response.statusCode != 200) {
+        throw JiraSyncException('Worklog fetch failed for $issueKey: HTTP ${response.statusCode}');
+      }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final worklogs = (data['worklogs'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
@@ -569,10 +573,14 @@ class JiraService {
     // Load existing tasks keyed by issueId
     final allTasks = await db.select(db.tasks).get();
     final existingByIssueId = <String, Task>{};
+    final taskIdToCategory = <String, String?>{};
     for (final row in allTasks) {
       if (row.issueId != null) {
         existingByIssueId[row.issueId!] = row;
       }
+      // Build category lookup for worklog inheritance
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      taskIdToCategory[row.id] = doc.category;
     }
 
     var created = 0;
@@ -642,6 +650,7 @@ class JiraService {
             start: started.millisecondsSinceEpoch,
             end: started.millisecondsSinceEpoch + durationMs,
             comment: comment,
+            category: taskIdToCategory[localTaskId],
           );
           worklog.createdMs = jiraCreated.millisecondsSinceEpoch;
           worklog.linkToJira(jiraId);
@@ -729,9 +738,17 @@ class JiraService {
           pushed++;
         } else {
           failed++;
+          // Record push error
+          final errorMsg = 'Push failed for $issueKey: HTTP ${response.statusCode}';
+          config.recordPushError(errorMsg);
+          await _saveConfig(config);
         }
-      } catch (_) {
+      } catch (e) {
         failed++;
+        // Record push error on exception
+        final errorMsg = 'Push failed for $issueKey: $e';
+        config.recordPushError(errorMsg);
+        await _saveConfig(config);
       }
     }
 
@@ -751,14 +768,21 @@ class JiraService {
           updated++;
         } else {
           failed++;
+          final errorMsg = 'Update failed for worklog ${worklog.id}';
+          config.recordPushError(errorMsg);
+          await _saveConfig(config);
         }
-      } catch (_) {
+      } catch (e) {
         failed++;
+        final errorMsg = 'Update failed for worklog ${worklog.id}: $e';
+        config.recordPushError(errorMsg);
+        await _saveConfig(config);
       }
     }
 
     if (pushed > 0 || updated > 0) {
       config.recordSyncSuccess();
+      config.clearPushError();
       await _saveConfig(config);
     }
 
@@ -1399,6 +1423,7 @@ class JiraService {
         baseUrl: config.baseUrl,
         lastSyncAt: config.lastSyncAt,
         lastSyncError: config.lastSyncError,
+        lastPushError: config.lastPushError,
         pendingWorklogs: pendingWorklogs,
         linkedTasks: linkedTasks,
       ));

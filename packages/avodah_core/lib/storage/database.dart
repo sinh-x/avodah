@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration {
@@ -129,6 +129,14 @@ class AppDatabase extends _$AppDatabase {
           // v14: secure sync — add origin column to paired_devices for CORS restriction
           try {
             await m.addColumn(pairedDevices, pairedDevices.origin);
+          } on Exception catch (_) {
+            // Column may already exist
+          }
+        }
+        if (from < 15) {
+          // v15: add lastPushError to jira_integrations for push error tracking
+          try {
+            await m.addColumn(jiraIntegrations, jiraIntegrations.lastPushError);
           } on Exception catch (_) {
             // Column may already exist
           }

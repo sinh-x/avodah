@@ -4570,6 +4570,17 @@ class $JiraIntegrationsTable extends JiraIntegrations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastPushErrorMeta = const VerificationMeta(
+    'lastPushError',
+  );
+  @override
+  late final GeneratedColumn<String> lastPushError = GeneratedColumn<String>(
+    'last_push_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdMeta = const VerificationMeta(
     'created',
   );
@@ -4633,6 +4644,7 @@ class $JiraIntegrationsTable extends JiraIntegrations
     statusMappings,
     lastSyncAt,
     lastSyncError,
+    lastPushError,
     created,
     modified,
     crdtClock,
@@ -4775,6 +4787,15 @@ class $JiraIntegrationsTable extends JiraIntegrations
         ),
       );
     }
+    if (data.containsKey('last_push_error')) {
+      context.handle(
+        _lastPushErrorMeta,
+        lastPushError.isAcceptableOrUnknown(
+          data['last_push_error']!,
+          _lastPushErrorMeta,
+        ),
+      );
+    }
     if (data.containsKey('created')) {
       context.handle(
         _createdMeta,
@@ -4870,6 +4891,10 @@ class $JiraIntegrationsTable extends JiraIntegrations
         DriftSqlType.string,
         data['${effectivePrefix}last_sync_error'],
       ),
+      lastPushError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_push_error'],
+      ),
       created: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created'],
@@ -4911,6 +4936,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
   final String statusMappings;
   final int? lastSyncAt;
   final String? lastSyncError;
+  final String? lastPushError;
   final int created;
   final int? modified;
   final String crdtClock;
@@ -4931,6 +4957,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     required this.statusMappings,
     this.lastSyncAt,
     this.lastSyncError,
+    this.lastPushError,
     required this.created,
     this.modified,
     required this.crdtClock,
@@ -4963,6 +4990,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     }
     if (!nullToAbsent || lastSyncError != null) {
       map['last_sync_error'] = Variable<String>(lastSyncError);
+    }
+    if (!nullToAbsent || lastPushError != null) {
+      map['last_push_error'] = Variable<String>(lastPushError);
     }
     map['created'] = Variable<int>(created);
     if (!nullToAbsent || modified != null) {
@@ -5000,6 +5030,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       lastSyncError: lastSyncError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncError),
+      lastPushError: lastPushError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPushError),
       created: Value(created),
       modified: modified == null && nullToAbsent
           ? const Value.absent()
@@ -5034,6 +5067,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       statusMappings: serializer.fromJson<String>(json['statusMappings']),
       lastSyncAt: serializer.fromJson<int?>(json['lastSyncAt']),
       lastSyncError: serializer.fromJson<String?>(json['lastSyncError']),
+      lastPushError: serializer.fromJson<String?>(json['lastPushError']),
       created: serializer.fromJson<int>(json['created']),
       modified: serializer.fromJson<int?>(json['modified']),
       crdtClock: serializer.fromJson<String>(json['crdtClock']),
@@ -5059,6 +5093,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       'statusMappings': serializer.toJson<String>(statusMappings),
       'lastSyncAt': serializer.toJson<int?>(lastSyncAt),
       'lastSyncError': serializer.toJson<String?>(lastSyncError),
+      'lastPushError': serializer.toJson<String?>(lastPushError),
       'created': serializer.toJson<int>(created),
       'modified': serializer.toJson<int?>(modified),
       'crdtClock': serializer.toJson<String>(crdtClock),
@@ -5082,6 +5117,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     String? statusMappings,
     Value<int?> lastSyncAt = const Value.absent(),
     Value<String?> lastSyncError = const Value.absent(),
+    Value<String?> lastPushError = const Value.absent(),
     int? created,
     Value<int?> modified = const Value.absent(),
     String? crdtClock,
@@ -5104,6 +5140,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     lastSyncError: lastSyncError.present
         ? lastSyncError.value
         : this.lastSyncError,
+    lastPushError: lastPushError.present
+        ? lastPushError.value
+        : this.lastPushError,
     created: created ?? this.created,
     modified: modified.present ? modified.value : this.modified,
     crdtClock: crdtClock ?? this.crdtClock,
@@ -5146,6 +5185,9 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
       lastSyncError: data.lastSyncError.present
           ? data.lastSyncError.value
           : this.lastSyncError,
+      lastPushError: data.lastPushError.present
+          ? data.lastPushError.value
+          : this.lastPushError,
       created: data.created.present ? data.created.value : this.created,
       modified: data.modified.present ? data.modified.value : this.modified,
       crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
@@ -5171,6 +5213,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
           ..write('statusMappings: $statusMappings, ')
           ..write('lastSyncAt: $lastSyncAt, ')
           ..write('lastSyncError: $lastSyncError, ')
+          ..write('lastPushError: $lastPushError, ')
           ..write('created: $created, ')
           ..write('modified: $modified, ')
           ..write('crdtClock: $crdtClock, ')
@@ -5196,6 +5239,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
     statusMappings,
     lastSyncAt,
     lastSyncError,
+    lastPushError,
     created,
     modified,
     crdtClock,
@@ -5220,6 +5264,7 @@ class JiraIntegration extends DataClass implements Insertable<JiraIntegration> {
           other.statusMappings == this.statusMappings &&
           other.lastSyncAt == this.lastSyncAt &&
           other.lastSyncError == this.lastSyncError &&
+          other.lastPushError == this.lastPushError &&
           other.created == this.created &&
           other.modified == this.modified &&
           other.crdtClock == this.crdtClock &&
@@ -5242,6 +5287,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
   final Value<String> statusMappings;
   final Value<int?> lastSyncAt;
   final Value<String?> lastSyncError;
+  final Value<String?> lastPushError;
   final Value<int> created;
   final Value<int?> modified;
   final Value<String> crdtClock;
@@ -5263,6 +5309,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     this.statusMappings = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
     this.lastSyncError = const Value.absent(),
+    this.lastPushError = const Value.absent(),
     this.created = const Value.absent(),
     this.modified = const Value.absent(),
     this.crdtClock = const Value.absent(),
@@ -5285,6 +5332,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     this.statusMappings = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
     this.lastSyncError = const Value.absent(),
+    this.lastPushError = const Value.absent(),
     required int created,
     this.modified = const Value.absent(),
     this.crdtClock = const Value.absent(),
@@ -5311,6 +5359,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     Expression<String>? statusMappings,
     Expression<int>? lastSyncAt,
     Expression<String>? lastSyncError,
+    Expression<String>? lastPushError,
     Expression<int>? created,
     Expression<int>? modified,
     Expression<String>? crdtClock,
@@ -5335,6 +5384,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
       if (statusMappings != null) 'status_mappings': statusMappings,
       if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
       if (lastSyncError != null) 'last_sync_error': lastSyncError,
+      if (lastPushError != null) 'last_push_error': lastPushError,
       if (created != null) 'created': created,
       if (modified != null) 'modified': modified,
       if (crdtClock != null) 'crdt_clock': crdtClock,
@@ -5359,6 +5409,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     Value<String>? statusMappings,
     Value<int?>? lastSyncAt,
     Value<String?>? lastSyncError,
+    Value<String?>? lastPushError,
     Value<int>? created,
     Value<int?>? modified,
     Value<String>? crdtClock,
@@ -5381,6 +5432,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
       statusMappings: statusMappings ?? this.statusMappings,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       lastSyncError: lastSyncError ?? this.lastSyncError,
+      lastPushError: lastPushError ?? this.lastPushError,
       created: created ?? this.created,
       modified: modified ?? this.modified,
       crdtClock: crdtClock ?? this.crdtClock,
@@ -5439,6 +5491,9 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
     if (lastSyncError.present) {
       map['last_sync_error'] = Variable<String>(lastSyncError.value);
     }
+    if (lastPushError.present) {
+      map['last_push_error'] = Variable<String>(lastPushError.value);
+    }
     if (created.present) {
       map['created'] = Variable<int>(created.value);
     }
@@ -5475,6 +5530,7 @@ class JiraIntegrationsCompanion extends UpdateCompanion<JiraIntegration> {
           ..write('statusMappings: $statusMappings, ')
           ..write('lastSyncAt: $lastSyncAt, ')
           ..write('lastSyncError: $lastSyncError, ')
+          ..write('lastPushError: $lastPushError, ')
           ..write('created: $created, ')
           ..write('modified: $modified, ')
           ..write('crdtClock: $crdtClock, ')
@@ -10009,6 +10065,7 @@ typedef $$JiraIntegrationsTableCreateCompanionBuilder =
       Value<String> statusMappings,
       Value<int?> lastSyncAt,
       Value<String?> lastSyncError,
+      Value<String?> lastPushError,
       required int created,
       Value<int?> modified,
       Value<String> crdtClock,
@@ -10032,6 +10089,7 @@ typedef $$JiraIntegrationsTableUpdateCompanionBuilder =
       Value<String> statusMappings,
       Value<int?> lastSyncAt,
       Value<String?> lastSyncError,
+      Value<String?> lastPushError,
       Value<int> created,
       Value<int?> modified,
       Value<String> crdtClock,
@@ -10120,6 +10178,11 @@ class $$JiraIntegrationsTableFilterComposer
 
   ColumnFilters<String> get lastSyncError => $composableBuilder(
     column: $table.lastSyncError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastPushError => $composableBuilder(
+    column: $table.lastPushError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10228,6 +10291,11 @@ class $$JiraIntegrationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastPushError => $composableBuilder(
+    column: $table.lastPushError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get created => $composableBuilder(
     column: $table.created,
     builder: (column) => ColumnOrderings(column),
@@ -10323,6 +10391,11 @@ class $$JiraIntegrationsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get lastPushError => $composableBuilder(
+    column: $table.lastPushError,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get created =>
       $composableBuilder(column: $table.created, builder: (column) => column);
 
@@ -10388,6 +10461,7 @@ class $$JiraIntegrationsTableTableManager
                 Value<String> statusMappings = const Value.absent(),
                 Value<int?> lastSyncAt = const Value.absent(),
                 Value<String?> lastSyncError = const Value.absent(),
+                Value<String?> lastPushError = const Value.absent(),
                 Value<int> created = const Value.absent(),
                 Value<int?> modified = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
@@ -10409,6 +10483,7 @@ class $$JiraIntegrationsTableTableManager
                 statusMappings: statusMappings,
                 lastSyncAt: lastSyncAt,
                 lastSyncError: lastSyncError,
+                lastPushError: lastPushError,
                 created: created,
                 modified: modified,
                 crdtClock: crdtClock,
@@ -10432,6 +10507,7 @@ class $$JiraIntegrationsTableTableManager
                 Value<String> statusMappings = const Value.absent(),
                 Value<int?> lastSyncAt = const Value.absent(),
                 Value<String?> lastSyncError = const Value.absent(),
+                Value<String?> lastPushError = const Value.absent(),
                 required int created,
                 Value<int?> modified = const Value.absent(),
                 Value<String> crdtClock = const Value.absent(),
@@ -10453,6 +10529,7 @@ class $$JiraIntegrationsTableTableManager
                 statusMappings: statusMappings,
                 lastSyncAt: lastSyncAt,
                 lastSyncError: lastSyncError,
+                lastPushError: lastPushError,
                 created: created,
                 modified: modified,
                 crdtClock: crdtClock,
