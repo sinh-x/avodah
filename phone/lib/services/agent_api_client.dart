@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show HttpStatus;
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
 
@@ -559,7 +561,8 @@ class AgentApiClient {
     try {
       final json = await _post('/api/self-update');
       return SelfUpdateResult.fromJson(json);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AgentApiClient] triggerSelfUpdate error: $e');
       return null;
     }
   }

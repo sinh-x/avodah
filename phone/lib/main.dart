@@ -400,6 +400,7 @@ class _HomeShellState extends State<_HomeShell> {
               focusProvider: widget.focusProvider,
               deploymentProvider: widget.deploymentProvider,
               crdtSyncService: widget.crdtSyncService,
+              apiClient: widget.apiClient,
             ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
