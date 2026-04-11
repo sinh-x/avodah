@@ -10,6 +10,7 @@ import 'tables/timer.dart';
 import 'tables/daily_plans.dart';
 import 'tables/day_plan_tasks.dart';
 import 'tables/sync_watermarks.dart';
+import 'tables/sync_queue.dart';
 import 'tables/paired_devices.dart';
 
 part 'database.g.dart';
@@ -31,6 +32,7 @@ part 'database.g.dart';
   DailyPlanEntries,
   DayPlanTasks,
   SyncWatermarks,
+  SyncQueue,
   PairedDevices,
 ])
 class AppDatabase extends _$AppDatabase {
@@ -44,7 +46,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration {
@@ -140,6 +142,10 @@ class AppDatabase extends _$AppDatabase {
           } on Exception catch (_) {
             // Column may already exist
           }
+        }
+        if (from < 16) {
+          // v16: add sync_queue table for offline push retry
+          await m.createTable(syncQueue);
         }
       },
     );

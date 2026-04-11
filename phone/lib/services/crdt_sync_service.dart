@@ -21,7 +21,7 @@ library;
 import 'dart:convert';
 
 import 'package:avodah_core/avodah_core.dart';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -144,7 +144,8 @@ class CrdtSyncService {
           'node': nodeId,
         },
       );
-      final body = await httpResponse.transform(utf8.decoder).join();
+      final bodyBytes = await httpResponse.fold<List<int>>([], (a, b) => a..addAll(b));
+      final body = utf8.decode(bodyBytes, allowMalformed: true);
       response = http.Response(body, httpResponse.statusCode);
     } else {
       final uri = Uri.parse(
@@ -372,8 +373,10 @@ class CrdtSyncService {
         'api/sync/deltas',
         headers: {'Content-Type': 'application/json'},
         body: body,
+        timeout: const Duration(seconds: 30),
       );
-      final responseBody = await httpResponse.transform(utf8.decoder).join();
+      final responseBytes = await httpResponse.fold<List<int>>([], (a, b) => a..addAll(b));
+      final responseBody = utf8.decode(responseBytes, allowMalformed: true);
       response = http.Response(responseBody, httpResponse.statusCode);
     } else {
       final uri = Uri.parse('$baseUrl/api/sync/deltas');
@@ -436,6 +439,85 @@ class CrdtSyncService {
         );
   }
 
+  /// Performs a full bidirectional sync: pushes all local data to the server,
+  /// then resets the watermark so the next pull fetches everything.
+  Future<int> forceFullSync() async {
+    debugPrint('[Sync] Force full sync — pushing all local data then resetting watermark');
+
+    // Extract all local documents as deltas
+    final deltas = <Map<String, dynamic>>[];
+
+    // Tasks
+    final tasks = await db.select(db.tasks).get();
+    for (final row in tasks) {
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.task, doc));
+    }
+
+    // Worklogs
+    final worklogs = await db.select(db.worklogEntries).get();
+    for (final row in worklogs) {
+      final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.worklog, doc));
+    }
+
+    // Timers
+    final timers = await db.select(db.timerEntries).get();
+    for (final row in timers) {
+      final doc = TimerDocument.fromDrift(timer: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.timer, doc));
+    }
+
+    // Projects
+    final projects = await db.select(db.projects).get();
+    for (final row in projects) {
+      final doc = ProjectDocument.fromDrift(project: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.project, doc));
+    }
+
+    // Daily plans
+    final dailyPlans = await db.select(db.dailyPlanEntries).get();
+    for (final row in dailyPlans) {
+      final doc = DailyPlanDocument.fromDrift(entry: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.dailyPlan, doc));
+    }
+
+    // Day plan tasks
+    final dayPlanTasks = await db.select(db.dayPlanTasks).get();
+    for (final row in dayPlanTasks) {
+      final doc = DayPlanTaskDocument.fromDrift(entry: row, clock: clock);
+      deltas.add(_wrapDelta(_SyncDocType.dayPlanTask, doc));
+    }
+
+    debugPrint('[Sync] Pushing ${deltas.length} local deltas to server');
+
+    // Push in batches of 100 to avoid timeout/payload size issues
+    var pushed = 0;
+    const batchSize = 100;
+    for (var i = 0; i < deltas.length; i += batchSize) {
+      final end = (i + batchSize).clamp(0, deltas.length);
+      final batch = deltas.sublist(i, end);
+      debugPrint('[Sync] Pushing batch ${i ~/ batchSize + 1} (${batch.length} deltas)');
+      pushed += await pushToDesktop(batch);
+    }
+
+    // Reset watermark so next pull gets everything from server
+    await _setDesktopWatermark('');
+    debugPrint('[Sync] Watermark reset — next pull will fetch all server data');
+
+    return pushed;
+  }
+
+  /// Wraps a CRDT document as a typed sync delta (mirrors server's _wrapDelta).
+  Map<String, dynamic> _wrapDelta(String type, CrdtDocument doc) {
+    final json = doc.toJson();
+    return {
+      'type': type,
+      'id': json['id'],
+      'fields': json['fields'],
+    };
+  }
+
   /// Revokes pairing with the desktop server.
   ///
   /// Calls DELETE /api/sync/pair to notify the server, then clears local
@@ -446,6 +528,136 @@ class CrdtSyncService {
   Future<void> revokePairing() async {
     await _pairingService?.revokePairing();
     debugPrint('[CrdtSync] Pairing revoked. Service reset to unpaired state.');
+  }
+
+  // ============================================================
+  // Sync queue methods
+  // ============================================================
+
+  /// Enqueues a CRDT delta for persistent retry on push failure.
+  ///
+  /// When [pushToDesktop] fails, callers should call this to persist
+  /// the delta so it can be retried on the next sync cycle.
+  Future<void> enqueueDelta(Map<String, dynamic> delta) async {
+    final json = jsonEncode(delta);
+    await db.into(db.syncQueue).insert(
+          SyncQueueCompanion.insert(
+            deltaJson: json,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            retryCount: const Value(0),
+            status: const Value('pending'),
+          ),
+        );
+    debugPrint('[Sync] Enqueued delta: ${delta['type']}/${delta['id']}');
+  }
+
+  /// Processes all pending deltas in FIFO order with exponential backoff.
+  ///
+  /// Called at the start of each periodic sync cycle (before pull).
+  /// Returns the number of deltas successfully pushed.
+  ///
+  /// Backoff schedule:
+  /// - retryCount 0: wait 5s before pushing
+  /// - retryCount 1: wait 15s before pushing
+  /// - retryCount 2: wait 60s before pushing
+  /// - retryCount 3: wait 300s before pushing
+  /// - retryCount 4: wait 900s before pushing
+  /// - retryCount >= 5: mark as failed, stop retrying
+  Future<int> processQueue() async {
+    // Fetch all pending entries in FIFO order (oldest first by id)
+    final pending = await (db.select(db.syncQueue)
+          ..where((q) => q.status.equals('pending'))
+          ..orderBy([(q) => OrderingTerm.asc(q.id)]))
+        .get();
+
+    if (pending.isEmpty) return 0;
+
+    debugPrint('[Sync] Processing queue: ${pending.length} pending entries');
+
+    var pushed = 0;
+    for (final entry in pending) {
+      // Check backoff — skip if not enough time has passed since creation
+      final backoffMs = _backoffMsForRetry(entry.retryCount);
+      final age = DateTime.now().millisecondsSinceEpoch - entry.createdAt;
+      if (age < backoffMs && entry.retryCount > 0) {
+        // First attempt (retryCount=0) doesn't wait — it tries immediately
+        debugPrint('[Sync] Entry ${entry.id} not ready: age=${age}ms, backoff=${backoffMs}ms');
+        continue;
+      }
+
+      final delta = jsonDecode(entry.deltaJson) as Map<String, dynamic>;
+      try {
+        await pushToDesktop([delta]);
+        // Success — delete from queue
+        await (db.delete(db.syncQueue)
+              ..where((q) => q.id.equals(entry.id)))
+            .go();
+        pushed++;
+        debugPrint('[Sync] Queue entry ${entry.id} pushed successfully');
+      } catch (e) {
+        // Failure — increment retry count or mark failed
+        final newRetryCount = entry.retryCount + 1;
+        if (newRetryCount >= 5) {
+          await (db.update(db.syncQueue)
+                ..where((q) => q.id.equals(entry.id)))
+              .write(
+                SyncQueueCompanion(
+                  retryCount: Value(newRetryCount),
+                  status: const Value('failed'),
+                ),
+              );
+          debugPrint('[Sync] Queue entry ${entry.id} marked failed after 5 retries');
+        } else {
+          await (db.update(db.syncQueue)
+                ..where((q) => q.id.equals(entry.id)))
+              .write(
+                SyncQueueCompanion(
+                  retryCount: Value(newRetryCount),
+                ),
+              );
+          debugPrint('[Sync] Queue entry ${entry.id} push failed, retry count: $newRetryCount');
+        }
+      }
+    }
+
+    return pushed;
+  }
+
+  /// Returns backoff delay in ms for a given retry count.
+  int _backoffMsForRetry(int retryCount) {
+    switch (retryCount) {
+      case 0:
+        return 5000; // 5s
+      case 1:
+        return 15000; // 15s
+      case 2:
+        return 60000; // 60s
+      case 3:
+        return 300000; // 300s
+      case 4:
+        return 900000; // 900s
+      default:
+        return 900000; // max 15min
+    }
+  }
+
+  /// Purges failed queue entries older than 7 days.
+  Future<int> purgeOldFailedEntries() async {
+    final cutoff = DateTime.now().millisecondsSinceEpoch - (7 * 24 * 60 * 60 * 1000);
+    // Select all failed entries and filter by age in Dart
+    final allFailed = await (db.select(db.syncQueue)
+          ..where((q) => q.status.equals('failed')))
+        .get();
+    final oldEntries = allFailed.where((e) => e.createdAt < cutoff).toList();
+    if (oldEntries.isEmpty) return 0;
+    final ids = oldEntries.map((e) => e.id).toList();
+    final deleted = await (db.delete(db.syncQueue)
+          ..where((q) => q.id.isIn(ids)))
+        .go();
+    if (deleted > 0) {
+      debugPrint('[Sync] Purged $deleted old failed queue entries');
+    }
+    return deleted;
   }
 
   void dispose() {
