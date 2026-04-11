@@ -58,6 +58,10 @@ Future<void> main(List<String> args) async {
   final agentApiUrl =
       Platform.environment['AGENT_API_URL'] ?? 'http://localhost:9848';
 
+  // HTTPS-only mode: when true + TLS configured, reject plain HTTP requests
+  final httpsOnly =
+      Platform.environment['SYNC_HTTPS_ONLY']?.toLowerCase() == 'true';
+
   // Initialize database and services (same pattern as server.dart)
   final db = openDatabase(paths.databasePath);
   final nodeId = paths.getNodeIdSync();
@@ -82,8 +86,10 @@ Future<void> main(List<String> args) async {
     pairingService: pairingService,
   );
 
-  // Start server (TLS or plain HTTP)
-  HttpServer server;
+  // Start server(s): HTTPS on all interfaces + HTTP on localhost (when TLS enabled),
+  // or HTTP only on localhost (when TLS disabled).
+  // Each entry is (server, isSecure): isSecure=true for HTTPS, false for HTTP.
+  final serverList = <(HttpServer, bool)>[];
   final tlsCertPath = config.syncTlsCertPath;
   final tlsKeyPath = config.syncTlsKeyPath;
 
@@ -115,16 +121,32 @@ Future<void> main(List<String> args) async {
     // Compute server fingerprint from the certificate (SHA-256, base64)
     serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
 
-    server = await HttpServer.bindSecure(
+    // HTTPS on all interfaces (TLS + auth required)
+    final httpsServer = await HttpServer.bindSecure(
       InternetAddress.anyIPv4,
       port,
       context,
     );
+    serverList.add((httpsServer, true)); // isSecure = true
     stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on 0.0.0.0:$port');
     stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
+
+    // HTTP on localhost (for pa-serve proxy, no TLS needed)
+    // Skip when HTTPS-only mode is enabled — TLS required, HTTP rejected
+    if (!httpsOnly) {
+      final localhostHttpServer = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        port,
+      );
+      serverList.add((localhostHttpServer, false)); // isSecure = false
+      stderr.writeln('Avodah Sync Server (HTTP/loopback) listening on 127.0.0.1:$port');
+    } else {
+      stderr.writeln('HTTPS-only mode: localhost HTTP binding skipped — HTTPS required');
+    }
   } else {
     // Plain HTTP mode (no TLS — for development or local-only networks)
-    server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    serverList.add((httpServer, false)); // isSecure = false
     stderr.writeln('Avodah Sync Server (HTTP) listening on 0.0.0.0:$port');
     stderr.writeln('WARNING: HTTP mode — sync traffic is NOT encrypted. Use TLS for production.');
   }
@@ -135,7 +157,9 @@ Future<void> main(List<String> args) async {
   // Handle SIGINT and SIGTERM for graceful shutdown
   Future<void> shutdown() async {
     stderr.writeln('\nShutting down...');
-    await server.close();
+    for (final (s, _) in serverList) {
+      await s.close();
+    }
     await db.close();
     exit(0);
   }
@@ -143,10 +167,10 @@ Future<void> main(List<String> args) async {
   ProcessSignal.sigint.watch().listen((_) => shutdown());
   ProcessSignal.sigterm.watch().listen((_) => shutdown());
 
-  // Accept connections — handle each request concurrently
-  await for (final request in server) {
-    unawaited(_handleRequest(
-        request, syncApi, pairingService, agentApiUrl));
+  // Accept connections — handle each request concurrently across all servers
+  for (final (server, isSecure) in serverList) {
+    unawaited(server.forEach((request) =>
+        _handleRequest(request, syncApi, pairingService, agentApiUrl, httpsOnly, isSecure)));
   }
 }
 
@@ -191,8 +215,19 @@ Future<void> _handleRequest(
   SyncApiService syncApi,
   PairingService pairingService,
   String agentApiUrl,
+  bool httpsOnly,
+  bool isSecure,
 ) async {
   try {
+    // HTTPS-only mode: reject plain HTTP requests when TLS is configured
+    if (httpsOnly && !isSecure) {
+      _jsonResponse(request, HttpStatus.forbidden, {
+        'error': 'HTTP not allowed when TLS is configured. Use HTTPS.',
+        'code': 'HTTPS_ONLY',
+      });
+      return;
+    }
+
     // WebSocket upgrade requests → proxy to AGENT_API_URL (requires auth)
     if (WebSocketTransformer.isUpgradeRequest(request)) {
       final nodeId = request.headers.value('X-Av-Node-Id');
