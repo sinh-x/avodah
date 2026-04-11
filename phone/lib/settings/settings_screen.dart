@@ -138,7 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadChips() async {
     // Always use fresh URL for chip operations
     final url = await SettingsScreen.loadServerUrl();
-    final client = AgentApiClient(baseUrl: url);
+    final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
     setState(() => _loadingChips = true);
     try {
       final chips = await client.getAllCategoryChips();
@@ -168,7 +168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Always use fresh URL
     final url = await SettingsScreen.loadServerUrl();
-    final client = AgentApiClient(baseUrl: url);
+    final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
 
     final success = await client.addCategoryChip(category, chip);
     if (success) {
@@ -191,7 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _removeChip(String category, String chip) async {
     // Always use fresh URL
     final url = await SettingsScreen.loadServerUrl();
-    final client = AgentApiClient(baseUrl: url);
+    final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
 
     final success = await client.removeCategoryChip(category, chip);
     if (success) {
@@ -256,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _triggerSelfUpdate() async {
     final url = await SettingsScreen.loadServerUrl();
-    final client = AgentApiClient(baseUrl: url);
+    final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
 
     final result = await client.triggerSelfUpdate();
     if (result == null) {
@@ -279,8 +279,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _startStatusPolling(String url) {
     _statusPollTimer?.cancel();
+    final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
     _statusPollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      final client = AgentApiClient(baseUrl: url);
       final status = await client.getSelfUpdateStatus();
 
       if (status == null) return;

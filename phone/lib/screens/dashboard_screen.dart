@@ -331,7 +331,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (_) => SettingsScreen(crdtSyncService: widget.crdtSyncService)),
+                MaterialPageRoute(builder: (_) => SettingsScreen(apiClient: widget.apiClient, crdtSyncService: widget.crdtSyncService)),
               );
             },
           ),

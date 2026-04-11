@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show HttpStatus;
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
 
@@ -553,19 +555,14 @@ class AgentApiClient {
 
   /// Triggers a self-update build (phone → server → APK push).
   ///
-  /// POST /api/self-update → 202 Accepted with {status: building, startedAt}
+  /// POST /api/self-update → 2xx with {status: building, startedAt}
   /// Returns null on network error.
   Future<SelfUpdateResult?> triggerSelfUpdate() async {
     try {
-      final response = await _client
-          .post(Uri.parse('$baseUrl/api/self-update'))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode == HttpStatus.accepted) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        return SelfUpdateResult.fromJson(json);
-      }
-      return null;
-    } catch (_) {
+      final json = await _post('/api/self-update');
+      return SelfUpdateResult.fromJson(json);
+    } catch (e) {
+      debugPrint('[AgentApiClient] triggerSelfUpdate error: $e');
       return null;
     }
   }
@@ -576,14 +573,8 @@ class AgentApiClient {
   /// Returns null on network error.
   Future<SelfUpdateStatus?> getSelfUpdateStatus() async {
     try {
-      final response = await _client
-          .get(Uri.parse('$baseUrl/api/self-update/status'))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode == HttpStatus.ok) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        return SelfUpdateStatus.fromJson(json);
-      }
-      return null;
+      final json = await _get('/api/self-update/status');
+      return SelfUpdateStatus.fromJson(json);
     } catch (_) {
       return null;
     }
