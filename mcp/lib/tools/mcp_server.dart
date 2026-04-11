@@ -558,7 +558,7 @@ class McpServer {
             'worklogId': result.worklogId,
             'elapsed': result.elapsedFormatted,
             'task': result.taskTitle,
-            if (pushed) 'jira': 'worklog synced',
+            if (pushed.success) 'jira': 'worklog synced',
           };
         } on NoTimerRunningException {
           return {
@@ -933,6 +933,10 @@ class McpServer {
             duration: Duration(minutes: durationMinutes),
             comment: comment,
           );
+
+          // Auto-push worklog to Jira if configured
+          final pushed = await jiraService.pushWorklog(worklog.id);
+
           return {
             'ok': true,
             'created': {
@@ -942,6 +946,7 @@ class McpServer {
               'durationMinutes': worklog.durationMs ~/ 60000,
               'comment': worklog.comment,
             },
+            if (pushed.success) 'jira': 'worklog synced',
           };
         } on FormatException {
           return {'ok': false, 'error': 'Invalid start date format'};

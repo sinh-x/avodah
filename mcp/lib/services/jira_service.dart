@@ -40,6 +40,33 @@ class PushResult {
   String toString() => 'PushResult(pushed: $pushed, updated: $updated, failed: $failed)';
 }
 
+/// Result of pushing a single worklog to Jira.
+class PushWorklogResult {
+  final bool success;
+  final int? httpStatus;
+  final String? errorMessage;
+
+  const PushWorklogResult({
+    required this.success,
+    this.httpStatus,
+    this.errorMessage,
+  });
+
+  factory PushWorklogResult.success() =>
+      const PushWorklogResult(success: true);
+
+  factory PushWorklogResult.failure({required int? httpStatus, required String errorMessage}) =>
+      PushWorklogResult(success: false, httpStatus: httpStatus, errorMessage: errorMessage);
+
+  factory PushWorklogResult.notApplicable() =>
+      const PushWorklogResult(success: false);
+
+  @override
+  String toString() => success
+      ? 'PushWorklogResult.success'
+      : 'PushWorklogResult.failure(httpStatus: $httpStatus, errorMessage: $errorMessage)';
+}
+
 /// Combined result of a full sync (pull + push).
 class SyncResult {
   final PullResult pull;
@@ -740,29 +767,29 @@ class JiraService {
 
   /// Pushes a single worklog to Jira by its local ID.
   ///
-  /// Returns `true` if the worklog was successfully pushed, `false` if not
-  /// applicable (not configured, not a Jira task, already synced, HTTP error).
-  Future<bool> pushWorklog(String worklogId) async {
+  /// Returns a [PushWorklogResult] indicating success, failure with http status and
+  /// error message, or not-applicable (not configured, not a Jira task, already synced).
+  Future<PushWorklogResult> pushWorklog(String worklogId) async {
     // 1. Load config/creds
     final config = await getConfig();
-    if (config == null) return false;
+    if (config == null) return PushWorklogResult.notApplicable();
     final creds = await config.loadCredentials();
-    if (creds == null) return false;
+    if (creds == null) return PushWorklogResult.notApplicable();
 
     // 2. Load worklog row
     final rows = await db.select(db.worklogEntries).get();
     final match = rows.where((w) => w.id == worklogId).toList();
-    if (match.isEmpty) return false;
+    if (match.isEmpty) return PushWorklogResult.notApplicable();
     final worklog = WorklogDocument.fromDrift(worklog: match.first, clock: clock);
-    if (worklog.isDeleted || worklog.isSyncedToJira) return false;
+    if (worklog.isDeleted || worklog.isSyncedToJira) return PushWorklogResult.notApplicable();
 
     // 3. Load task to get issueKey
     final taskRows = await (db.select(db.tasks)
           ..where((t) => t.id.equals(worklog.taskId)))
         .get();
-    if (taskRows.isEmpty) return false;
+    if (taskRows.isEmpty) return PushWorklogResult.notApplicable();
     final issueKey = taskRows.first.issueId;
-    if (issueKey == null) return false;
+    if (issueKey == null) return PushWorklogResult.notApplicable();
 
     // 4. POST to Jira
     try {
@@ -774,16 +801,29 @@ class JiraService {
         path: '/issue/$issueKey/worklog',
         body: body,
       );
-      if (response.statusCode != 201) return false;
+      if (response.statusCode != 201) {
+        return PushWorklogResult.failure(
+          httpStatus: response.statusCode,
+          errorMessage: 'Jira returned status ${response.statusCode}',
+        );
+      }
 
       final respData = jsonDecode(response.body) as Map<String, dynamic>;
       final jiraWorklogId = respData['id'] as String;
       worklog.linkToJira(jiraWorklogId);
       _reconcileDuration(worklog, respData);
       await _saveWorklog(worklog);
-      return true;
-    } catch (_) {
-      return false;
+      return PushWorklogResult.success();
+    } on http.ClientException catch (e) {
+      return PushWorklogResult.failure(
+        httpStatus: null,
+        errorMessage: 'Network error: ${e.message}',
+      );
+    } catch (e) {
+      return PushWorklogResult.failure(
+        httpStatus: null,
+        errorMessage: e.toString(),
+      );
     }
   }
 
