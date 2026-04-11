@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:avodah_core/version.dart';
 import '../services/agent_api_client.dart';
 import '../services/crdt_sync_service.dart';
+import '../services/display_settings_service.dart';
 
 const kServerUrlKey = 'sync_server_url';
 const kDefaultServerUrl = 'http://100.64.0.1:9847';
@@ -74,6 +75,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Whether Forget Server is in progress.
   bool _forgetting = false;
 
+  /// Whether Force Full Sync is in progress.
+  bool _fullSyncing = false;
+
   /// Triggers the Forget Server confirmation and revocation flow.
   Future<void> _forgetServer() async {
     final confirmed = await showDialog<bool>(
@@ -120,6 +124,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _forgetting = false);
+    }
+  }
+
+  Future<void> _forceFullSync() async {
+    setState(() => _fullSyncing = true);
+    try {
+      final pushed = await widget.crdtSyncService?.forceFullSync() ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Full sync complete. Pushed $pushed deltas. Pull will refresh shortly.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Full sync failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _fullSyncing = false);
     }
   }
 
@@ -372,6 +396,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(),
+          // --- Display Settings ---
+          _DisplaySettingsSection(),
+          const Divider(),
           if (widget.crdtSyncService != null)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -386,6 +413,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _fullSyncing ? null : _forceFullSync,
+                      icon: _fullSyncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.sync),
+                      label: Text(
+                          _fullSyncing ? 'Syncing...' : 'Force Full Sync'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Re-downloads all data from the server.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -637,6 +685,153 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onDeleted: () => _removeChip(_selectedCategory!, chip),
         );
       }).toList(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Display Settings Section
+// ---------------------------------------------------------------------------
+
+class _DisplaySettingsSection extends StatefulWidget {
+  @override
+  State<_DisplaySettingsSection> createState() => _DisplaySettingsSectionState();
+}
+
+class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
+  late DisplaySettingsService _service;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = DisplaySettingsService();
+    _service.load().then((_) {
+      if (mounted) setState(() => _loaded = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _service.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _service,
+      builder: (context, _) {
+        if (!_loaded) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Display',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const Text(
+                'Customize brightness, accent color, and contrast.',
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+
+              // Brightness
+              Text('Brightness',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              SegmentedButton<DisplayBrightness>(
+                segments: const [
+                  ButtonSegment(
+                      value: DisplayBrightness.light,
+                      label: Text('Light'),
+                      icon: Icon(Icons.light_mode)),
+                  ButtonSegment(
+                      value: DisplayBrightness.dark,
+                      label: Text('Dark'),
+                      icon: Icon(Icons.dark_mode)),
+                  ButtonSegment(
+                      value: DisplayBrightness.system,
+                      label: Text('System'),
+                      icon: Icon(Icons.brightness_auto)),
+                ],
+                selected: {_service.brightness},
+                onSelectionChanged: (selected) {
+                  _service.setBrightness(selected.first);
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Accent color
+              Text('Accent Color',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: kAccentColors.map((color) {
+                  final isSelected = _service.accentColor.toARGB32() == color.toARGB32();
+                  return GestureDetector(
+                    onTap: () => _service.setAccentColor(color),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: color.withAlpha(128),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+
+              // Contrast
+              Text('Contrast',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              SegmentedButton<DisplayContrast>(
+                segments: const [
+                  ButtonSegment(
+                      value: DisplayContrast.normal,
+                      label: Text('Normal'),
+                      icon: Icon(Icons.text_fields)),
+                  ButtonSegment(
+                      value: DisplayContrast.high,
+                      label: Text('High'),
+                      icon: Icon(Icons.contrast)),
+                ],
+                selected: {_service.contrast},
+                onSelectionChanged: (selected) {
+                  _service.setContrast(selected.first);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

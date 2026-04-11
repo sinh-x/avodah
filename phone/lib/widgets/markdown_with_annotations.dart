@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../services/display_settings_service.dart';
+
 /// GFM alert type detected in blockquote text content.
 enum _GfmAlertType {
   note,
@@ -69,7 +71,9 @@ class MarkdownWithAnnotations extends StatelessWidget {
   ) {
     final theme = Theme.of(context);
     const amberAccent = Color(0xFFFFC107);
-    final amberLight = Colors.amber.shade50;
+    // Use more saturated amber background in high contrast mode
+    final isHighContrast = theme.syntaxColors.isHighContrast;
+    final amberLight = isHighContrast ? Colors.amber.shade100 : Colors.amber.shade50;
 
     return MarkdownStyleSheet(
       blockquote: baseStyle?.copyWith(

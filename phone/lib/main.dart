@@ -16,6 +16,7 @@ import 'services/board_provider.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/crypto_sync_service.dart';
 import 'services/deployment_provider.dart';
+import 'services/display_settings_service.dart';
 import 'services/focus_provider.dart';
 import 'services/local_dashboard_provider.dart';
 import 'services/local_write_service.dart';
@@ -49,6 +50,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   TeamBrowserProvider? _teamBrowserProvider;
   BoardProvider? _boardProvider;
   FocusProvider? _focusProvider;
+  DisplaySettingsService? _displaySettings;
   Timer? _syncTimer;
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -120,6 +122,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final focusProvider = FocusProvider(apiClient);
     focusProvider.startPolling();
 
+    // Display settings (brightness, accent color, contrast)
+    final displaySettings = DisplaySettingsService();
+    await displaySettings.load();
+
     setState(() {
       _db = db;
       _dashboardProvider = dashboardProvider;
@@ -132,6 +138,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       _teamBrowserProvider = teamBrowserProvider;
       _boardProvider = boardProvider;
       _focusProvider = focusProvider;
+      _displaySettings = displaySettings;
     });
 
     // Initial pull + dashboard render
@@ -326,45 +333,73 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     _crdtSyncService?.dispose();
     _cryptoSyncService?.dispose();
     _dashboardProvider?.dispose();
+    _displaySettings?.dispose();
     _db?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-      navigatorKey: _navigatorKey,
-      title: 'Avodah',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF6750A4),
-        useMaterial3: true,
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: const Color(0xFF6750A4),
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
-      home: _dashboardProvider == null
-          ? const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            )
-          : _HomeShell(
-              dashboardProvider: _dashboardProvider!,
-              writeService: _writeService!,
-              apiClient: _apiClient!,
-              reviewProvider: _reviewProvider!,
-              deploymentProvider: _deploymentProvider!,
-              teamBrowserProvider: _teamBrowserProvider!,
-              boardProvider: _boardProvider!,
-              focusProvider: _focusProvider,
-              onPushDeltas: _pushDeltas,
-              crdtSyncService: _crdtSyncService,
-            ),
+    final display = _displaySettings;
+    final notifier = display ?? _NullNotifier();
+
+    return ListenableBuilder(
+      listenable: notifier,
+      builder: (context, _) {
+        final syntaxColors = display?.contrast == DisplayContrast.high
+            ? SyntaxColors.high
+            : SyntaxColors.normal;
+        final syntaxTheme = SyntaxThemeExtension(syntaxColors: syntaxColors);
+
+        return MaterialApp(
+          scaffoldMessengerKey: _scaffoldMessengerKey,
+          navigatorKey: _navigatorKey,
+          title: 'Avodah',
+          debugShowCheckedModeBanner: false,
+          theme: display?.lightTheme().copyWith(
+                extensions: [syntaxTheme],
+              ) ??
+              ThemeData(
+                colorSchemeSeed: const Color(0xFF6750A4),
+                useMaterial3: true,
+                brightness: Brightness.light,
+                extensions: [syntaxTheme],
+              ),
+          darkTheme: display?.darkTheme().copyWith(
+                extensions: [syntaxTheme],
+              ) ??
+              ThemeData(
+                colorSchemeSeed: const Color(0xFF6750A4),
+                useMaterial3: true,
+                brightness: Brightness.dark,
+                extensions: [syntaxTheme],
+              ),
+          themeMode: display != null ? ThemeMode.system : ThemeMode.light,
+          home: _dashboardProvider == null
+              ? const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                )
+              : _HomeShell(
+                  dashboardProvider: _dashboardProvider!,
+                  writeService: _writeService!,
+                  apiClient: _apiClient!,
+                  reviewProvider: _reviewProvider!,
+                  deploymentProvider: _deploymentProvider!,
+                  teamBrowserProvider: _teamBrowserProvider!,
+                  boardProvider: _boardProvider!,
+                  focusProvider: _focusProvider,
+                  onPushDeltas: _pushDeltas,
+                  crdtSyncService: _crdtSyncService,
+                ),
+        );
+      },
     );
   }
+}
+
+/// A no-op Listenable used when display settings hasn't loaded yet.
+class _NullNotifier extends ChangeNotifier {
+  _NullNotifier();
 }
 
 /// Shell with bottom navigation between Kanban, Dashboard, Agent Review, Deployments, and Teams.
