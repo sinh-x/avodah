@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:http/http.dart' as http;
@@ -1323,6 +1324,8 @@ class JiraService {
     if (jiraSeconds == null) return;
     final reconciledMs = jiraSeconds * 1000;
     if (worklog.durationMs != reconciledMs) {
+      stderr.writeln('Jira duration reconciled for worklog ${worklog.id}: '
+          'local ${worklog.durationMs}ms → Jira ${reconciledMs}ms');
       worklog.durationMs = reconciledMs;
       worklog.endMs = worklog.startMs + reconciledMs;
       worklog.updatedMs = DateTime.now().millisecondsSinceEpoch;

@@ -83,12 +83,14 @@ class LocalDashboardProvider extends ChangeNotifier {
       _queryDayPlanTasks(today), // 1
       _queryWorklogs(today), // 2
       _queryPlanEntries(today), // 3
+      _queryUnsyncedJiraCount(), // 4
     ]);
 
     final timerEntry = results[0] as TimerEntry?;
     final dayPlanDocs = results[1] as List<DayPlanTaskDocument>;
     final worklogDocs = results[2] as List<WorklogDocument>;
     final planDocs = results[3] as List<DailyPlanDocument>;
+    final unsyncedJiraCount = results[4] as int;
 
     // Worklog totals by task ID
     final loggedByTask = <String, int>{};
@@ -149,6 +151,7 @@ class LocalDashboardProvider extends ChangeNotifier {
       plan: plan,
       plannedTasks: plannedTasks,
       worklogSummary: worklogSummary,
+      unsyncedJiraCount: unsyncedJiraCount,
     );
   }
 
@@ -199,6 +202,23 @@ class LocalDashboardProvider extends ChangeNotifier {
           ..where((t) => t.id.isIn(ids.toList())))
         .get();
     return {for (final t in rows) t.id: t};
+  }
+
+  /// Counts worklogs that haven't been synced to Jira (jiraWorklogId is null)
+  /// but belong to a Jira-linked task (task has issueId).
+  Future<int> _queryUnsyncedJiraCount() async {
+    final worklogs = await db.select(db.worklogEntries).get();
+    final tasks = await db.select(db.tasks).get();
+    final taskIssueIds = {for (final t in tasks) t.id: t.issueId};
+
+    int count = 0;
+    for (final wl in worklogs) {
+      final issueId = taskIssueIds[wl.taskId];
+      if (wl.jiraWorklogId == null && issueId != null) {
+        count++;
+      }
+    }
+    return count;
   }
 
   // ============================================================
