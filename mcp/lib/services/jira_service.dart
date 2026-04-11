@@ -384,6 +384,26 @@ class JiraService {
     return data['accountId'] as String;
   }
 
+  /// Validates the Jira API token by calling /myself.
+  ///
+  /// Throws [JiraAuthException] if the token is expired or invalid (401/403).
+  /// Returns silently if the token is valid (200).
+  Future<void> _validateAuth({
+    required JiraIntegrationDocument config,
+    required JiraCredentials creds,
+  }) async {
+    final response = await _makeRequest(
+      config: config,
+      creds: creds,
+      method: 'GET',
+      path: '/myself',
+    );
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw JiraAuthException();
+    }
+    // 200 means valid; any other error is a non-auth issue (let caller handle)
+  }
+
   /// Extracts plain text from a Jira ADF comment structure.
   static String? _extractPlainText(dynamic comment) {
     if (comment is! Map) return null;
@@ -562,6 +582,9 @@ class JiraService {
     final creds = await config.loadCredentials();
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
 
+    // Validate token before any API calls
+    await _validateAuth(config: config, creds: creds);
+
     List<Map<String, dynamic>> issues;
     try {
       issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey, updatedSinceDays: updatedSinceDays);
@@ -679,6 +702,9 @@ class JiraService {
 
     final creds = await config.loadCredentials();
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
+
+    // Validate token before any API calls
+    await _validateAuth(config: config, creds: creds);
 
     // Find worklogs where jiraWorklogId is null AND task has issueId
     final allWorklogs = await db.select(db.worklogEntries).get();
@@ -826,6 +852,9 @@ class JiraService {
         path: '/issue/$issueKey/worklog',
         body: body,
       );
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw JiraAuthException();
+      }
       if (response.statusCode != 201) {
         return PushWorklogResult.failure(
           httpStatus: response.statusCode,
@@ -888,6 +917,9 @@ class JiraService {
         path: '/issue/$issueKey/worklog/${worklog.jiraWorklogId}',
         body: body,
       );
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw JiraAuthException();
+      }
       if (response.statusCode != 200) return false;
 
       final respData = jsonDecode(response.body) as Map<String, dynamic>;
@@ -924,6 +956,9 @@ class JiraService {
 
     final creds = await config.loadCredentials();
     if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
+
+    // Validate token before any API calls
+    await _validateAuth(config: config, creds: creds);
 
     final issues = await _fetchIssues(config: config, creds: creds, issueKey: issueKey, updatedSinceDays: updatedSinceDays);
     onProgress?.call('Fetching issues', issues.length, issues.length);
@@ -1524,4 +1559,9 @@ class JiraSyncException implements Exception {
 
   @override
   String toString() => 'Jira sync error: $message';
+}
+
+/// Thrown when the Jira API token is expired or invalid.
+class JiraAuthException extends JiraSyncException {
+  JiraAuthException() : super('Jira token expired or invalid — regenerate at https://id.atlassian.com/manage-profile/security/api-tokens');
 }

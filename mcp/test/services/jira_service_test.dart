@@ -322,6 +322,112 @@ void main() {
     });
   });
 
+  group('validateAuth', () {
+    test('pull throws JiraAuthException when /myself returns 401', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response('Unauthorized', 401);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      expect(() => service.pull(), throwsA(isA<JiraAuthException>()));
+    });
+
+    test('pull throws JiraAuthException when /myself returns 403', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response('Forbidden', 403);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      expect(() => service.pull(), throwsA(isA<JiraAuthException>()));
+    });
+
+    test('push throws JiraAuthException when /myself returns 401', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response('Unauthorized', 401);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      expect(() => service.push(), throwsA(isA<JiraAuthException>()));
+    });
+
+    test('push throws JiraAuthException when /myself returns 403', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response('Forbidden', 403);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      expect(() => service.push(), throwsA(isA<JiraAuthException>()));
+    });
+
+    test('computeSyncPreview throws JiraAuthException when /myself returns 401', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response('Unauthorized', 401);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      expect(() => service.computeSyncPreview(), throwsA(isA<JiraAuthException>()));
+    });
+
+    test('pull succeeds when /myself returns 200 (valid token)', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      // Should not throw
+      final result = await service.pull();
+      expect(result.created, equals(0));
+      expect(result.updated, equals(0));
+    });
+
+    test('push succeeds when /myself returns 200 (valid token)', () async {
+      await writeProfileConfig();
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/myself')) {
+          return http.Response(jsonEncode({'accountId': 'user-123'}), 200);
+        }
+        return http.Response(jsonEncode({'issues': []}), 200);
+      });
+      final service = createService(httpClient: mockClient);
+      await service.setup(profileName: 'work');
+
+      // Should not throw
+      final result = await service.push();
+      expect(result.pushed, equals(0));
+      expect(result.failed, equals(0));
+    });
+  });
+
   group('pull', () {
     test('throws when not configured', () async {
       final service = createService();
