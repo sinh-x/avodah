@@ -221,8 +221,16 @@ class AgentApiClient {
   // --- Deployments ---
 
   /// List recent deployments (last 3 days).
-  Future<List<Deployment>> listDeployments() async {
-    final response = await _get('/api/deployments');
+  ///
+  /// When [ticketId] is provided, fetches all historical deployments for that
+  /// ticket (no 3-day cutoff) — server-side filtering via PA-1147.
+  /// When [ticketId] is null, returns last 3 days only (backward compatible).
+  Future<List<Deployment>> listDeployments({String? ticketId}) async {
+    String path = '/api/deployments';
+    if (ticketId != null && ticketId.isNotEmpty) {
+      path += '?ticket_id=${Uri.encodeComponent(ticketId)}';
+    }
+    final response = await _get(path);
     final deployments = response['deployments'] as List;
     final cutoff = DateTime.now().subtract(const Duration(days: 3));
     return deployments
