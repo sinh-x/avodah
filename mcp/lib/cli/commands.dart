@@ -3330,6 +3330,10 @@ class JiraSyncCommand extends JiraSubcommand {
       print('');
       print(hint('avo task list', 'to see synced tasks'));
       print(hint('avo jira status', 'to see sync status'));
+    } on JiraAuthException catch (e) {
+      print('${e.message}');
+      print('');
+      print(hint('avo jira setup', 'to reconfigure Jira connection'));
     } on JiraNotConfiguredException {
       print('Jira is not configured.');
       print('');
@@ -3466,9 +3470,15 @@ class JiraStatusCommand extends JiraSubcommand {
       }
       if (status.lastSyncError != null) {
         print(kvRow('Last pull error:', status.lastSyncError!));
+        if (status.lastSyncError!.toLowerCase().contains('token')) {
+          stderr.writeln('WARNING: Token may be expired — run avo jira setup to re-authenticate');
+        }
       }
       if (status.lastPushError != null) {
         print(kvRow('Last push error:', status.lastPushError!));
+        if (status.lastPushError!.toLowerCase().contains('token')) {
+          stderr.writeln('WARNING: Token may be expired — run avo jira setup to re-authenticate');
+        }
       }
     }
     print('');
