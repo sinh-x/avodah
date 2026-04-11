@@ -36,6 +36,27 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
   Timer? _refreshTimer;
   Deployment? _enrichedDeployment;
 
+  // Filter/sort state
+  bool _newestFirst = true;
+  Set<String> _activeTypeFilters = {};
+  String _searchQuery = '';
+  Timer? _debounceTimer;
+
+  // Available event type chips
+  static const _allEventTypes = [
+    'tool_call',
+    'thinking',
+    'text',
+    'tool_use_detail',
+    'agent_spawned',
+    'agent_stopped',
+    'task_completed',
+    'task_failed',
+    'deployment_started',
+    'deployment_completed',
+    'child_deploy_started',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +84,60 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  /// Builds a searchable text string from an event's label, agent, and data fields.
+  String _eventContentText(ActivityEvent e) {
+    final buffer = StringBuffer();
+    buffer.write(e.eventLabel);
+    buffer.write(' ');
+    buffer.write(e.agent);
+    for (final entry in e.data.entries) {
+      final value = entry.value;
+      if (value is String && value.isNotEmpty) {
+        buffer.write(' ');
+        buffer.write(value);
+      }
+    }
+    return buffer.toString();
+  }
+
+  List<ActivityEvent> get _filteredEvents {
+    return _events.where((e) {
+      // Type filter
+      if (_activeTypeFilters.isNotEmpty && !_activeTypeFilters.contains(e.event)) {
+        return false;
+      }
+      // Search filter
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        if (!_eventContentText(e).toLowerCase().contains(q)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+  }
+
+  bool get _hasActiveFilters =>
+      _activeTypeFilters.isNotEmpty || _searchQuery.isNotEmpty || !_newestFirst;
+
+  int get _activeFilterCount {
+    int count = 0;
+    if (_activeTypeFilters.isNotEmpty) count += _activeTypeFilters.length;
+    if (_searchQuery.isNotEmpty) count++;
+    if (!_newestFirst) count++;
+    return count;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _activeTypeFilters = {};
+      _searchQuery = '';
+      _newestFirst = true;
+    });
   }
 
   void _scheduleRefresh() {
@@ -105,7 +179,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
             if (aTime == null && bTime == null) return 0;
             if (aTime == null) return 1;
             if (bTime == null) return -1;
-            return aTime.compareTo(bTime);
+            return _newestFirst ? bTime.compareTo(aTime) : aTime.compareTo(bTime);
           });
           _events = events;
           _loading = false;
@@ -135,6 +209,57 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: _newestFirst ? 'Newest first (tap for oldest first)' : 'Oldest first (tap for newest first)',
+            icon: Icon(_newestFirst ? Icons.arrow_downward : Icons.arrow_upward),
+            onPressed: () {
+              setState(() {
+                _newestFirst = !_newestFirst;
+                // Re-sort existing events
+                _events.sort((a, b) {
+                  final aTime = a.timestamp;
+                  final bTime = b.timestamp;
+                  if (aTime == null && bTime == null) return 0;
+                  if (aTime == null) return 1;
+                  if (bTime == null) return -1;
+                  return _newestFirst ? bTime.compareTo(aTime) : aTime.compareTo(bTime);
+                });
+              });
+            },
+          ),
+          Stack(
+            children: [
+              IconButton(
+                tooltip: _hasActiveFilters
+                    ? 'Filters active (see chips below)'
+                    : 'Filter events (see chips below)',
+                icon: const Icon(Icons.filter_list),
+                onPressed: () {}, // Chips are in the body row below
+              ),
+              if (_hasActiveFilters)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '${_activeFilterCount}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          IconButton(
             tooltip: _expanded ? 'Compact view' : 'Expanded view',
             icon: Icon(_expanded ? Icons.unfold_less : Icons.unfold_more),
             onPressed: () => setState(() => _expanded = !_expanded),
@@ -148,6 +273,35 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
       ),
       body: Column(
         children: [
+          _SearchBar(
+            query: _searchQuery,
+            onChanged: (q) {
+              _debounceTimer?.cancel();
+              _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                setState(() => _searchQuery = q);
+              });
+            },
+            onClear: () => setState(() {
+              _debounceTimer?.cancel();
+              _searchQuery = '';
+            }),
+          ),
+          _FilterChipsRow(
+            eventTypes: _allEventTypes,
+            activeFilters: _activeTypeFilters,
+            onToggle: (type) {
+              setState(() {
+                final newFilters = Set<String>.from(_activeTypeFilters);
+                if (newFilters.contains(type)) {
+                  newFilters.remove(type);
+                } else {
+                  newFilters.add(type);
+                }
+                _activeTypeFilters = newFilters;
+              });
+            },
+            onClear: _clearAllFilters,
+          ),
           _DeploymentHeader(deployment: deployment, client: widget.client),
           if (_loading && _events.isEmpty)
             const Expanded(
@@ -157,17 +311,19 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
             Expanded(child: _buildError())
           else if (_events.isEmpty)
             Expanded(child: _buildEmpty())
+          else if (_filteredEvents.isEmpty)
+            Expanded(child: _buildEmptyFiltered())
           else
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.only(top: 8, bottom: 32),
-                itemCount: _events.length,
+                itemCount: _filteredEvents.length,
                 itemBuilder: (context, index) {
                   // Global expand overrides individual states; otherwise use individual
                   final isExpanded =
                       _expanded || _expandedItems.contains(index);
                   return ActivityEventTile(
-                    event: _events[index],
+                    event: _filteredEvents[index],
                     expanded: isExpanded,
                     onTap: () => _toggleItem(index),
                   );
@@ -216,6 +372,124 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
             style: theme.textTheme.bodyLarge
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyFiltered() {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.filter_list_off, size: 48, color: theme.colorScheme.outline),
+          const SizedBox(height: 12),
+          Text(
+            'No events match your filters',
+            style: theme.textTheme.bodyLarge
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _clearAllFilters,
+            icon: const Icon(Icons.clear_all),
+            label: const Text('Clear filters'),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+/// Search bar for filtering events by label or agent name.
+class _SearchBar extends StatelessWidget {
+  final String query;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _SearchBar({
+    required this.query,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: 'Search events...',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: query.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 20),
+                  onPressed: onClear,
+                )
+              : null,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// Horizontal scrollable row of event type filter chips.
+class _FilterChipsRow extends StatelessWidget {
+  final List<String> eventTypes;
+  final Set<String> activeFilters;
+  final ValueChanged<String> onToggle;
+  final VoidCallback onClear;
+
+  const _FilterChipsRow({
+    required this.eventTypes,
+    required this.activeFilters,
+    required this.onToggle,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFilters = activeFilters.isNotEmpty;
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              children: [
+                ...eventTypes.map((type) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        label: Text(type.replaceAll('_', ' ')),
+                        selected: activeFilters.contains(type),
+                        onSelected: (_) => onToggle(type),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )),
+              ],
+            ),
+          ),
+          if (hasFilters)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: IconButton(
+                icon: const Icon(Icons.clear_all, size: 20),
+                tooltip: 'Clear filters',
+                onPressed: onClear,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
         ],
       ),
     );
