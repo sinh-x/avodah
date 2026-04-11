@@ -24,7 +24,6 @@ import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/pairing_service.dart';
-import 'package:avodah_mcp/services/self_update_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -82,9 +81,6 @@ Future<void> main(List<String> args) async {
     paths: paths,
     pairingService: pairingService,
   );
-
-  // Self-update service for phone-triggered APK builds
-  final selfUpdateService = SelfUpdateService();
 
   // Start server (TLS or plain HTTP)
   HttpServer server;
@@ -150,7 +146,7 @@ Future<void> main(List<String> args) async {
   // Accept connections — handle each request concurrently
   await for (final request in server) {
     unawaited(_handleRequest(
-        request, syncApi, pairingService, selfUpdateService, agentApiUrl));
+        request, syncApi, pairingService, agentApiUrl));
   }
 }
 
@@ -194,7 +190,6 @@ Future<void> _handleRequest(
   HttpRequest request,
   SyncApiService syncApi,
   PairingService pairingService,
-  SelfUpdateService selfUpdateService,
   String agentApiUrl,
 ) async {
   try {
@@ -213,20 +208,6 @@ Future<void> _handleRequest(
     }
 
     final path = request.uri.path;
-
-    // Self-update endpoints (requires auth)
-    if (path == '/api/self-update' || path == '/api/self-update/status') {
-      final nodeId = request.headers.value('X-Av-Node-Id');
-      final token = request.headers.value('X-Av-Pair-Token');
-      if (nodeId == null || token == null ||
-          !await pairingService.verifyPairToken(nodeId, token)) {
-        _jsonResponse(request, HttpStatus.forbidden,
-            {'error': 'Invalid or expired pairing token'});
-        return;
-      }
-      await _handleSelfUpdate(request, selfUpdateService);
-      return;
-    }
 
     // Pairing endpoints (before auth check — pairing doesn't require auth)
     if (path == '/api/sync/status') {
@@ -467,77 +448,6 @@ void _jsonResponse(
     ..headers.contentType = ContentType.json
     ..write(jsonEncode(body))
     ..close();
-}
-
-Future<void> _handleSelfUpdate(
-  HttpRequest request,
-  SelfUpdateService selfUpdateService,
-) async {
-  // CORS
-  request.response.headers.add('Access-Control-Allow-Origin', '*');
-  request.response.headers
-      .add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  request.response.headers
-      .add('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (request.method == 'OPTIONS') {
-    request.response
-      ..statusCode = HttpStatus.ok
-      ..close();
-    return;
-  }
-
-  final path = request.uri.path;
-
-  if (path == '/api/self-update') {
-    if (request.method == 'POST') {
-      // F1/F3: Trigger build (async), return 202 Accepted
-      final started = selfUpdateService.triggerIfIdle();
-      if (started) {
-        final state = selfUpdateService.state;
-        request.response
-          ..statusCode = HttpStatus.accepted
-          ..headers.contentType = ContentType.json
-          ..write(jsonEncode({
-            'status': 'building',
-            'startedAt': state.startedAt?.toIso8601String(),
-          }))
-          ..close();
-      } else {
-        // F5: Mutex — build already running
-        request.response
-          ..statusCode = HttpStatus.conflict
-          ..headers.contentType = ContentType.json
-          ..write('{"error":"Build already in progress","code":"CONFLICT"}')
-          ..close();
-      }
-    } else {
-      request.response
-        ..statusCode = HttpStatus.methodNotAllowed
-        ..write('{"error":"Method not allowed"}')
-        ..close();
-    }
-  } else if (path == '/api/self-update/status') {
-    if (request.method == 'GET') {
-      // F4: Return current status
-      final state = selfUpdateService.state;
-      request.response
-        ..statusCode = HttpStatus.ok
-        ..headers.contentType = ContentType.json
-        ..write(jsonEncode(state.toJson()))
-        ..close();
-    } else {
-      request.response
-        ..statusCode = HttpStatus.methodNotAllowed
-        ..write('{"error":"Method not allowed"}')
-        ..close();
-    }
-  } else {
-    request.response
-      ..statusCode = HttpStatus.notFound
-      ..write('{"error":"Not found"}')
-      ..close();
-  }
 }
 
 /// Proxies an HTTP request to the upstream agent API.
