@@ -33,6 +33,7 @@ class JiraIntegrationFields {
   static const String statusMappings = 'statusMappings';
   static const String lastSyncAt = 'lastSyncAt';
   static const String lastSyncError = 'lastSyncError';
+  static const String lastPushError = 'lastPushError';
   static const String created = 'created';
   static const String defaultCategory = 'defaultCategory';
 }
@@ -234,6 +235,7 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
     setRaw(JiraIntegrationFields.statusMappings, integration.statusMappings);
     setInt(JiraIntegrationFields.lastSyncAt, integration.lastSyncAt);
     setString(JiraIntegrationFields.lastSyncError, integration.lastSyncError);
+    setString(JiraIntegrationFields.lastPushError, integration.lastPushError);
     setInt(JiraIntegrationFields.created, integration.created);
   }
 
@@ -350,6 +352,11 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   set lastSyncError(String? value) =>
       setString(JiraIntegrationFields.lastSyncError, value);
 
+  /// Last push error message.
+  String? get lastPushError => getString(JiraIntegrationFields.lastPushError);
+  set lastPushError(String? value) =>
+      setString(JiraIntegrationFields.lastPushError, value);
+
   /// Default category for tasks synced from this profile.
   String? get defaultCategory =>
       getString(JiraIntegrationFields.defaultCategory);
@@ -368,6 +375,16 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
   /// Records a sync failure.
   void recordSyncError(String error) {
     lastSyncError = error;
+  }
+
+  /// Records a push failure (last push error for display in status).
+  void recordPushError(String error) {
+    lastPushError = error;
+  }
+
+  /// Clears push error on successful push.
+  void clearPushError() {
+    lastPushError = null;
   }
 
   // ============================================================
@@ -448,6 +465,7 @@ class JiraIntegrationDocument extends CrdtDocument<JiraIntegrationDocument> {
       statusMappings: Value(jsonEncode(statusMappings)),
       lastSyncAt: Value(lastSyncAtMs),
       lastSyncError: Value(lastSyncError),
+      lastPushError: Value(lastPushError),
       created: Value(createdMs),
       modified: Value(DateTime.now().millisecondsSinceEpoch),
       crdtClock: Value(clock.lastTimestamp.pack()),

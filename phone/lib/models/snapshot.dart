@@ -9,6 +9,7 @@ class DaySnapshot {
   final PlanSnapshot plan;
   final List<PlannedTaskSnapshot> plannedTasks;
   final WorklogSummarySnapshot worklogSummary;
+  final int unsyncedJiraCount;
 
   const DaySnapshot({
     required this.version,
@@ -18,6 +19,7 @@ class DaySnapshot {
     required this.plan,
     required this.plannedTasks,
     required this.worklogSummary,
+    this.unsyncedJiraCount = 0,
   });
 
   factory DaySnapshot.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class DaySnapshot {
           .toList(),
       worklogSummary: WorklogSummarySnapshot.fromJson(
           json['worklogSummary'] as Map<String, dynamic>),
+      unsyncedJiraCount: json['unsyncedJiraCount'] as int? ?? 0,
     );
   }
 }

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:http/http.dart' as http;
@@ -40,6 +41,33 @@ class PushResult {
   String toString() => 'PushResult(pushed: $pushed, updated: $updated, failed: $failed)';
 }
 
+/// Result of pushing a single worklog to Jira.
+class PushWorklogResult {
+  final bool success;
+  final int? httpStatus;
+  final String? errorMessage;
+
+  const PushWorklogResult({
+    required this.success,
+    this.httpStatus,
+    this.errorMessage,
+  });
+
+  factory PushWorklogResult.success() =>
+      const PushWorklogResult(success: true);
+
+  factory PushWorklogResult.failure({required int? httpStatus, required String errorMessage}) =>
+      PushWorklogResult(success: false, httpStatus: httpStatus, errorMessage: errorMessage);
+
+  factory PushWorklogResult.notApplicable() =>
+      const PushWorklogResult(success: false);
+
+  @override
+  String toString() => success
+      ? 'PushWorklogResult.success'
+      : 'PushWorklogResult.failure(httpStatus: $httpStatus, errorMessage: $errorMessage)';
+}
+
 /// Combined result of a full sync (pull + push).
 class SyncResult {
   final PullResult pull;
@@ -56,6 +84,7 @@ class JiraStatus {
   final String? baseUrl;
   final DateTime? lastSyncAt;
   final String? lastSyncError;
+  final String? lastPushError;
   final int pendingWorklogs;
   final int linkedTasks;
 
@@ -66,6 +95,7 @@ class JiraStatus {
     this.baseUrl,
     this.lastSyncAt,
     this.lastSyncError,
+    this.lastPushError,
     required this.pendingWorklogs,
     required this.linkedTasks,
   });
@@ -503,7 +533,9 @@ class JiraService {
         method: 'GET',
         path: '/issue/$issueKey/worklog?startAt=$startAt&maxResults=50',
       );
-      if (response.statusCode != 200) break;
+      if (response.statusCode != 200) {
+        throw JiraSyncException('Worklog fetch failed for $issueKey: HTTP ${response.statusCode}');
+      }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final worklogs = (data['worklogs'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
@@ -542,10 +574,14 @@ class JiraService {
     // Load existing tasks keyed by issueId
     final allTasks = await db.select(db.tasks).get();
     final existingByIssueId = <String, Task>{};
+    final taskIdToCategory = <String, String?>{};
     for (final row in allTasks) {
       if (row.issueId != null) {
         existingByIssueId[row.issueId!] = row;
       }
+      // Build category lookup for worklog inheritance
+      final doc = TaskDocument.fromDrift(task: row, clock: clock);
+      taskIdToCategory[row.id] = doc.category;
     }
 
     var created = 0;
@@ -568,8 +604,7 @@ class JiraService {
         updated++;
       } else {
         final doc = TaskDocument.create(clock: clock, title: summary);
-        doc.issueId = key;
-        doc.issueType = IssueType.jira;
+        doc.linkToIssue(issueId: key, providerId: config.id, type: IssueType.jira);
         _applyJiraFields(doc, fields,
             defaultCategory: config.defaultCategory);
         await _saveTask(doc);
@@ -616,6 +651,7 @@ class JiraService {
             start: started.millisecondsSinceEpoch,
             end: started.millisecondsSinceEpoch + durationMs,
             comment: comment,
+            category: taskIdToCategory[localTaskId],
           );
           worklog.createdMs = jiraCreated.millisecondsSinceEpoch;
           worklog.linkToJira(jiraId);
@@ -703,9 +739,17 @@ class JiraService {
           pushed++;
         } else {
           failed++;
+          // Record push error
+          final errorMsg = 'Push failed for $issueKey: HTTP ${response.statusCode}';
+          config.recordPushError(errorMsg);
+          await _saveConfig(config);
         }
-      } catch (_) {
+      } catch (e) {
         failed++;
+        // Record push error on exception
+        final errorMsg = 'Push failed for $issueKey: $e';
+        config.recordPushError(errorMsg);
+        await _saveConfig(config);
       }
     }
 
@@ -725,14 +769,21 @@ class JiraService {
           updated++;
         } else {
           failed++;
+          final errorMsg = 'Update failed for worklog ${worklog.id}';
+          config.recordPushError(errorMsg);
+          await _saveConfig(config);
         }
-      } catch (_) {
+      } catch (e) {
         failed++;
+        final errorMsg = 'Update failed for worklog ${worklog.id}: $e';
+        config.recordPushError(errorMsg);
+        await _saveConfig(config);
       }
     }
 
     if (pushed > 0 || updated > 0) {
       config.recordSyncSuccess();
+      config.clearPushError();
       await _saveConfig(config);
     }
 
@@ -741,29 +792,29 @@ class JiraService {
 
   /// Pushes a single worklog to Jira by its local ID.
   ///
-  /// Returns `true` if the worklog was successfully pushed, `false` if not
-  /// applicable (not configured, not a Jira task, already synced, HTTP error).
-  Future<bool> pushWorklog(String worklogId) async {
+  /// Returns a [PushWorklogResult] indicating success, failure with http status and
+  /// error message, or not-applicable (not configured, not a Jira task, already synced).
+  Future<PushWorklogResult> pushWorklog(String worklogId) async {
     // 1. Load config/creds
     final config = await getConfig();
-    if (config == null) return false;
+    if (config == null) return PushWorklogResult.notApplicable();
     final creds = await config.loadCredentials();
-    if (creds == null) return false;
+    if (creds == null) return PushWorklogResult.notApplicable();
 
     // 2. Load worklog row
     final rows = await db.select(db.worklogEntries).get();
     final match = rows.where((w) => w.id == worklogId).toList();
-    if (match.isEmpty) return false;
+    if (match.isEmpty) return PushWorklogResult.notApplicable();
     final worklog = WorklogDocument.fromDrift(worklog: match.first, clock: clock);
-    if (worklog.isDeleted || worklog.isSyncedToJira) return false;
+    if (worklog.isDeleted || worklog.isSyncedToJira) return PushWorklogResult.notApplicable();
 
     // 3. Load task to get issueKey
     final taskRows = await (db.select(db.tasks)
           ..where((t) => t.id.equals(worklog.taskId)))
         .get();
-    if (taskRows.isEmpty) return false;
+    if (taskRows.isEmpty) return PushWorklogResult.notApplicable();
     final issueKey = taskRows.first.issueId;
-    if (issueKey == null) return false;
+    if (issueKey == null) return PushWorklogResult.notApplicable();
 
     // 4. POST to Jira
     try {
@@ -775,16 +826,29 @@ class JiraService {
         path: '/issue/$issueKey/worklog',
         body: body,
       );
-      if (response.statusCode != 201) return false;
+      if (response.statusCode != 201) {
+        return PushWorklogResult.failure(
+          httpStatus: response.statusCode,
+          errorMessage: 'Jira returned status ${response.statusCode}',
+        );
+      }
 
       final respData = jsonDecode(response.body) as Map<String, dynamic>;
       final jiraWorklogId = respData['id'] as String;
       worklog.linkToJira(jiraWorklogId);
       _reconcileDuration(worklog, respData);
       await _saveWorklog(worklog);
-      return true;
-    } catch (_) {
-      return false;
+      return PushWorklogResult.success();
+    } on http.ClientException catch (e) {
+      return PushWorklogResult.failure(
+        httpStatus: null,
+        errorMessage: 'Network error: ${e.message}',
+      );
+    } catch (e) {
+      return PushWorklogResult.failure(
+        httpStatus: null,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -1050,8 +1114,7 @@ class JiraService {
       final summary = fields['summary'] as String? ?? key;
 
       final doc = TaskDocument.create(clock: clock, title: summary);
-      doc.issueId = key;
-      doc.issueType = IssueType.jira;
+      doc.linkToIssue(issueId: key, providerId: config.id, type: IssueType.jira);
       _applyJiraFields(doc, fields,
           defaultCategory: config.defaultCategory);
       await _saveTask(doc);
@@ -1261,6 +1324,8 @@ class JiraService {
     if (jiraSeconds == null) return;
     final reconciledMs = jiraSeconds * 1000;
     if (worklog.durationMs != reconciledMs) {
+      stderr.writeln('Jira duration reconciled for worklog ${worklog.id}: '
+          'local ${worklog.durationMs}ms → Jira ${reconciledMs}ms');
       worklog.durationMs = reconciledMs;
       worklog.endMs = worklog.startMs + reconciledMs;
       worklog.updatedMs = DateTime.now().millisecondsSinceEpoch;
@@ -1361,6 +1426,7 @@ class JiraService {
         baseUrl: config.baseUrl,
         lastSyncAt: config.lastSyncAt,
         lastSyncError: config.lastSyncError,
+        lastPushError: config.lastPushError,
         pendingWorklogs: pendingWorklogs,
         linkedTasks: linkedTasks,
       ));

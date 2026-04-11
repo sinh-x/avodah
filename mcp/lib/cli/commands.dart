@@ -300,8 +300,10 @@ class StopCommand extends TimerCommand {
       // Auto-push worklog to Jira if service is available
       if (jiraService != null) {
         final pushed = await jiraService!.pushWorklog(result.worklogId);
-        if (pushed) {
+        if (pushed.success) {
           print(kvRow('Jira:', 'worklog synced'));
+        } else if (!pushed.success && pushed.httpStatus != null) {
+          stderr.writeln('WARNING: Jira push failed (${pushed.httpStatus}): ${pushed.errorMessage}');
         }
       }
 
@@ -2305,8 +2307,10 @@ class WorklogAddCommand extends WorklogSubcommand {
       // Auto-push worklog to Jira if service is available
       if (jiraService != null) {
         final pushed = await jiraService!.pushWorklog(worklog.id);
-        if (pushed) {
+        if (pushed.success) {
           print(kvRow('Jira:', 'worklog synced'));
+        } else if (!pushed.success && pushed.httpStatus != null) {
+          stderr.writeln('WARNING: Jira push failed (${pushed.httpStatus}): ${pushed.errorMessage}');
         }
       }
     }
@@ -3461,7 +3465,10 @@ class JiraStatusCommand extends JiraSubcommand {
         print(kvRow('Last sync:', 'never'));
       }
       if (status.lastSyncError != null) {
-        print(kvRow('Last error:', status.lastSyncError!));
+        print(kvRow('Last pull error:', status.lastSyncError!));
+      }
+      if (status.lastPushError != null) {
+        print(kvRow('Last push error:', status.lastPushError!));
       }
     }
     print('');

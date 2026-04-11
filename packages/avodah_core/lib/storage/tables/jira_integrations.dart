@@ -33,6 +33,7 @@ class JiraIntegrations extends Table {
   // Last sync tracking
   IntColumn get lastSyncAt => integer().nullable()(); // Unix ms
   TextColumn get lastSyncError => text().nullable()();
+  TextColumn get lastPushError => text().nullable()();
 
   // Timestamps
   IntColumn get created => integer()(); // Unix ms

@@ -83,17 +83,19 @@ class LocalDashboardProvider extends ChangeNotifier {
       _queryDayPlanTasks(today), // 1
       _queryWorklogs(today), // 2
       _queryPlanEntries(today), // 3
+      _queryUnsyncedJiraCount(), // 4
     ]);
 
     final timerEntry = results[0] as TimerEntry?;
     final dayPlanDocs = results[1] as List<DayPlanTaskDocument>;
-    final worklogRows = results[2] as List<WorklogEntry>;
+    final worklogDocs = results[2] as List<WorklogDocument>;
     final planDocs = results[3] as List<DailyPlanDocument>;
+    final unsyncedJiraCount = results[4] as int;
 
     // Worklog totals by task ID
     final loggedByTask = <String, int>{};
-    for (final wl in worklogRows) {
-      loggedByTask[wl.taskId] = (loggedByTask[wl.taskId] ?? 0) + wl.duration;
+    for (final wl in worklogDocs) {
+      loggedByTask[wl.taskId] = (loggedByTask[wl.taskId] ?? 0) + wl.durationMs;
     }
 
     // Task lookup for titles, category, isDone
@@ -118,8 +120,8 @@ class LocalDashboardProvider extends ChangeNotifier {
       );
     }).toList();
 
-    final plan = _buildPlanSnapshot(planDocs, worklogRows, taskById);
-    final worklogSummary = _buildWorklogSummary(today, worklogRows, taskById);
+    final plan = _buildPlanSnapshot(planDocs, worklogDocs, taskById);
+    final worklogSummary = _buildWorklogSummary(today, worklogDocs, taskById);
 
     // Timer
     TimerSnapshot? timerSnapshot;
@@ -149,6 +151,7 @@ class LocalDashboardProvider extends ChangeNotifier {
       plan: plan,
       plannedTasks: plannedTasks,
       worklogSummary: worklogSummary,
+      unsyncedJiraCount: unsyncedJiraCount,
     );
   }
 
@@ -173,10 +176,14 @@ class LocalDashboardProvider extends ChangeNotifier {
         .toList();
   }
 
-  Future<List<WorklogEntry>> _queryWorklogs(String day) async {
-    return (db.select(db.worklogEntries)
+  Future<List<WorklogDocument>> _queryWorklogs(String day) async {
+    final rows = await (db.select(db.worklogEntries)
           ..where((w) => w.date.equals(day)))
         .get();
+    return rows
+        .map((r) => WorklogDocument.fromDrift(worklog: r, clock: clock))
+        .where((d) => !d.isDeleted)
+        .toList();
   }
 
   Future<List<DailyPlanDocument>> _queryPlanEntries(String day) async {
@@ -197,13 +204,30 @@ class LocalDashboardProvider extends ChangeNotifier {
     return {for (final t in rows) t.id: t};
   }
 
+  /// Counts worklogs that haven't been synced to Jira (jiraWorklogId is null)
+  /// but belong to a Jira-linked task (task has issueId).
+  Future<int> _queryUnsyncedJiraCount() async {
+    final worklogs = await db.select(db.worklogEntries).get();
+    final tasks = await db.select(db.tasks).get();
+    final taskIssueIds = {for (final t in tasks) t.id: t.issueId};
+
+    int count = 0;
+    for (final wl in worklogs) {
+      final issueId = taskIssueIds[wl.taskId];
+      if (wl.jiraWorklogId == null && issueId != null) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   // ============================================================
   // Plan summary
   // ============================================================
 
   PlanSnapshot _buildPlanSnapshot(
     List<DailyPlanDocument> planDocs,
-    List<WorklogEntry> worklogRows,
+    List<WorklogDocument> worklogDocs,
     Map<String, Task> taskById,
   ) {
     // Category → planned ms
@@ -214,7 +238,7 @@ class LocalDashboardProvider extends ChangeNotifier {
     }
 
     // Category resolution for worklogs (handles orphans)
-    String resolveCategory(WorklogEntry wl) {
+    String resolveCategory(WorklogDocument wl) {
       final wlCat = wl.category;
       if (wlCat != null && wlCat.isNotEmpty) {
         return wlCat;
@@ -232,12 +256,12 @@ class LocalDashboardProvider extends ChangeNotifier {
     // Category → actual ms (from worklogs via resolved category)
     final actualByCategory = <String, int>{};
     var nonCategorizedMs = 0;
-    for (final wl in worklogRows) {
+    for (final wl in worklogDocs) {
       final cat = resolveCategory(wl);
       if (cat == 'Uncategorized') {
-        nonCategorizedMs += wl.duration;
+        nonCategorizedMs += wl.durationMs;
       } else {
-        actualByCategory[cat] = (actualByCategory[cat] ?? 0) + wl.duration;
+        actualByCategory[cat] = (actualByCategory[cat] ?? 0) + wl.durationMs;
       }
     }
 
@@ -263,7 +287,7 @@ class LocalDashboardProvider extends ChangeNotifier {
     }).toList();
 
     final totalPlannedMs = plannedByCategory.values.fold(0, (a, b) => a + b);
-    final totalActualMs = worklogRows.fold(0, (a, wl) => a + wl.duration);
+    final totalActualMs = worklogDocs.fold(0, (a, wl) => a + wl.durationMs);
 
     return PlanSnapshot(
       totalPlannedMs: totalPlannedMs,
@@ -286,11 +310,11 @@ class LocalDashboardProvider extends ChangeNotifier {
 
   WorklogSummarySnapshot _buildWorklogSummary(
     String today,
-    List<WorklogEntry> worklogs,
+    List<WorklogDocument> worklogs,
     Map<String, Task> taskById,
   ) {
     // Category resolution algorithm
-    String resolveCategoryForWorklog(WorklogEntry wl) {
+    String resolveCategoryForWorklog(WorklogDocument wl) {
       final wlCat = wl.category;
       if (wlCat != null && wlCat.isNotEmpty) {
         return wlCat;
@@ -306,7 +330,7 @@ class LocalDashboardProvider extends ChangeNotifier {
     }
 
     // Entry label algorithm
-    String resolveLabelForWorklog(WorklogEntry wl) {
+    String resolveLabelForWorklog(WorklogDocument wl) {
       if (wl.taskId.isNotEmpty) {
         return taskById[wl.taskId]?.title ?? wl.taskId;
       }
@@ -318,7 +342,7 @@ class LocalDashboardProvider extends ChangeNotifier {
     }
 
     // Aggregate worklogs by resolved category
-    final byCategory = <String, List<WorklogEntry>>{};
+    final byCategory = <String, List<WorklogDocument>>{};
     for (final wl in worklogs) {
       final cat = resolveCategoryForWorklog(wl);
       byCategory.putIfAbsent(cat, () => []).add(wl);
@@ -333,8 +357,8 @@ class LocalDashboardProvider extends ChangeNotifier {
         return WorklogTaskSnapshot(
           taskId: wl.taskId,
           title: resolveLabelForWorklog(wl),
-          totalMs: wl.duration,
-          total: _fmt(Duration(milliseconds: wl.duration)),
+          totalMs: wl.durationMs,
+          total: _fmt(Duration(milliseconds: wl.durationMs)),
           category: wl.category,
           comment: wl.comment,
         );
