@@ -44,6 +44,13 @@ class ActivityEvent {
         return 'Deployment started';
       case 'deployment_completed':
         return 'Deployment completed';
+      case 'thinking':
+        return 'Thinking';
+      case 'text':
+        return 'Text response';
+      case 'tool_use_detail':
+        final tool = data['tool'] as String?;
+        return tool != null ? 'Tool use: $tool' : 'Tool use';
       default:
         return event;
     }

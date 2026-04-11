@@ -132,12 +132,20 @@ class ActivityEventTile extends StatelessWidget {
         return status != null
             ? 'Deployment completed ($status)'
             : 'Deployment completed';
+      case 'thinking':
+        return 'Thinking';
+      case 'text':
+        return 'Text response';
+      case 'tool_use_detail':
+        final tool = event.data['tool'] as String?;
+        return tool != null ? 'Tool use: $tool' : 'Tool use';
       default:
         return event.eventLabel;
     }
   }
 
   Widget _buildDataSection(ThemeData theme) {
+    final isThinking = event.event == 'thinking';
     final entries = event.data.entries
         .where((e) => e.value != null && e.value.toString().isNotEmpty)
         .toList();
@@ -146,14 +154,24 @@ class ActivityEventTile extends StatelessWidget {
     // Build markdown content from data entries
     final buffer = StringBuffer();
     for (final e in entries) {
-      buffer.writeln('**${e.key}:** ${e.value}');
+      var value = e.value.toString();
+      // Truncate tool_use_detail input at 500 chars
+      if (event.event == 'tool_use_detail' && e.key == 'input' && value.length > 500) {
+        value = '${value.substring(0, 500)}...[truncated]';
+      }
+      buffer.writeln('**${e.key}:** $value');
     }
+
+    // Use amber tint for thinking blocks
+    final bgColor = isThinking
+        ? Colors.amber.withValues(alpha: 0.1)
+        : theme.colorScheme.surfaceContainerHighest;
 
     return RepaintBoundary(
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
+          color: bgColor,
           borderRadius: BorderRadius.circular(6),
         ),
         child: MarkdownBody(
@@ -189,6 +207,12 @@ Color _eventColor(BuildContext context, String eventType) {
       return Colors.purple;
     case 'child_deploy_started':
       return Colors.teal;
+    case 'thinking':
+      return Colors.amber;
+    case 'text':
+      return Colors.blue;
+    case 'tool_use_detail':
+      return Colors.purple;
     default:
       return Theme.of(context).colorScheme.outline;
   }
@@ -212,6 +236,12 @@ IconData _eventIcon(String eventType) {
       return Icons.build;
     case 'child_deploy_started':
       return Icons.fork_right;
+    case 'thinking':
+      return Icons.psychology;
+    case 'text':
+      return Icons.short_text;
+    case 'tool_use_detail':
+      return Icons.build;
     default:
       return Icons.circle_outlined;
   }
