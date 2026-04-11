@@ -88,6 +88,22 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
     super.dispose();
   }
 
+  /// Builds a searchable text string from an event's label, agent, and data fields.
+  String _eventContentText(ActivityEvent e) {
+    final buffer = StringBuffer();
+    buffer.write(e.eventLabel);
+    buffer.write(' ');
+    buffer.write(e.agent);
+    for (final entry in e.data.entries) {
+      final value = entry.value;
+      if (value is String && value.isNotEmpty) {
+        buffer.write(' ');
+        buffer.write(value);
+      }
+    }
+    return buffer.toString();
+  }
+
   List<ActivityEvent> get _filteredEvents {
     return _events.where((e) {
       // Type filter
@@ -97,8 +113,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
       // Search filter
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
-        if (!e.eventLabel.toLowerCase().contains(q) &&
-            !e.agent.toLowerCase().contains(q)) {
+        if (!_eventContentText(e).toLowerCase().contains(q)) {
           return false;
         }
       }
