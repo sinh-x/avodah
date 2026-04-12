@@ -19,6 +19,7 @@ import '../config/avo_config.dart';
 import '../config/paths.dart';
 import 'jira_service.dart';
 import 'pairing_service.dart';
+import 'settings_service.dart';
 
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
@@ -56,6 +57,9 @@ class SyncApiService {
   /// Optional pairing service for device authentication.
   final PairingService? pairingService;
 
+  /// Settings service for server-managed key-value settings.
+  final SettingsService? settingsService;
+
   SyncApiService({
     required this.db,
     required this.clock,
@@ -64,6 +68,7 @@ class SyncApiService {
     this.config,
     this.paths,
     this.pairingService,
+    this.settingsService,
   });
 
   /// Routes a sync API request. Returns true if handled.
@@ -229,6 +234,22 @@ class SyncApiService {
   Future<void> _handleGetCategoryChips(HttpRequest request) async {
     final category = request.uri.queryParameters['category'];
 
+    // Use SettingsService if available, otherwise fall back to config
+    if (settingsService != null) {
+      if (category != null) {
+        final chips = await settingsService!.getChips(category);
+        _jsonResponse(request, HttpStatus.ok, {
+          'category': category,
+          'chips': chips,
+        });
+      } else {
+        final allChips = await settingsService!.getAllChips();
+        _jsonResponse(request, HttpStatus.ok, {'categoryChips': allChips});
+      }
+      return;
+    }
+
+    // Fallback to config-based chips (for backwards compatibility)
     final chips = config?.categoryChips ?? {};
 
     if (category != null) {
@@ -248,7 +269,7 @@ class SyncApiService {
   /// Adds or removes a chip preset for a category.
   /// Body: {"action": "add"|"remove", "category": "Working", "chip": "standup"}
   Future<void> _handleUpdateCategoryChip(HttpRequest request) async {
-    if (config == null) {
+    if (settingsService == null && config == null) {
       _jsonResponse(request, HttpStatus.serviceUnavailable,
           {'error': 'Config not available'});
       return;
@@ -273,6 +294,48 @@ class SyncApiService {
       return;
     }
 
+    // Use SettingsService if available for chip storage
+    if (settingsService != null) {
+      final existingChips = await settingsService!.getChips(category);
+      final categoryChips = List<String>.from(existingChips);
+
+      if (action == 'add') {
+        if (!categoryChips.contains(chip)) {
+          categoryChips.add(chip);
+          await settingsService!.setChips(category, categoryChips);
+          _jsonResponse(request, HttpStatus.ok, {
+            'success': true,
+            'action': 'added',
+            'category': category,
+            'chip': chip,
+          });
+        } else {
+          _jsonResponse(request, HttpStatus.ok, {
+            'success': true,
+            'action': 'already_exists',
+            'category': category,
+            'chip': chip,
+          });
+        }
+      } else if (action == 'remove') {
+        if (categoryChips.contains(chip)) {
+          categoryChips.remove(chip);
+          await settingsService!.setChips(category, categoryChips);
+        }
+        _jsonResponse(request, HttpStatus.ok, {
+          'success': true,
+          'action': 'removed',
+          'category': category,
+          'chip': chip,
+        });
+      } else {
+        _jsonResponse(request, HttpStatus.badRequest,
+            {'error': 'Invalid action. Use "add" or "remove"'});
+      }
+      return;
+    }
+
+    // Fallback to config-based chips (for backwards compatibility)
     final newChips = Map<String, List<String>>.from(config!.categoryChips);
     final categoryChips = List<String>.from(newChips[category] ?? []);
 
@@ -321,7 +384,7 @@ class SyncApiService {
   ///
   /// Removes a chip preset from a category.
   Future<void> _handleDeleteCategoryChip(HttpRequest request) async {
-    if (config == null) {
+    if (settingsService == null && config == null) {
       _jsonResponse(request, HttpStatus.serviceUnavailable,
           {'error': 'Config not available'});
       return;
@@ -336,6 +399,25 @@ class SyncApiService {
       return;
     }
 
+    // Use SettingsService if available for chip storage
+    if (settingsService != null) {
+      final existingChips = await settingsService!.getChips(category);
+      final categoryChips = List<String>.from(existingChips);
+
+      if (categoryChips.contains(chip)) {
+        categoryChips.remove(chip);
+        await settingsService!.setChips(category, categoryChips);
+      }
+
+      _jsonResponse(request, HttpStatus.ok, {
+        'success': true,
+        'category': category,
+        'chip': chip,
+      });
+      return;
+    }
+
+    // Fallback to config-based chips (for backwards compatibility)
     final newChips = Map<String, List<String>>.from(config!.categoryChips);
     final categoryChips = List<String>.from(newChips[category] ?? []);
 
