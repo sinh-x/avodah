@@ -45,6 +45,7 @@ class _SyncDocType {
   static const String project = 'project';
   static const String dailyPlan = 'dailyPlan';
   static const String dayPlanTask = 'dayPlanTask';
+  static const String categoryChip = 'categoryChip';
 }
 
 /// Callback type invoked when the server indicates pairing is required.
@@ -197,6 +198,7 @@ class CrdtSyncService {
     var worklogCount = 0;
     var timerCount = 0;
     var projectCount = 0;
+    var categoryChipCount = 0;
     for (final deltaJson in deltas) {
       final delta = deltaJson as Map<String, dynamic>;
       switch (delta['type'] as String) {
@@ -218,6 +220,9 @@ class CrdtSyncService {
         case _SyncDocType.project:
           projectCount++;
           break;
+        case _SyncDocType.categoryChip:
+          categoryChipCount++;
+          break;
         default:
           break;
       }
@@ -225,7 +230,8 @@ class CrdtSyncService {
 
     debugPrint('[Sync] Pulled $merged deltas '
         '(dailyPlan=$dailyPlanCount, dayPlanTask=$dayPlanTaskCount, '
-        'task=$taskCount, worklog=$worklogCount, timer=$timerCount, project=$projectCount)');
+        'task=$taskCount, worklog=$worklogCount, timer=$timerCount, '
+        'project=$projectCount, categoryChip=$categoryChipCount)');
     debugPrint('[Sync] Merged $merged deltas into local DB. New watermark=$newWatermark');
     return merged;
   }
@@ -265,6 +271,8 @@ class CrdtSyncService {
         await _mergeDailyPlan(id, state);
       case _SyncDocType.dayPlanTask:
         await _mergeDayPlanTask(id, state);
+      case _SyncDocType.categoryChip:
+        await _mergeCategoryChip(id, state);
       default:
         debugPrint('[CrdtSync] Unknown delta type: $type — skipping');
     }
@@ -340,6 +348,18 @@ class CrdtSyncService {
         : DayPlanTaskDocument.fromState(id: id, clock: clock, state: {});
     _applyState(doc, state);
     await db.into(db.dayPlanTasks).insertOnConflictUpdate(doc.toDriftCompanion());
+  }
+
+  Future<void> _mergeCategoryChip(
+      String id, Map<String, CrdtFieldState> state) async {
+    final rows = await (db.select(db.categoryChips)
+          ..where((t) => t.id.equals(id)))
+        .get();
+    final doc = rows.isNotEmpty
+        ? CategoryChipDocument.fromDrift(chip: rows.first, clock: clock)
+        : CategoryChipDocument.fromState(id: id, clock: clock, state: {});
+    _applyState(doc, state);
+    await db.into(db.categoryChips).insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   void _applyState(CrdtDocument doc, Map<String, CrdtFieldState> state) {
@@ -495,6 +515,14 @@ class CrdtSyncService {
       final doc = DayPlanTaskDocument.fromDrift(entry: d, clock: clock);
       final json = doc.toJson();
       json['type'] = _SyncDocType.dayPlanTask;
+      deltas.add(json);
+    }
+
+    final categoryChips = await db.select(db.categoryChips).get();
+    for (final c in categoryChips) {
+      final doc = CategoryChipDocument.fromDrift(chip: c, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.categoryChip;
       deltas.add(json);
     }
 
