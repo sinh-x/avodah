@@ -230,6 +230,7 @@ class SyncApiService {
   ///
   /// Returns the list of chip presets for the specified category.
   /// If no category is specified, returns all category chips as a map.
+  /// Falls back to config.categoryChips when the database is empty.
   Future<void> _handleGetCategoryChips(HttpRequest request) async {
     final category = request.uri.queryParameters['category'];
 
@@ -243,6 +244,21 @@ class SyncApiService {
       if (!doc.isDeleted) {
         chipModels.add(doc.toModel());
       }
+    }
+
+    // Fall back to config.categoryChips when DB is empty
+    if (chipModels.isEmpty && config != null && config!.categoryChips.isNotEmpty) {
+      final configChips = config!.categoryChips;
+      if (category != null) {
+        final chips = configChips[category] ?? [];
+        _jsonResponse(request, HttpStatus.ok, {
+          'category': category,
+          'chips': chips,
+        });
+      } else {
+        _jsonResponse(request, HttpStatus.ok, {'categoryChips': configChips});
+      }
+      return;
     }
 
     if (category != null) {
@@ -278,7 +294,19 @@ class SyncApiService {
   /// Adds or removes a chip preset for a category.
   /// Body: {"action": "add"|"remove", "category": "Working", "chip": "standup"}
   Future<void> _handleUpdateCategoryChip(HttpRequest request) async {
+    // Check if config is available first
+    if (config == null) {
+      _jsonResponse(request, HttpStatus.serviceUnavailable,
+          {'error': 'Service unavailable: no config'});
+      return;
+    }
+
     final body = await utf8.decoder.bind(request).join();
+    if (body.isEmpty) {
+      _jsonResponse(request, HttpStatus.badRequest,
+          {'error': 'Request body is empty'});
+      return;
+    }
     final json = jsonDecode(body) as Map<String, dynamic>;
 
     final action = json['action'] as String?;
