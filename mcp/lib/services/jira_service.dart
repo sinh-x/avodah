@@ -291,6 +291,23 @@ class JiraService {
         .insertOnConflictUpdate(worklog.toDriftCompanion());
   }
 
+  /// Loads Jira credentials using the runtime path resolution.
+  ///
+  /// Uses [paths.jiraCredentialsPath] instead of [config.credentialsFilePath]
+  /// to support Docker environments where the config dir is mounted to a
+  /// different path than the host path stored in the DB.
+  Future<JiraCredentials?> _loadCredentials(JiraIntegrationDocument config) async {
+    final runtimePath = paths.jiraCredentialsPath;
+
+    try {
+      final profileConfig = await JiraProfileConfig.load(runtimePath);
+      final profile = profileConfig.getProfile(config.profileName);
+      return profile?.toCredentials();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Configures Jira integration from a profile in the config file.
   ///
   /// Loads the profile config from [paths.jiraCredentialsPath], finds the
@@ -579,8 +596,8 @@ class JiraService {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
-    final creds = await config.loadCredentials();
-    if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
+    final creds = await _loadCredentials(config);
+    if (creds == null) throw JiraCredentialsNotFoundException(paths.jiraCredentialsPath);
 
     // Validate token before any API calls
     await _validateAuth(config: config, creds: creds);
@@ -700,8 +717,8 @@ class JiraService {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
-    final creds = await config.loadCredentials();
-    if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
+    final creds = await _loadCredentials(config);
+    if (creds == null) throw JiraCredentialsNotFoundException(paths.jiraCredentialsPath);
 
     // Validate token before any API calls
     await _validateAuth(config: config, creds: creds);
@@ -824,7 +841,7 @@ class JiraService {
     // 1. Load config/creds
     final config = await getConfig();
     if (config == null) return PushWorklogResult.notApplicable();
-    final creds = await config.loadCredentials();
+    final creds = await _loadCredentials(config);
     if (creds == null) return PushWorklogResult.notApplicable();
 
     // 2. Load worklog row
@@ -889,7 +906,7 @@ class JiraService {
     // 1. Load config/creds
     final config = await getConfig();
     if (config == null) return false;
-    final creds = await config.loadCredentials();
+    final creds = await _loadCredentials(config);
     if (creds == null) return false;
 
     // 2. Load worklog row
@@ -954,8 +971,8 @@ class JiraService {
     final config = await getConfig();
     if (config == null) throw JiraNotConfiguredException();
 
-    final creds = await config.loadCredentials();
-    if (creds == null) throw JiraCredentialsNotFoundException(config.credentialsFilePath);
+    final creds = await _loadCredentials(config);
+    if (creds == null) throw JiraCredentialsNotFoundException(paths.jiraCredentialsPath);
 
     // Validate token before any API calls
     await _validateAuth(config: config, creds: creds);
@@ -1385,7 +1402,7 @@ class JiraService {
     if (config == null) return null;
 
     try {
-      final profileConfig = await JiraProfileConfig.load(config.credentialsFilePath);
+      final profileConfig = await JiraProfileConfig.load(paths.jiraCredentialsPath);
       final profile = profileConfig.getProfile(config.profileName);
       return profile?.username;
     } catch (_) {
