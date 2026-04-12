@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../services/display_settings_service.dart';
+import '../utils/syntax_highlight.dart';
 
 /// GFM alert type detected in blockquote text content.
 enum _GfmAlertType {
@@ -58,6 +59,7 @@ class MarkdownWithAnnotations extends StatelessWidget {
           onLineTapped: onLineTapped,
           sourceLines: data.split('\n'),
         ),
+        'code': _CodeBlockBuilder(syntaxColors: theme.syntaxColors),
       },
       onTapLink: (text, href, title) {
         // Allow link taps to open URLs
@@ -90,6 +92,12 @@ class MarkdownWithAnnotations extends StatelessWidget {
         top: 8,
         bottom: 8,
         right: 12,
+      ),
+      code: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: baseStyle?.fontSize ?? 14,
+        color: theme.colorScheme.onSurface,
+        backgroundColor: theme.colorScheme.surfaceContainerHighest,
       ),
     );
   }
@@ -284,6 +292,40 @@ class _GfmAlertBlockquoteBuilder extends MarkdownElementBuilder {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Custom builder for code block elements that applies syntax highlighting
+/// using SyntaxColors and responds to high contrast settings.
+class _CodeBlockBuilder extends MarkdownElementBuilder {
+  final SyntaxColors syntaxColors;
+
+  _CodeBlockBuilder({required this.syntaxColors});
+
+  @override
+  Widget? visitElementAfter(element, TextStyle? preferredStyle) {
+    // Extract language from class attribute (e.g., 'language-dart' -> 'dart')
+    final classAttr = element.attributes['class'];
+    String? language;
+    if (classAttr != null && classAttr.startsWith('language-')) {
+      language = classAttr.substring('language-'.length);
+    }
+
+    final code = element.textContent;
+    if (code.isEmpty) {
+      return null;
+    }
+
+    // Use the RichText approach from diff_widgets.dart for syntax highlighting
+    return RichText(
+      text: TextSpan(
+        style: preferredStyle?.copyWith(
+          fontFamily: 'monospace',
+          fontSize: 13,
+        ),
+        children: parseSyntaxHighlighted(code, language, syntaxColors),
       ),
     );
   }
