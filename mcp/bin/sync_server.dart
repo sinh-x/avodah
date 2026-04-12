@@ -282,11 +282,20 @@ Future<void> main(List<String> args) async {
   ProcessSignal.sigint.watch().listen((_) => shutdown());
   ProcessSignal.sigterm.watch().listen((_) => shutdown());
 
-  // Accept connections — handle each request concurrently across all servers
+  // Accept connections — handle each request concurrently across all servers.
+  // Use listen() with cancelOnError:false so a single SocketException
+  // (e.g. TLS handshake failure) doesn't kill the entire server loop.
   for (final (server, isSecure) in serverList) {
-    unawaited(server.forEach((request) => _handleRequest(
-        request, syncApi, pairingService, agentApiUrl, httpsOnly,
-        isSecure, paths, tlsEnabled, port, jiraEnabled)));
+    server.listen(
+      (request) => _handleRequest(
+          request, syncApi, pairingService, agentApiUrl, httpsOnly,
+          isSecure, paths, tlsEnabled, port, jiraEnabled),
+      onError: (Object error, StackTrace stack) {
+        lastError = error.toString();
+        stderr.writeln('Server socket error (continuing): $error');
+      },
+      cancelOnError: false,
+    );
   }
   }, (error, stack) {
     lastError = error.toString();
