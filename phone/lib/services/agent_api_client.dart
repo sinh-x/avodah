@@ -24,6 +24,7 @@ import '../models/review_item.dart';
 import '../models/team_folder.dart';
 import '../models/ticket.dart';
 import '../models/timer_info.dart';
+import 'kanban_constants.dart';
 
 /// HTTP client for the agent workflow API endpoints.
 ///
@@ -744,6 +745,50 @@ class AgentApiClient {
     return tickets
         .map((e) => Ticket.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Get the backlog — tickets that are inactive.
+  ///
+  /// The backlog is the union of:
+  /// - Tag-based backlog: tickets with 'backlog' tag
+  /// - Status-based backlog: tickets with status in backlogStatuses
+  ///
+  /// Combines both queries and deduplicates by ticket ID.
+  Future<List<Ticket>> getBacklog({
+    String? project,
+    String? assignee,
+    String? priority,
+    String? tags,
+  }) async {
+    // Tag-based backlog: tickets with 'backlog' tag
+    final tagBased = await listTickets(
+      project: project,
+      assignee: assignee,
+      priority: priority,
+      tags: 'backlog',
+    );
+
+    // Status-based backlog: tickets in backlog statuses, excluding backlog/archived tags
+    // (a ticket that has 'backlog' tag but also a backlog status is already captured above)
+    final statusBased = await listTickets(
+      project: project,
+      assignee: assignee,
+      priority: priority,
+      tags: tags,
+      excludeTags: 'backlog,archived',
+      status: backlogStatuses.join(','),
+    );
+
+    // Combine and deduplicate by ticket ID
+    final Map<String, Ticket> byId = {};
+    for (final t in tagBased) {
+      byId[t.id] = t;
+    }
+    for (final t in statusBased) {
+      byId[t.id] = t;
+    }
+
+    return byId.values.toList();
   }
 
   /// Create a new ticket.
