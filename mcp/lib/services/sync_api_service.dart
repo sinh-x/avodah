@@ -177,7 +177,10 @@ class SyncApiService {
   /// Accepts CRDT deltas from a remote node and merges them.
   /// Body: {"node": "<node-id>", "deltas": [{"type": "...", "id": "...", "fields": {...}}]}
   Future<void> _handlePushDeltas(HttpRequest request) async {
-    final body = await utf8.decoder.bind(request).join();
+    // Read raw bytes first, then decode with allowMalformed to handle
+    // any non-UTF-8 data in CRDT field values from the phone.
+    final bytes = await request.fold<List<int>>([], (a, b) => a..addAll(b));
+    final body = utf8.decode(bytes, allowMalformed: true);
     final json = jsonDecode(body) as Map<String, dynamic>;
 
     final remoteNode = json['node'] as String?;

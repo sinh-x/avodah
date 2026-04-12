@@ -5,6 +5,7 @@ import '../services/local_dashboard_provider.dart';
 import '../services/local_write_service.dart';
 import '../services/crdt_sync_service.dart' show CrdtSyncService, SyncConnectionState;
 import '../services/agent_api_client.dart';
+import '../services/display_settings_service.dart';
 import '../settings/settings_screen.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/plan_category_table.dart';
@@ -26,6 +27,9 @@ class DashboardScreen extends StatefulWidget {
 
   final CrdtSyncService? crdtSyncService;
 
+  /// Display settings service for theme and contrast control.
+  final DisplaySettingsService? displaySettings;
+
   const DashboardScreen({
     super.key,
     required this.dashboardProvider,
@@ -33,6 +37,7 @@ class DashboardScreen extends StatefulWidget {
     this.apiClient,
     this.onPushDeltas,
     this.crdtSyncService,
+    this.displaySettings,
   });
 
   @override
@@ -342,7 +347,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (_) => SettingsScreen(apiClient: widget.apiClient, crdtSyncService: widget.crdtSyncService)),
+                MaterialPageRoute(builder: (_) => SettingsScreen(apiClient: widget.apiClient, crdtSyncService: widget.crdtSyncService, displaySettings: widget.displaySettings)),
               );
             },
           ),

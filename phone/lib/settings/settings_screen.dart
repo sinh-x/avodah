@@ -344,20 +344,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        bottom: const TabBar(
-          tabs: [
-            Tab(icon: Icon(Icons.palette), text: 'Appearance'),
-            Tab(icon: Icon(Icons.tune), text: 'Input'),
-            Tab(icon: Icon(Icons.settings_ethernet), text: 'Technical'),
-          ],
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Settings'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.palette), text: 'Appearance'),
+              Tab(icon: Icon(Icons.tune), text: 'Input'),
+              Tab(icon: Icon(Icons.settings_ethernet), text: 'Technical'),
+            ],
+          ),
         ),
-      ),
-      body: DefaultTabController(
-        length: 3,
-        child: TabBarView(
+        body: TabBarView(
           children: [
             _buildAppearanceTab(),
             _buildInputTab(),

@@ -472,6 +472,7 @@ class _HomeShellState extends State<_HomeShell> {
               deploymentProvider: widget.deploymentProvider,
               crdtSyncService: widget.crdtSyncService,
               apiClient: widget.apiClient,
+              displaySettings: widget.displaySettings,
             ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
@@ -479,6 +480,7 @@ class _HomeShellState extends State<_HomeShell> {
             apiClient: widget.apiClient,
             onPushDeltas: widget.onPushDeltas,
             crdtSyncService: widget.crdtSyncService,
+            displaySettings: widget.displaySettings,
           ),
           Scaffold(
             appBar: AppBar(
