@@ -233,17 +233,43 @@ class SyncApiService {
   Future<void> _handleGetCategoryChips(HttpRequest request) async {
     final category = request.uri.queryParameters['category'];
 
-    final chips = config?.categoryChips ?? {};
+    // Read from CRDT-backed table
+    final allChips = await db.select(db.categoryChips).get();
+
+    // Build model list, filtering soft-deleted chips
+    final chipModels = <CategoryChipModel>[];
+    for (final row in allChips) {
+      final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
+      if (!doc.isDeleted) {
+        chipModels.add(doc.toModel());
+      }
+    }
 
     if (category != null) {
       // Return chips for specific category
+      final categoryChipList =
+          chipModels.where((c) => c.category == category).toList()
+            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       _jsonResponse(request, HttpStatus.ok, {
         'category': category,
-        'chips': chips[category] ?? [],
+        'chips': categoryChipList.map((c) => c.label).toList(),
       });
     } else {
-      // Return all chips
-      _jsonResponse(request, HttpStatus.ok, {'categoryChips': chips});
+      // Return all chips as a map grouped by category
+      final chipsMap = <String, List<String>>{};
+      for (final chip in chipModels) {
+        final cat = chip.category ?? '';
+        chipsMap.putIfAbsent(cat, () => []).add(chip.label!);
+      }
+      // Sort each category's chips by sortOrder
+      for (final key in chipsMap.keys) {
+        final sorted = chipModels
+            .where((c) => c.category == key)
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        chipsMap[key] = sorted.map((c) => c.label!).toList();
+      }
+      _jsonResponse(request, HttpStatus.ok, {'categoryChips': chipsMap});
     }
   }
 
@@ -252,12 +278,6 @@ class SyncApiService {
   /// Adds or removes a chip preset for a category.
   /// Body: {"action": "add"|"remove", "category": "Working", "chip": "standup"}
   Future<void> _handleUpdateCategoryChip(HttpRequest request) async {
-    if (config == null) {
-      _jsonResponse(request, HttpStatus.serviceUnavailable,
-          {'error': 'Config not available'});
-      return;
-    }
-
     final body = await utf8.decoder.bind(request).join();
     final json = jsonDecode(body) as Map<String, dynamic>;
 
@@ -277,37 +297,62 @@ class SyncApiService {
       return;
     }
 
-    final newChips = Map<String, List<String>>.from(config!.categoryChips);
-    final categoryChips = List<String>.from(newChips[category] ?? []);
-
     if (action == 'add') {
-      if (!categoryChips.contains(chip)) {
-        categoryChips.add(chip);
-        newChips[category] = categoryChips;
-        final newConfig = config!.copyWith(categoryChips: newChips);
-        await newConfig.save(paths ?? AvodahPaths());
-        config = newConfig;
-        _jsonResponse(request, HttpStatus.ok, {
-          'success': true,
-          'action': 'added',
-          'category': category,
-          'chip': chip,
-        });
-      } else {
+      // Find existing chip by category+label to check if it already exists
+      final existingChips = await db.select(db.categoryChips).get();
+      CategoryChip? existing;
+      for (final row in existingChips) {
+        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
+        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
+          existing = row;
+          break;
+        }
+      }
+
+      if (existing != null) {
         _jsonResponse(request, HttpStatus.ok, {
           'success': true,
           'action': 'already_exists',
           'category': category,
           'chip': chip,
         });
+      } else {
+        // Create new CRDT document and upsert
+        final doc = CategoryChipDocument.create(
+          clock: clock,
+          category: category,
+          label: chip,
+          sortOrder: 0,
+        );
+        await db
+            .into(db.categoryChips)
+            .insertOnConflictUpdate(doc.toDriftCompanion());
+        _jsonResponse(request, HttpStatus.ok, {
+          'success': true,
+          'action': 'added',
+          'category': category,
+          'chip': chip,
+        });
       }
     } else if (action == 'remove') {
-      if (categoryChips.contains(chip)) {
-        categoryChips.remove(chip);
-        newChips[category] = categoryChips;
-        final newConfig = config!.copyWith(categoryChips: newChips);
-        await newConfig.save(paths ?? AvodahPaths());
-        config = newConfig;
+      // Soft-delete via CRDT _deleted field
+      final existingChips = await db.select(db.categoryChips).get();
+      CategoryChip? existing;
+      for (final row in existingChips) {
+        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
+        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
+          existing = row;
+          break;
+        }
+      }
+
+      if (existing != null) {
+        final doc =
+            CategoryChipDocument.fromDrift(chip: existing, clock: clock);
+        doc.delete();
+        await db
+            .into(db.categoryChips)
+            .insertOnConflictUpdate(doc.toDriftCompanion());
       }
       _jsonResponse(request, HttpStatus.ok, {
         'success': true,
@@ -323,14 +368,8 @@ class SyncApiService {
 
   /// DELETE /api/config/category-chips?category=Working&chip=standup
   ///
-  /// Removes a chip preset from a category.
+  /// Removes a chip preset from a category (soft-delete via CRDT _deleted field).
   Future<void> _handleDeleteCategoryChip(HttpRequest request) async {
-    if (config == null) {
-      _jsonResponse(request, HttpStatus.serviceUnavailable,
-          {'error': 'Config not available'});
-      return;
-    }
-
     final category = request.uri.queryParameters['category'];
     final chip = request.uri.queryParameters['chip'];
 
@@ -340,15 +379,17 @@ class SyncApiService {
       return;
     }
 
-    final newChips = Map<String, List<String>>.from(config!.categoryChips);
-    final categoryChips = List<String>.from(newChips[category] ?? []);
-
-    if (categoryChips.contains(chip)) {
-      categoryChips.remove(chip);
-      newChips[category] = categoryChips;
-      final newConfig = config!.copyWith(categoryChips: newChips);
-      await newConfig.save(paths ?? AvodahPaths());
-      config = newConfig;
+    // Find and soft-delete via CRDT _deleted field
+    final existingChips = await db.select(db.categoryChips).get();
+    for (final row in existingChips) {
+      final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
+      if (!doc.isDeleted && doc.category == category && doc.label == chip) {
+        doc.delete();
+        await db
+            .into(db.categoryChips)
+            .insertOnConflictUpdate(doc.toDriftCompanion());
+        break;
+      }
     }
 
     _jsonResponse(request, HttpStatus.ok, {
