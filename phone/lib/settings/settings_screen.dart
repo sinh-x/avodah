@@ -21,7 +21,11 @@ class SettingsScreen extends StatefulWidget {
   /// If not provided, the Forget This Server button is hidden.
   final CrdtSyncService? crdtSyncService;
 
-  const SettingsScreen({super.key, this.apiClient, this.crdtSyncService});
+  /// Optional app-level display settings service. If not provided,
+  /// _DisplaySettingsSection creates its own (dual-instance bug fix).
+  final DisplaySettingsService? displaySettings;
+
+  const SettingsScreen({super.key, this.apiClient, this.crdtSyncService, this.displaySettings});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -341,316 +345,356 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sync Server URL',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    hintText: kDefaultServerUrl,
-                    border: OutlineInputBorder(),
-                    helperText: 'e.g. https://your-host.ts.net:9847',
-                  ),
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: _testing ? null : _testConnection,
-                      child: _testing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('Test Connection'),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: _save,
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-                if (_testResult != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _testResult!,
-                    style: TextStyle(
-                      color: _testResult!.startsWith('Connected')
-                          ? Colors.green
-                          : Colors.red,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const Divider(),
-          // --- Display Settings ---
-          _DisplaySettingsSection(),
-          const Divider(),
-          if (widget.crdtSyncService != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(
+        title: const Text('Settings'),
+        bottom: const TabBar(
+          tabs: [
+            Tab(icon: Icon(Icons.palette), text: 'Appearance'),
+            Tab(icon: Icon(Icons.tune), text: 'Input'),
+            Tab(icon: Icon(Icons.settings_ethernet), text: 'Technical'),
+          ],
+        ),
+      ),
+      body: DefaultTabController(
+        length: 3,
+        child: TabBarView(
+          children: [
+            _buildAppearanceTab(),
+            _buildInputTab(),
+            _buildTechnicalTab(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppearanceTab() {
+    if (widget.displaySettings == null) {
+      return const Center(child: Text('Display settings unavailable'));
+    }
+    return ListView(
+      children: [
+        _DisplaySettingsSection(service: widget.displaySettings!),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _buildInputTab() {
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Server Connection',
+                  Text('Comment Chip Presets',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Remove pairing with the current sync server.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _fullSyncing ? null : _forceFullSync,
-                      icon: _fullSyncing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.sync),
-                      label: Text(
-                          _fullSyncing ? 'Syncing...' : 'Force Full Sync'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Re-downloads all data from the server.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _forgetting ? null : _forgetServer,
-                      icon: _forgetting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.link_off, color: Colors.red),
-                      label: Text(
-                          _forgetting ? 'Forgetting...' : 'Forget This Server'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                    ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      _selectedCategory = null;
+                      await _loadChips();
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Refresh'),
                   ),
                 ],
               ),
-            ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Comment Chip Presets',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    TextButton.icon(
-                      onPressed: () async {
-                        _selectedCategory = null;
-                        await _loadChips();
-                      },
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Refresh'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Manage quick comment chips shown when stopping a timer.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
+              const SizedBox(height: 8),
+              const Text(
+                'Manage quick comment chips shown when stopping a timer.',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
           ),
-          // Category selector
+        ),
+        // Category selector
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonFormField<String>(
+            decoration: const InputDecoration(
+              labelText: 'Category',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            value: _selectedCategory,
+            hint: const Text('Select a category'),
+            items: _categories.map((cat) {
+              return DropdownMenuItem(value: cat, child: Text(cat));
+            }).toList(),
+            onChanged: (value) {
+              setState(() => _selectedCategory = value);
+            },
+            onTap: () async {
+              if (_categories.isEmpty) {
+                await _loadChips();
+              }
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Add chip row
+        if (_selectedCategory != null) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Category',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              value: _selectedCategory,
-              hint: const Text('Select a category'),
-              items: _categories.map((cat) {
-                return DropdownMenuItem(value: cat, child: Text(cat));
-              }).toList(),
-              onChanged: (value) {
-                setState(() => _selectedCategory = value);
-              },
-              onTap: () async {
-                // Load chips when user taps the dropdown if not yet loaded
-                if (_categories.isEmpty) {
-                  await _loadChips();
-                }
-              },
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _chipController,
+                    decoration: const InputDecoration(
+                      hintText: 'New chip text',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onSubmitted: (_) => _addChip(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _addChip,
+                  child: const Text('Add'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
-          // Add chip row
-          if (_selectedCategory != null) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+          // Chips list for selected category
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _loadingChips
+                ? const Center(child: CircularProgressIndicator())
+                : _buildChipsList(),
+          ),
+        ],
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _buildTechnicalTab() {
+    return ListView(
+      children: [
+        // Sync Server URL
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Sync Server URL',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _controller,
+                decoration: const InputDecoration(
+                  hintText: kDefaultServerUrl,
+                  border: OutlineInputBorder(),
+                  helperText: 'e.g. https://your-host.ts.net:9847',
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _chipController,
-                      decoration: const InputDecoration(
-                        hintText: 'New chip text',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      onSubmitted: (_) => _addChip(),
-                    ),
+                  OutlinedButton(
+                    onPressed: _testing ? null : _testConnection,
+                    child: _testing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Test Connection'),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   FilledButton(
-                    onPressed: _addChip,
-                    child: const Text('Add'),
+                    onPressed: _save,
+                    child: const Text('Save'),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            // Chips list for selected category
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _loadingChips
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildChipsList(),
-            ),
-          ],
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('About'),
-            subtitle: Text('Avodah v$avodahVersion'),
+              if (_testResult != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _testResult!,
+                  style: TextStyle(
+                    color: _testResult!.startsWith('Connected')
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
+              ],
+            ],
           ),
-          const Divider(),
-          // Update App section
+        ),
+        const Divider(),
+        // Server Connection
+        if (widget.crdtSyncService != null) ...[
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('App Updates',
+                Text('Server Connection',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 const Text(
-                  'Build and install the latest version on your device.',
+                  'Remove pairing with the current sync server.',
                   style: TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 12),
-                if (_updateBuilding || _updateStatus != null) ...[
-                  // Status display
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _updateStatus == 'Update complete!'
-                          ? Colors.green.shade50
-                          : _updateStatus == 'Build failed'
-                              ? Colors.red.shade50
-                              : Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _updateStatus == 'Update complete!'
-                            ? Colors.green.shade200
-                            : _updateStatus == 'Build failed'
-                                ? Colors.red.shade200
-                                : Colors.blue.shade200,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (_updateBuilding)
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            else
-                              Icon(
-                                _updateStatus == 'Update complete!'
-                                    ? Icons.check_circle
-                                    : Icons.error,
-                                size: 16,
-                                color: _updateStatus == 'Update complete!'
-                                    ? Colors.green
-                                    : Colors.red,
-                              ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _updateStatus ?? '',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: _updateStatus == 'Update complete!'
-                                      ? Colors.green.shade700
-                                      : _updateStatus == 'Build failed'
-                                          ? Colors.red.shade700
-                                          : Colors.blue.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_updateLog.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _updateLog.take(5).join('\n'),
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _updateBuilding ? null : _triggerSelfUpdate,
-                    icon: const Icon(Icons.system_update),
-                    label: Text(_updateBuilding ? 'Building...' : 'Update App'),
+                    onPressed: _fullSyncing ? null : _forceFullSync,
+                    icon: _fullSyncing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.sync),
+                    label: Text(
+                        _fullSyncing ? 'Syncing...' : 'Force Full Sync'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Re-downloads all data from the server.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _forgetting ? null : _forgetServer,
+                    icon: _forgetting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.link_off, color: Colors.red),
+                    label: Text(
+                        _forgetting ? 'Forgetting...' : 'Forget This Server'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 32),
+          const Divider(),
         ],
-      ),
+        // App Updates
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('App Updates',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const Text(
+                'Build and install the latest version on your device.',
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              if (_updateBuilding || _updateStatus != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _updateStatus == 'Update complete!'
+                        ? Colors.green.shade50
+                        : _updateStatus == 'Build failed'
+                            ? Colors.red.shade50
+                            : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _updateStatus == 'Update complete!'
+                          ? Colors.green.shade200
+                          : _updateStatus == 'Build failed'
+                              ? Colors.red.shade200
+                              : Colors.blue.shade200,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (_updateBuilding)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            Icon(
+                              _updateStatus == 'Update complete!'
+                                  ? Icons.check_circle
+                                  : Icons.error,
+                              size: 16,
+                              color: _updateStatus == 'Update complete!'
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _updateStatus ?? '',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: _updateStatus == 'Update complete!'
+                                    ? Colors.green.shade700
+                                    : _updateStatus == 'Build failed'
+                                        ? Colors.red.shade700
+                                        : Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_updateLog.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _updateLog.take(5).join('\n'),
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _updateBuilding ? null : _triggerSelfUpdate,
+                  icon: const Icon(Icons.system_update),
+                  label: Text(_updateBuilding ? 'Building...' : 'Update App'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(),
+        // About
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('About'),
+          subtitle: Text('Avodah v$avodahVersion'),
+        ),
+        const SizedBox(height: 32),
+      ],
     );
   }
 
@@ -694,26 +738,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
 // ---------------------------------------------------------------------------
 
 class _DisplaySettingsSection extends StatefulWidget {
+  final DisplaySettingsService service;
+
+  const _DisplaySettingsSection({required this.service});
+
   @override
   State<_DisplaySettingsSection> createState() => _DisplaySettingsSectionState();
 }
 
 class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
-  late DisplaySettingsService _service;
   bool _loaded = false;
 
   @override
   void initState() {
     super.initState();
-    _service = DisplaySettingsService();
-    _service.load().then((_) {
+    widget.service.load().then((_) {
       if (mounted) setState(() => _loaded = true);
     });
   }
 
+  DisplaySettingsService get _service => widget.service;
+
   @override
   void dispose() {
-    _service.dispose();
+    // Service is owned by app-level main.dart, not disposed here.
     super.dispose();
   }
 

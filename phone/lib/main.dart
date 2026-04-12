@@ -390,6 +390,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                   focusProvider: _focusProvider,
                   onPushDeltas: _pushDeltas,
                   crdtSyncService: _crdtSyncService,
+                  displaySettings: _displaySettings,
                 ),
         );
       },
@@ -414,6 +415,7 @@ class _HomeShell extends StatefulWidget {
   final FocusProvider? focusProvider;
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
   final CrdtSyncService? crdtSyncService;
+  final DisplaySettingsService? displaySettings;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -426,6 +428,7 @@ class _HomeShell extends StatefulWidget {
     this.focusProvider,
     this.onPushDeltas,
     this.crdtSyncService,
+    this.displaySettings,
   });
 
   @override
@@ -495,7 +498,8 @@ class _HomeShellState extends State<_HomeShell> {
                     MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
-                        crdtSyncService: widget.crdtSyncService)),
+                        crdtSyncService: widget.crdtSyncService,
+                        displaySettings: widget.displaySettings)),
                   ),
                 ),
               ],
@@ -523,7 +527,8 @@ class _HomeShellState extends State<_HomeShell> {
                     MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
-                        crdtSyncService: widget.crdtSyncService)),
+                        crdtSyncService: widget.crdtSyncService,
+                        displaySettings: widget.displaySettings)),
                   ),
                 ),
                 IconButton(
@@ -555,7 +560,8 @@ class _HomeShellState extends State<_HomeShell> {
                     MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
-                        crdtSyncService: widget.crdtSyncService)),
+                        crdtSyncService: widget.crdtSyncService,
+                        displaySettings: widget.displaySettings)),
                   ),
                 ),
                 IconButton(
