@@ -12,6 +12,7 @@ import 'tables/day_plan_tasks.dart';
 import 'tables/sync_watermarks.dart';
 import 'tables/paired_devices.dart';
 import 'tables/settings.dart';
+import 'tables/category_chips.dart';
 
 part 'database.g.dart';
 
@@ -34,6 +35,7 @@ part 'database.g.dart';
   SyncWatermarks,
   PairedDevices,
   Settings,
+  CategoryChips,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -46,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration {
@@ -148,6 +150,15 @@ class AppDatabase extends _$AppDatabase {
           // Server NEVER writes to config.json — chips moved to DB to prevent TLS overwrites
           try {
             await m.createTable(settings);
+          } on Exception catch (_) {
+            // Table may already exist
+          }
+        }
+        if (from < 17) {
+          // v17: category chips table for CRDT-backed chip sync (AVO-092)
+          // Chips moved from config.json to CRDT table for bidirectional sync
+          try {
+            await m.createTable(categoryChips);
           } on Exception catch (_) {
             // Table may already exist
           }
