@@ -839,11 +839,14 @@ class SyncApiService {
   /// Sends a JSON response.
   void _jsonResponse(
       HttpRequest request, int statusCode, Map<String, dynamic> body) {
-    request.response
-      ..statusCode = statusCode
-      ..headers.contentType = ContentType.json
-      ..write(jsonEncode(body))
-      ..close();
+    try {
+      request.response.statusCode = statusCode;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode(body));
+      request.response.close(); // Separate call so errors can be caught
+    } catch (e) {
+      stderr.writeln('Response write error (client likely disconnected): $e');
+    }
   }
 
   // ============================================================

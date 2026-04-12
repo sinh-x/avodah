@@ -35,8 +35,9 @@ import 'package:http/http.dart' as http;
 String? serverFingerprint;
 
 Future<void> main(List<String> args) async {
-  final paths = AvodahPaths();
-  await paths.ensureDirectories();
+  runZonedGuarded(() async {
+    final paths = AvodahPaths();
+    await paths.ensureDirectories();
 
   // Load config for defaults
   final config = await AvoConfig.load(paths);
@@ -180,6 +181,9 @@ Future<void> main(List<String> args) async {
     unawaited(server.forEach((request) =>
         _handleRequest(request, syncApi, pairingService, agentApiUrl, httpsOnly, isSecure)));
   }
+  }, (error, stack) {
+    stderr.writeln('Uncaught error (server continues): $error\n$stack');
+  });
 }
 
 /// Computes a SHA-256 fingerprint from a PEM-encoded certificate.
@@ -486,11 +490,14 @@ void _setSyncCors(HttpRequest request, {String? pairedOrigin}) {
 /// Sends a JSON response.
 void _jsonResponse(
     HttpRequest request, int statusCode, Map<String, dynamic> body) {
-  request.response
-    ..statusCode = statusCode
-    ..headers.contentType = ContentType.json
-    ..write(jsonEncode(body))
-    ..close();
+  try {
+    request.response.statusCode = statusCode;
+    request.response.headers.contentType = ContentType.json;
+    request.response.write(jsonEncode(body));
+    request.response.close(); // Separate call so errors can be caught
+  } catch (e) {
+    stderr.writeln('Response write error (client likely disconnected): $e');
+  }
 }
 
 /// Proxies an HTTP request to the upstream agent API.
