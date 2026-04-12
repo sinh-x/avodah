@@ -11,6 +11,7 @@ import 'tables/daily_plans.dart';
 import 'tables/day_plan_tasks.dart';
 import 'tables/sync_watermarks.dart';
 import 'tables/paired_devices.dart';
+import 'tables/settings.dart';
 
 part 'database.g.dart';
 
@@ -32,6 +33,7 @@ part 'database.g.dart';
   DayPlanTasks,
   SyncWatermarks,
   PairedDevices,
+  Settings,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Creates a database with the given executor.
@@ -44,7 +46,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.executor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration {
@@ -139,6 +141,15 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(jiraIntegrations, jiraIntegrations.lastPushError);
           } on Exception catch (_) {
             // Column may already exist
+          }
+        }
+        if (from < 16) {
+          // v16: settings table for server-managed config (category chips, etc.)
+          // Server NEVER writes to config.json — chips moved to DB to prevent TLS overwrites
+          try {
+            await m.createTable(settings);
+          } on Exception catch (_) {
+            // Table may already exist
           }
         }
       },

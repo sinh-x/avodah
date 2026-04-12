@@ -19,6 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:avodah_core/version.dart' as version;
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
@@ -33,9 +34,19 @@ import 'package:http/http.dart' as http;
 /// Set during TLS binding and used in the /api/sync/status response.
 String? serverFingerprint;
 
+/// Server start time for uptime calculation.
+DateTime? startTime;
+
+/// Last uncaught error message from runZonedGuarded.
+String? lastError;
+
 Future<void> main(List<String> args) async {
-  final paths = AvodahPaths();
-  await paths.ensureDirectories();
+  runZonedGuarded(() async {
+    // Track server start time for uptime calculation
+    startTime = DateTime.now();
+
+    final paths = AvodahPaths();
+    await paths.ensureDirectories();
 
   // Load config for defaults
   final config = await AvoConfig.load(paths);
@@ -61,6 +72,48 @@ Future<void> main(List<String> args) async {
   // HTTPS-only mode: when true + TLS configured, reject plain HTTP requests
   final httpsOnly =
       Platform.environment['SYNC_HTTPS_ONLY']?.toLowerCase() == 'true';
+
+  // Phase 4: Config validation on startup
+  // These will be redeclared in the binding block, but we use them here for
+  // validation and to pass values to the binding block via shared scope
+  var tlsCertPath = config.syncTlsCertPath;
+  var tlsKeyPath = config.syncTlsKeyPath;
+
+  // Validate TLS cert file exists if path is set
+  if (tlsCertPath != null && !File(tlsCertPath).existsSync()) {
+    stderr.writeln('WARNING: TLS certificate not found: $tlsCertPath');
+    stderr.writeln('WARNING: TLS disabled — falling back to HTTP mode');
+  }
+  // Validate TLS key file exists if path is set
+  if (tlsKeyPath != null && !File(tlsKeyPath).existsSync()) {
+    stderr.writeln('WARNING: TLS key not found: $tlsKeyPath');
+    stderr.writeln('WARNING: TLS disabled — falling back to HTTP mode');
+  }
+
+  // If either cert or key is missing when TLS is configured, nullify to force HTTP
+  if (tlsCertPath != null || tlsKeyPath != null) {
+    final certMissing = tlsCertPath != null && !File(tlsCertPath).existsSync();
+    final keyMissing = tlsKeyPath != null && !File(tlsKeyPath).existsSync();
+    if (certMissing || keyMissing) {
+      // Can't use TLS — nullify to force HTTP fallback
+      tlsCertPath = null;
+      tlsKeyPath = null;
+    }
+  }
+
+  // Validate Jira credentials if JIRA is enabled
+  if (jiraEnabled) {
+    final jiraCredPath = paths.jiraCredentialsPath;
+    if (!File(jiraCredPath).existsSync()) {
+      stderr.writeln('WARNING: Jira credentials not found: $jiraCredPath');
+      stderr.writeln('WARNING: Jira sync disabled — credentials required');
+    }
+  }
+
+  // Log config summary
+  final tlsEnabled = tlsCertPath != null && tlsKeyPath != null;
+  stderr.writeln(
+      'Config: TLS=${tlsEnabled ? "enabled" : "disabled"}, port=$port, Jira=${jiraEnabled ? "yes" : "no"}');
 
   // Initialize database and services (same pattern as server.dart)
   final db = openDatabase(paths.databasePath);
@@ -90,61 +143,64 @@ Future<void> main(List<String> args) async {
   // or HTTP only on localhost (when TLS disabled).
   // Each entry is (server, isSecure): isSecure=true for HTTPS, false for HTTP.
   final serverList = <(HttpServer, bool)>[];
-  final tlsCertPath = config.syncTlsCertPath;
-  final tlsKeyPath = config.syncTlsKeyPath;
 
   if (tlsCertPath != null && tlsKeyPath != null) {
     // TLS mode: load certificate and bind securely
+    // Note: Phase 4 already validated these files exist and nullified if missing
     final certFile = File(tlsCertPath);
     final keyFile = File(tlsKeyPath);
 
-    if (!await certFile.exists()) {
-      stderr.writeln('ERROR: TLS certificate not found: $tlsCertPath');
-      stderr.writeln('Please provide valid TLS cert and key files, or remove syncTls config.');
-      exit(1);
-    }
-    if (!await keyFile.exists()) {
-      stderr.writeln('ERROR: TLS key not found: $tlsKeyPath');
-      stderr.writeln('Please provide valid TLS cert and key files, or remove syncTls config.');
-      exit(1);
-    }
+    // Belt-and-suspenders check — Phase 4 should have already validated
+    final certExists = await certFile.exists();
+    final keyExists = await keyFile.exists();
 
-    final context = SecurityContext();
-    try {
-      context.useCertificateChainBytes(await certFile.readAsBytes());
-      context.usePrivateKeyBytes(await keyFile.readAsBytes());
-    } catch (e) {
-      stderr.writeln('ERROR: Failed to load TLS certificate/key: $e');
-      exit(1);
-    }
-
-    // Compute server fingerprint from the certificate (SHA-256, base64)
-    serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
-
-    // HTTPS on all interfaces (TLS + auth required)
-    final httpsServer = await HttpServer.bindSecure(
-      InternetAddress.anyIPv4,
-      port,
-      context,
-    );
-    serverList.add((httpsServer, true)); // isSecure = true
-    stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on 0.0.0.0:$port');
-    stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
-
-    // HTTP on localhost (for pa-serve proxy, no TLS needed)
-    // Skip when HTTPS-only mode is enabled — TLS required, HTTP rejected
-    if (!httpsOnly) {
-      final localhostHttpServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        port,
-      );
-      serverList.add((localhostHttpServer, false)); // isSecure = false
-      stderr.writeln('Avodah Sync Server (HTTP/loopback) listening on 127.0.0.1:$port');
+    if (!certExists) {
+      stderr.writeln('WARNING: TLS certificate not found at bind time: $tlsCertPath');
+      stderr.writeln('WARNING: Falling back to HTTP mode');
+    } else if (!keyExists) {
+      stderr.writeln('WARNING: TLS key not found at bind time: $tlsKeyPath');
+      stderr.writeln('WARNING: Falling back to HTTP mode');
     } else {
-      stderr.writeln('HTTPS-only mode: localhost HTTP binding skipped — HTTPS required');
+      // All files present — proceed with TLS binding
+      final context = SecurityContext();
+      try {
+        context.useCertificateChainBytes(await certFile.readAsBytes());
+        context.usePrivateKeyBytes(await keyFile.readAsBytes());
+      } catch (e) {
+        stderr.writeln('ERROR: Failed to load TLS certificate/key: $e');
+        stderr.writeln('WARNING: Falling back to HTTP mode');
+      }
+
+      // Compute server fingerprint from the certificate (SHA-256, base64)
+      serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
+
+      // HTTPS on all interfaces (TLS + auth required)
+      final httpsServer = await HttpServer.bindSecure(
+        InternetAddress.anyIPv4,
+        port,
+        context,
+      );
+      serverList.add((httpsServer, true)); // isSecure = true
+      stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on 0.0.0.0:$port');
+      stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
+
+      // HTTP on localhost (for pa-serve proxy, no TLS needed)
+      // Skip when HTTPS-only mode is enabled — TLS required, HTTP rejected
+      if (!httpsOnly) {
+        final localhostHttpServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          port,
+        );
+        serverList.add((localhostHttpServer, false)); // isSecure = false
+        stderr.writeln('Avodah Sync Server (HTTP/loopback) listening on 127.0.0.1:$port');
+      } else {
+        stderr.writeln('HTTPS-only mode: localhost HTTP binding skipped — HTTPS required');
+      }
     }
-  } else {
-    // Plain HTTP mode (no TLS — for development or local-only networks)
+  }
+
+  // Fallback HTTP server if TLS mode was skipped or failed
+  if (serverList.isEmpty) {
     final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
     serverList.add((httpServer, false)); // isSecure = false
     stderr.writeln('Avodah Sync Server (HTTP) listening on 0.0.0.0:$port');
@@ -169,9 +225,14 @@ Future<void> main(List<String> args) async {
 
   // Accept connections — handle each request concurrently across all servers
   for (final (server, isSecure) in serverList) {
-    unawaited(server.forEach((request) =>
-        _handleRequest(request, syncApi, pairingService, agentApiUrl, httpsOnly, isSecure)));
+    unawaited(server.forEach((request) => _handleRequest(
+        request, syncApi, pairingService, agentApiUrl, httpsOnly,
+        isSecure, paths, tlsEnabled, port, jiraEnabled)));
   }
+  }, (error, stack) {
+    lastError = error.toString();
+    stderr.writeln('Uncaught error (server continues): $error\n$stack');
+  });
 }
 
 /// Computes a SHA-256 fingerprint from a PEM-encoded certificate.
@@ -217,6 +278,10 @@ Future<void> _handleRequest(
   String agentApiUrl,
   bool httpsOnly,
   bool isSecure,
+  AvodahPaths paths,
+  bool tlsEnabled,
+  int port,
+  bool jiraEnabled,
 ) async {
   try {
     // HTTPS-only mode: reject plain HTTP requests when TLS is configured
@@ -295,12 +360,27 @@ Future<void> _handleRequest(
       return;
     }
 
-    // Health check fallback
-    request.response
-      ..statusCode = HttpStatus.ok
-      ..headers.contentType = ContentType.json
-      ..write('{"status":"ok","service":"avodah-sync"}')
-      ..close();
+    // Enhanced health check
+    if (path == '/') {
+      final uptime = startTime != null
+          ? (DateTime.now().difference(startTime!).inSeconds)
+          : 0;
+      final jiraFileFound = File(paths.jiraCredentialsPath).existsSync();
+      _jsonResponse(request, HttpStatus.ok, {
+        'status': 'ok',
+        'service': 'avodah-sync',
+        'tls': tlsEnabled,
+        'uptime': uptime,
+        'port': port,
+        'jira': {
+          'enabled': jiraEnabled,
+          'fileFound': jiraFileFound,
+        },
+        'lastError': lastError,
+        'version': version.avodahVersion,
+      });
+      return;
+    }
   } catch (e, stack) {
     stderr.writeln('Unhandled request error: $e\n$stack');
   }
@@ -478,11 +558,14 @@ void _setSyncCors(HttpRequest request, {String? pairedOrigin}) {
 /// Sends a JSON response.
 void _jsonResponse(
     HttpRequest request, int statusCode, Map<String, dynamic> body) {
-  request.response
-    ..statusCode = statusCode
-    ..headers.contentType = ContentType.json
-    ..write(jsonEncode(body))
-    ..close();
+  try {
+    request.response.statusCode = statusCode;
+    request.response.headers.contentType = ContentType.json;
+    request.response.write(jsonEncode(body));
+    request.response.close(); // Separate call so errors can be caught
+  } catch (e) {
+    stderr.writeln('Response write error (client likely disconnected): $e');
+  }
 }
 
 /// Proxies an HTTP request to the upstream agent API.
