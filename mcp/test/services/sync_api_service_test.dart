@@ -234,6 +234,123 @@ void main() {
       expect(timers[0].taskTitle, equals('Phone timer'));
       expect(timers[0].isRunning, isTrue);
     });
+
+    test('merges categoryChip from remote', () async {
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final delta = {
+        'type': SyncDocType.categoryChip,
+        'id': 'remote-chip-1',
+        'fields': {
+          'category': {'v': 'Working', 't': remoteTs.pack()},
+          'label': {'v': 'standup', 't': remoteTs.pack()},
+          'sortOrder': {'v': 0, 't': remoteTs.pack()},
+        },
+      };
+
+      await syncApi.mergeDelta(delta);
+
+      final chips = await db.select(db.categoryChips).get();
+      expect(chips, hasLength(1));
+      expect(chips[0].id, equals('remote-chip-1'));
+      expect(chips[0].category, equals('Working'));
+      expect(chips[0].label, equals('standup'));
+      expect(chips[0].sortOrder, equals(0));
+    });
+
+    test('merges remote changes into existing categoryChip (LWW)', () async {
+      // Create a local chip
+      final localChip = CategoryChipDocument.create(
+        clock: clock,
+        category: 'Working',
+        label: 'local-label',
+      );
+      await db
+          .into(db.categoryChips)
+          .insert(localChip.toDriftCompanion());
+
+      // Remote update with a later timestamp
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch + 1000,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final delta = {
+        'type': SyncDocType.categoryChip,
+        'id': localChip.id,
+        'fields': {
+          'label': {'v': 'Updated from phone', 't': remoteTs.pack()},
+        },
+      };
+
+      await syncApi.mergeDelta(delta);
+
+      // Remote wins (later timestamp)
+      final rows = await db.select(db.categoryChips).get();
+      expect(rows[0].label, equals('Updated from phone'));
+    });
+
+    test('local wins when local timestamp is newer for categoryChip', () async {
+      // Create a local chip with current clock
+      final localChip = CategoryChipDocument.create(
+        clock: clock,
+        category: 'Working',
+        label: 'Local label',
+      );
+      await db
+          .into(db.categoryChips)
+          .insert(localChip.toDriftCompanion());
+
+      // Remote update with an OLD timestamp
+      final remoteTs = HybridTimestamp(
+        physicalTime: 1000, // very old
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final delta = {
+        'type': SyncDocType.categoryChip,
+        'id': localChip.id,
+        'fields': {
+          'label': {'v': 'Old remote label', 't': remoteTs.pack()},
+        },
+      };
+
+      await syncApi.mergeDelta(delta);
+
+      // Local wins (later timestamp)
+      final rows = await db.select(db.categoryChips).get();
+      expect(rows[0].label, equals('Local label'));
+    });
+
+    test('merges categoryChip sortOrder from remote', () async {
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      final delta = {
+        'type': SyncDocType.categoryChip,
+        'id': 'chip-sort-test',
+        'fields': {
+          'category': {'v': 'Learning', 't': remoteTs.pack()},
+          'label': {'v': 'course', 't': remoteTs.pack()},
+          'sortOrder': {'v': 5, 't': remoteTs.pack()},
+        },
+      };
+
+      await syncApi.mergeDelta(delta);
+
+      final chips = await db.select(db.categoryChips).get();
+      expect(chips, hasLength(1));
+      expect(chips[0].sortOrder, equals(5));
+    });
   });
 
   group('watermark tracking', () {

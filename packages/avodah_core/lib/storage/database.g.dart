@@ -8271,6 +8271,419 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $CategoryChipsTable extends CategoryChips
+    with TableInfo<$CategoryChipsTable, CategoryChip> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CategoryChipsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _crdtClockMeta = const VerificationMeta(
+    'crdtClock',
+  );
+  @override
+  late final GeneratedColumn<String> crdtClock = GeneratedColumn<String>(
+    'crdt_clock',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _crdtStateMeta = const VerificationMeta(
+    'crdtState',
+  );
+  @override
+  late final GeneratedColumn<String> crdtState = GeneratedColumn<String>(
+    'crdt_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    category,
+    label,
+    sortOrder,
+    crdtClock,
+    crdtState,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'category_chips';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CategoryChip> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('crdt_clock')) {
+      context.handle(
+        _crdtClockMeta,
+        crdtClock.isAcceptableOrUnknown(data['crdt_clock']!, _crdtClockMeta),
+      );
+    }
+    if (data.containsKey('crdt_state')) {
+      context.handle(
+        _crdtStateMeta,
+        crdtState.isAcceptableOrUnknown(data['crdt_state']!, _crdtStateMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CategoryChip map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CategoryChip(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      crdtClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_clock'],
+      )!,
+      crdtState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}crdt_state'],
+      )!,
+    );
+  }
+
+  @override
+  $CategoryChipsTable createAlias(String alias) {
+    return $CategoryChipsTable(attachedDatabase, alias);
+  }
+}
+
+class CategoryChip extends DataClass implements Insertable<CategoryChip> {
+  /// Unique chip identifier (UUID).
+  final String id;
+
+  /// Category grouping for this chip (e.g., "Working", "Learning").
+  final String category;
+
+  /// Display label for this chip.
+  final String label;
+
+  /// Sort order within the category.
+  final int sortOrder;
+
+  /// CRDT clock timestamp (packed HLC).
+  final String crdtClock;
+
+  /// CRDT state JSON for all field timestamps and values.
+  final String crdtState;
+  const CategoryChip({
+    required this.id,
+    required this.category,
+    required this.label,
+    required this.sortOrder,
+    required this.crdtClock,
+    required this.crdtState,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['category'] = Variable<String>(category);
+    map['label'] = Variable<String>(label);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['crdt_clock'] = Variable<String>(crdtClock);
+    map['crdt_state'] = Variable<String>(crdtState);
+    return map;
+  }
+
+  CategoryChipsCompanion toCompanion(bool nullToAbsent) {
+    return CategoryChipsCompanion(
+      id: Value(id),
+      category: Value(category),
+      label: Value(label),
+      sortOrder: Value(sortOrder),
+      crdtClock: Value(crdtClock),
+      crdtState: Value(crdtState),
+    );
+  }
+
+  factory CategoryChip.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CategoryChip(
+      id: serializer.fromJson<String>(json['id']),
+      category: serializer.fromJson<String>(json['category']),
+      label: serializer.fromJson<String>(json['label']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      crdtClock: serializer.fromJson<String>(json['crdtClock']),
+      crdtState: serializer.fromJson<String>(json['crdtState']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'category': serializer.toJson<String>(category),
+      'label': serializer.toJson<String>(label),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'crdtClock': serializer.toJson<String>(crdtClock),
+      'crdtState': serializer.toJson<String>(crdtState),
+    };
+  }
+
+  CategoryChip copyWith({
+    String? id,
+    String? category,
+    String? label,
+    int? sortOrder,
+    String? crdtClock,
+    String? crdtState,
+  }) => CategoryChip(
+    id: id ?? this.id,
+    category: category ?? this.category,
+    label: label ?? this.label,
+    sortOrder: sortOrder ?? this.sortOrder,
+    crdtClock: crdtClock ?? this.crdtClock,
+    crdtState: crdtState ?? this.crdtState,
+  );
+  CategoryChip copyWithCompanion(CategoryChipsCompanion data) {
+    return CategoryChip(
+      id: data.id.present ? data.id.value : this.id,
+      category: data.category.present ? data.category.value : this.category,
+      label: data.label.present ? data.label.value : this.label,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      crdtClock: data.crdtClock.present ? data.crdtClock.value : this.crdtClock,
+      crdtState: data.crdtState.present ? data.crdtState.value : this.crdtState,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CategoryChip(')
+          ..write('id: $id, ')
+          ..write('category: $category, ')
+          ..write('label: $label, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, category, label, sortOrder, crdtClock, crdtState);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CategoryChip &&
+          other.id == this.id &&
+          other.category == this.category &&
+          other.label == this.label &&
+          other.sortOrder == this.sortOrder &&
+          other.crdtClock == this.crdtClock &&
+          other.crdtState == this.crdtState);
+}
+
+class CategoryChipsCompanion extends UpdateCompanion<CategoryChip> {
+  final Value<String> id;
+  final Value<String> category;
+  final Value<String> label;
+  final Value<int> sortOrder;
+  final Value<String> crdtClock;
+  final Value<String> crdtState;
+  final Value<int> rowid;
+  const CategoryChipsCompanion({
+    this.id = const Value.absent(),
+    this.category = const Value.absent(),
+    this.label = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CategoryChipsCompanion.insert({
+    required String id,
+    required String category,
+    required String label,
+    this.sortOrder = const Value.absent(),
+    this.crdtClock = const Value.absent(),
+    this.crdtState = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       category = Value(category),
+       label = Value(label);
+  static Insertable<CategoryChip> custom({
+    Expression<String>? id,
+    Expression<String>? category,
+    Expression<String>? label,
+    Expression<int>? sortOrder,
+    Expression<String>? crdtClock,
+    Expression<String>? crdtState,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (category != null) 'category': category,
+      if (label != null) 'label': label,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (crdtClock != null) 'crdt_clock': crdtClock,
+      if (crdtState != null) 'crdt_state': crdtState,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CategoryChipsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? category,
+    Value<String>? label,
+    Value<int>? sortOrder,
+    Value<String>? crdtClock,
+    Value<String>? crdtState,
+    Value<int>? rowid,
+  }) {
+    return CategoryChipsCompanion(
+      id: id ?? this.id,
+      category: category ?? this.category,
+      label: label ?? this.label,
+      sortOrder: sortOrder ?? this.sortOrder,
+      crdtClock: crdtClock ?? this.crdtClock,
+      crdtState: crdtState ?? this.crdtState,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (crdtClock.present) {
+      map['crdt_clock'] = Variable<String>(crdtClock.value);
+    }
+    if (crdtState.present) {
+      map['crdt_state'] = Variable<String>(crdtState.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CategoryChipsCompanion(')
+          ..write('id: $id, ')
+          ..write('category: $category, ')
+          ..write('label: $label, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('crdtClock: $crdtClock, ')
+          ..write('crdtState: $crdtState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8290,6 +8703,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncWatermarksTable syncWatermarks = $SyncWatermarksTable(this);
   late final $PairedDevicesTable pairedDevices = $PairedDevicesTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $CategoryChipsTable categoryChips = $CategoryChipsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8307,6 +8721,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncWatermarks,
     pairedDevices,
     settings,
+    categoryChips,
   ];
 }
 
@@ -12247,6 +12662,225 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$CategoryChipsTableCreateCompanionBuilder =
+    CategoryChipsCompanion Function({
+      required String id,
+      required String category,
+      required String label,
+      Value<int> sortOrder,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+typedef $$CategoryChipsTableUpdateCompanionBuilder =
+    CategoryChipsCompanion Function({
+      Value<String> id,
+      Value<String> category,
+      Value<String> label,
+      Value<int> sortOrder,
+      Value<String> crdtClock,
+      Value<String> crdtState,
+      Value<int> rowid,
+    });
+
+class $$CategoryChipsTableFilterComposer
+    extends Composer<_$AppDatabase, $CategoryChipsTable> {
+  $$CategoryChipsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CategoryChipsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CategoryChipsTable> {
+  $$CategoryChipsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtClock => $composableBuilder(
+    column: $table.crdtClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get crdtState => $composableBuilder(
+    column: $table.crdtState,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CategoryChipsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CategoryChipsTable> {
+  $$CategoryChipsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtClock =>
+      $composableBuilder(column: $table.crdtClock, builder: (column) => column);
+
+  GeneratedColumn<String> get crdtState =>
+      $composableBuilder(column: $table.crdtState, builder: (column) => column);
+}
+
+class $$CategoryChipsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CategoryChipsTable,
+          CategoryChip,
+          $$CategoryChipsTableFilterComposer,
+          $$CategoryChipsTableOrderingComposer,
+          $$CategoryChipsTableAnnotationComposer,
+          $$CategoryChipsTableCreateCompanionBuilder,
+          $$CategoryChipsTableUpdateCompanionBuilder,
+          (
+            CategoryChip,
+            BaseReferences<_$AppDatabase, $CategoryChipsTable, CategoryChip>,
+          ),
+          CategoryChip,
+          PrefetchHooks Function()
+        > {
+  $$CategoryChipsTableTableManager(_$AppDatabase db, $CategoryChipsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CategoryChipsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CategoryChipsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CategoryChipsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CategoryChipsCompanion(
+                id: id,
+                category: category,
+                label: label,
+                sortOrder: sortOrder,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String category,
+                required String label,
+                Value<int> sortOrder = const Value.absent(),
+                Value<String> crdtClock = const Value.absent(),
+                Value<String> crdtState = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CategoryChipsCompanion.insert(
+                id: id,
+                category: category,
+                label: label,
+                sortOrder: sortOrder,
+                crdtClock: crdtClock,
+                crdtState: crdtState,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CategoryChipsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CategoryChipsTable,
+      CategoryChip,
+      $$CategoryChipsTableFilterComposer,
+      $$CategoryChipsTableOrderingComposer,
+      $$CategoryChipsTableAnnotationComposer,
+      $$CategoryChipsTableCreateCompanionBuilder,
+      $$CategoryChipsTableUpdateCompanionBuilder,
+      (
+        CategoryChip,
+        BaseReferences<_$AppDatabase, $CategoryChipsTable, CategoryChip>,
+      ),
+      CategoryChip,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12274,4 +12908,6 @@ class $AppDatabaseManager {
       $$PairedDevicesTableTableManager(_db, _db.pairedDevices);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$CategoryChipsTableTableManager get categoryChips =>
+      $$CategoryChipsTableTableManager(_db, _db.categoryChips);
 }

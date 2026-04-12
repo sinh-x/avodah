@@ -35,6 +35,7 @@ export 'documents/timer_document.dart';
 export 'documents/subtask_document.dart';
 export 'documents/tag_document.dart';
 export 'documents/worklog_document.dart';
+export 'documents/category_chip_document.dart';
 
 // Version
 export 'version.dart';
