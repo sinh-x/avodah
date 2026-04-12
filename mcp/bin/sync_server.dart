@@ -19,6 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:avodah_core/version.dart' as version;
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
@@ -34,8 +35,17 @@ import 'package:http/http.dart' as http;
 /// Set during TLS binding and used in the /api/sync/status response.
 String? serverFingerprint;
 
+/// Server start time for uptime calculation.
+DateTime? startTime;
+
+/// Last uncaught error message from runZonedGuarded.
+String? lastError;
+
 Future<void> main(List<String> args) async {
   runZonedGuarded(() async {
+    // Track server start time for uptime calculation
+    startTime = DateTime.now();
+
     final paths = AvodahPaths();
     await paths.ensureDirectories();
 
@@ -223,10 +233,12 @@ Future<void> main(List<String> args) async {
 
   // Accept connections — handle each request concurrently across all servers
   for (final (server, isSecure) in serverList) {
-    unawaited(server.forEach((request) =>
-        _handleRequest(request, syncApi, pairingService, agentApiUrl, httpsOnly, isSecure)));
+    unawaited(server.forEach((request) => _handleRequest(
+        request, syncApi, pairingService, agentApiUrl, httpsOnly,
+        isSecure, paths, tlsEnabled, port, jiraEnabled)));
   }
   }, (error, stack) {
+    lastError = error.toString();
     stderr.writeln('Uncaught error (server continues): $error\n$stack');
   });
 }
@@ -274,6 +286,10 @@ Future<void> _handleRequest(
   String agentApiUrl,
   bool httpsOnly,
   bool isSecure,
+  AvodahPaths paths,
+  bool tlsEnabled,
+  int port,
+  bool jiraEnabled,
 ) async {
   try {
     // HTTPS-only mode: reject plain HTTP requests when TLS is configured
@@ -352,12 +368,27 @@ Future<void> _handleRequest(
       return;
     }
 
-    // Health check fallback
-    request.response
-      ..statusCode = HttpStatus.ok
-      ..headers.contentType = ContentType.json
-      ..write('{"status":"ok","service":"avodah-sync"}')
-      ..close();
+    // Enhanced health check
+    if (path == '/') {
+      final uptime = startTime != null
+          ? (DateTime.now().difference(startTime!).inSeconds)
+          : 0;
+      final jiraFileFound = File(paths.jiraCredentialsPath).existsSync();
+      _jsonResponse(request, HttpStatus.ok, {
+        'status': 'ok',
+        'service': 'avodah-sync',
+        'tls': tlsEnabled,
+        'uptime': uptime,
+        'port': port,
+        'jira': {
+          'enabled': jiraEnabled,
+          'fileFound': jiraFileFound,
+        },
+        'lastError': lastError,
+        'version': version.avodahVersion,
+      });
+      return;
+    }
   } catch (e, stack) {
     stderr.writeln('Unhandled request error: $e\n$stack');
   }
