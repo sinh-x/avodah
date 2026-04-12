@@ -19,6 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:uuid/uuid.dart';
 import 'package:avodah_core/version.dart' as version;
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:avodah_mcp/config/avo_config.dart';
@@ -39,6 +40,61 @@ DateTime? startTime;
 
 /// Last uncaught error message from runZonedGuarded.
 String? lastError;
+
+/// Migrates category chips from config.json to the category_chips table.
+///
+/// This is idempotent — it only runs if no migrated-* entries exist in the
+/// table and config.categoryChips is non-empty.
+Future<void> _migrateCategoryChipsFromConfig(
+  AppDatabase db,
+  HybridLogicalClock clock,
+  AvoConfig config,
+) async {
+  // Idempotency check: skip if already migrated
+  final allChips = await db.select(db.categoryChips).get();
+  final migratedRows = allChips.where((c) => c.id.startsWith('migrated-')).toList();
+
+  if (migratedRows.isNotEmpty) {
+    stderr.writeln(
+        'CategoryChip migration: skipped (${migratedRows.length} migrated entries exist)');
+    return;
+  }
+
+  // Nothing to migrate?
+  if (config.categoryChips.isEmpty) {
+    stderr.writeln('CategoryChip migration: no chips in config, skipping');
+    return;
+  }
+
+  // Migrate each chip from config.json
+  int totalMigrated = 0;
+  for (final MapEntry<String, List<String>> categoryEntry
+      in config.categoryChips.entries) {
+    final category = categoryEntry.key;
+    final chips = categoryEntry.value;
+
+    for (int i = 0; i < chips.length; i++) {
+      final chipLabel = chips[i];
+
+      // Create document with migrated-* ID for idempotency tracking
+      final doc = CategoryChipDocument(
+        id: 'migrated-${const Uuid().v4()}',
+        clock: clock,
+      );
+      doc.category = category;
+      doc.label = chipLabel;
+      doc.sortOrder = i;
+
+      await db
+          .into(db.categoryChips)
+          .insertOnConflictUpdate(doc.toDriftCompanion());
+      totalMigrated++;
+    }
+  }
+
+  stderr.writeln(
+      'CategoryChip migration: migrated $totalMigrated chips from config.json');
+}
 
 Future<void> main(List<String> args) async {
   runZonedGuarded(() async {
@@ -119,6 +175,9 @@ Future<void> main(List<String> args) async {
   final db = openDatabase(paths.databasePath);
   final nodeId = paths.getNodeIdSync();
   final clock = HybridLogicalClock(nodeId: nodeId);
+
+  // Phase 6: Migrate category chips from config.json to DB on first startup
+  await _migrateCategoryChipsFromConfig(db, clock, config);
 
   // Pairing service for secure sync device authentication
   final pairingService = PairingService(db: db);
