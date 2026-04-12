@@ -25,7 +25,6 @@ import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/pairing_service.dart';
-import 'package:avodah_mcp/services/settings_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -121,12 +120,6 @@ Future<void> main(List<String> args) async {
   final nodeId = paths.getNodeIdSync();
   final clock = HybridLogicalClock(nodeId: nodeId);
 
-  // Settings service for server-managed config (category chips, etc.)
-  final settingsService = SettingsService(db: db);
-
-  // One-time migration: copy category chips from config.json to DB if DB is empty
-  await _migrateCategoryChipsFromConfig(db, config, settingsService, paths);
-
   // Pairing service for secure sync device authentication
   final pairingService = PairingService(db: db);
 
@@ -144,7 +137,6 @@ Future<void> main(List<String> args) async {
     config: config,
     paths: paths,
     pairingService: pairingService,
-    settingsService: settingsService,
   );
 
   // Start server(s): HTTPS on all interfaces + HTTP on localhost (when TLS enabled),
@@ -640,36 +632,5 @@ Future<void> _proxyWebSocket(HttpRequest request, String agentApiUrl) async {
     stderr.writeln('WebSocket proxy error: $e');
     request.response.statusCode = HttpStatus.badGateway;
     await request.response.close();
-  }
-}
-
-/// One-time migration: copy category chips from config.json to DB if DB is empty.
-///
-/// This runs on first startup after upgrade. The server NEVER writes to
-/// config.json after this — chips are now managed by SettingsService.
-Future<void> _migrateCategoryChipsFromConfig(
-  AppDatabase db,
-  AvoConfig config,
-  SettingsService settingsService,
-  AvodahPaths paths,
-) async {
-  try {
-    // Only migrate if settings table is empty and config has chips
-    final hasSettings = await settingsService.hasAnySettings();
-    if (hasSettings) return; // Already migrated or manually populated
-
-    final chips = config.categoryChips;
-    if (chips.isEmpty) return; // Nothing to migrate
-
-    stderr.writeln('Migrating ${chips.length} category chip groups from config.json to DB');
-
-    for (final entry in chips.entries) {
-      await settingsService.setChips(entry.key, entry.value);
-    }
-
-    stderr.writeln('Migration complete: category chips moved to DB');
-  } on Exception catch (e) {
-    stderr.writeln('Warning: category chip migration failed: $e');
-    stderr.writeln('Proceeding with empty chips — phone app may need re-setup');
   }
 }
