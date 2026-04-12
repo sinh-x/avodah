@@ -265,4 +265,20 @@ class BacklogProvider extends ChangeNotifier {
     _debounceTimer?.cancel();
     super.dispose();
   }
+
+  // --- Activate a single ticket ---
+
+  /// Activate a backlog ticket — removes 'backlog' tag if present and
+  /// updates the status to [newStatus].
+  Future<Ticket> activateTicket(String ticketId, String newStatus) async {
+    final ticket = _allTickets.firstWhere((t) => t.id == ticketId);
+    final updates = <String, dynamic>{'status': newStatus};
+    if (ticket.tags.contains('backlog')) {
+      final newTags = List<String>.from(ticket.tags)..remove('backlog');
+      updates['tags'] = newTags;
+    }
+    final updated = await _client.updateTicket(ticketId, updates);
+    await refresh();
+    return updated;
+  }
 }

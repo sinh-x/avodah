@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/deployment.dart';
 import '../models/ticket.dart';
+import '../services/backlog_provider.dart';
 import '../services/board_provider.dart';
 import '../services/deployment_provider.dart';
 import '../services/focus_provider.dart';
@@ -19,6 +20,7 @@ import '../services/crdt_sync_service.dart';
 import '../services/agent_api_client.dart';
 import '../services/display_settings_service.dart';
 import '../settings/settings_screen.dart';
+import 'backlog_screen.dart';
 import 'create_bulletin_screen.dart';
 import 'create_ticket_screen.dart';
 import 'ticket_detail_screen.dart';
@@ -322,6 +324,22 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
                       ),
                     )),
               ],
+              // Backlog navigation button
+              const SizedBox(width: 12),
+              ActionChip(
+                avatar: const Icon(Icons.inventory_2_outlined, size: 18),
+                label: const Text('Backlog'),
+                onPressed: () {
+                  final backlogProvider = BacklogProvider(widget.boardProvider.client);
+                  backlogProvider.fetchBacklog();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => BacklogScreen(backlogProvider: backlogProvider),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
