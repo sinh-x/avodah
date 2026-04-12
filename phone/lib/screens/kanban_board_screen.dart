@@ -17,6 +17,7 @@ import '../widgets/ticket_card.dart';
 import '../widgets/wip_summary.dart';
 import '../services/crdt_sync_service.dart';
 import '../services/agent_api_client.dart';
+import '../services/display_settings_service.dart';
 import '../settings/settings_screen.dart';
 import 'create_bulletin_screen.dart';
 import 'create_ticket_screen.dart';
@@ -44,6 +45,9 @@ class KanbanBoardScreen extends StatefulWidget {
   /// API client for authenticated proxy access.
   final AgentApiClient? apiClient;
 
+  /// Display settings service for theme and contrast control.
+  final DisplaySettingsService? displaySettings;
+
   const KanbanBoardScreen({
     super.key,
     required this.boardProvider,
@@ -52,6 +56,7 @@ class KanbanBoardScreen extends StatefulWidget {
     this.deploymentProvider,
     this.crdtSyncService,
     this.apiClient,
+    this.displaySettings,
   });
 
   @override
@@ -174,7 +179,7 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => SettingsScreen(apiClient: widget.apiClient, crdtSyncService: widget.crdtSyncService)),
+              MaterialPageRoute(builder: (_) => SettingsScreen(apiClient: widget.apiClient, crdtSyncService: widget.crdtSyncService, displaySettings: widget.displaySettings)),
             ),
           ),
           IconButton(

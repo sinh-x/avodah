@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/repo_diff.dart';
+import '../services/display_settings_service.dart';
 import '../utils/syntax_highlight.dart';
 import '../utils/word_diff.dart';
 import 'diff_stat_bar.dart';
@@ -304,12 +305,14 @@ class DiffLineView extends StatelessWidget {
     this.language,
   });
 
-  Color _backgroundColor() {
+  Color _backgroundColor(BuildContext context) {
+    final isHighContrast = Theme.of(context).syntaxColors.isHighContrast;
+    final alpha = isHighContrast ? 80 : 30;
     switch (line.type) {
       case 'add':
-        return Colors.green.withAlpha(30);
+        return Colors.green.withAlpha(alpha);
       case 'del':
-        return Colors.red.withAlpha(30);
+        return Colors.red.withAlpha(alpha);
       default:
         return Colors.transparent;
     }
@@ -346,7 +349,7 @@ class DiffLineView extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: _backgroundColor(),
+        color: _backgroundColor(context),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,7 +429,8 @@ class DiffLineView extends StatelessWidget {
             // For unchanged segments, apply syntax highlighting
             // For added/deleted segments, use plain text with muted color
             if (!isHighlighted && language != null) {
-              final syntaxSpans = parseSyntaxHighlighted(segment.text, language);
+              final syntaxSpans = parseSyntaxHighlighted(
+                  segment.text, language, theme.syntaxColors);
               return Container(
                 decoration: BoxDecoration(
                   color: bgColor,
@@ -466,7 +470,7 @@ class DiffLineView extends StatelessWidget {
 
     // Fallback: render with syntax highlighting if language is available
     if (language != null) {
-      final syntaxSpans = parseSyntaxHighlighted(line.content, language);
+      final syntaxSpans = parseSyntaxHighlighted(line.content, language, theme.syntaxColors);
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: RichText(

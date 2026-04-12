@@ -308,7 +308,9 @@ class CryptoSyncService {
     }
     _applySyncHeaders(request);
     if (body != null) {
-      request.write(body);
+      // Encode as UTF-8 bytes directly to handle any problematic characters.
+      // Replace invalid sequences instead of throwing.
+      request.add(dart_convert.utf8.encode(body));
     }
     return request.close().timeout(timeout);
   }

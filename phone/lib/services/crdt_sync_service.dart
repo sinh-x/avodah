@@ -436,6 +436,72 @@ class CrdtSyncService {
         );
   }
 
+  /// Force a full bidirectional sync: reset watermark, pull everything from
+  /// desktop, then push all local documents.
+  ///
+  /// Returns the total number of deltas pushed to the desktop.
+  Future<int> forceFullSync() async {
+    // Reset watermark so the next pull fetches all deltas
+    await _setDesktopWatermark('0');
+
+    // Pull all from desktop
+    await pullFromDesktop();
+
+    // Collect all local documents as deltas
+    final deltas = <Map<String, dynamic>>[];
+
+    final tasks = await db.select(db.tasks).get();
+    for (final t in tasks) {
+      final doc = TaskDocument.fromDrift(task: t, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.task;
+      deltas.add(json);
+    }
+
+    final worklogs = await db.select(db.worklogEntries).get();
+    for (final w in worklogs) {
+      final doc = WorklogDocument.fromDrift(worklog: w, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.worklog;
+      deltas.add(json);
+    }
+
+    final timers = await db.select(db.timerEntries).get();
+    for (final t in timers) {
+      final doc = TimerDocument.fromDrift(timer: t, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.timer;
+      deltas.add(json);
+    }
+
+    final projects = await db.select(db.projects).get();
+    for (final p in projects) {
+      final doc = ProjectDocument.fromDrift(project: p, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.project;
+      deltas.add(json);
+    }
+
+    final dailyPlans = await db.select(db.dailyPlanEntries).get();
+    for (final d in dailyPlans) {
+      final doc = DailyPlanDocument.fromDrift(entry: d, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.dailyPlan;
+      deltas.add(json);
+    }
+
+    final dayPlanTasks = await db.select(db.dayPlanTasks).get();
+    for (final d in dayPlanTasks) {
+      final doc = DayPlanTaskDocument.fromDrift(entry: d, clock: clock);
+      final json = doc.toJson();
+      json['type'] = _SyncDocType.dayPlanTask;
+      deltas.add(json);
+    }
+
+    debugPrint('[Sync] Force full sync: pushing ${deltas.length} local deltas');
+    return pushToDesktop(deltas);
+  }
+
   /// Revokes pairing with the desktop server.
   ///
   /// Calls DELETE /api/sync/pair to notify the server, then clears local

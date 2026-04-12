@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:highlight/highlight.dart' as hl;
 
+import '../services/display_settings_service.dart';
+
 /// Maps common file extensions to highlight.js language names.
 String? inferLanguage(String? filePath) {
   if (filePath == null || filePath.isEmpty) return null;
@@ -123,49 +125,70 @@ Map<String, Color> _syntaxColors = {
   'default': const Color(0xFFE0E0E0),
 };
 
-Color _colorForClass(String? className) {
-  if (className == null || className.isEmpty) return _syntaxColors['default']!;
+Color _colorForClass(String? className, [SyntaxColors? syntaxColors]) {
+  final colors = syntaxColors ?? SyntaxColors.normal;
+
+  if (className == null || className.isEmpty) {
+    return colors.defaultColor;
+  }
 
   final firstClass = className.split(' ').first;
-  if (_syntaxColors.containsKey(firstClass)) {
-    return _syntaxColors[firstClass]!;
+  final mapped = colors.forClass(firstClass);
+  if (mapped != colors.defaultColor || _syntaxColors.containsKey(firstClass)) {
+    return mapped;
   }
   for (final key in _syntaxColors.keys) {
     if (firstClass.startsWith(key)) {
       return _syntaxColors[key]!;
     }
   }
-  return _syntaxColors['default']!;
+  return colors.defaultColor;
 }
 
 /// Parses code with syntax highlighting and returns a list of TextSpans.
-List<TextSpan> parseSyntaxHighlighted(String code, String? language) {
+List<TextSpan> parseSyntaxHighlighted(String code, String? language,
+    [SyntaxColors? syntaxColors]) {
   if (language == null || language.isEmpty || code.isEmpty) {
-    return [TextSpan(text: code, style: const TextStyle(color: Color(0xFFE0E0E0)))];
+    return [
+      TextSpan(
+          text: code,
+          style:
+              TextStyle(color: (syntaxColors ?? SyntaxColors.normal).defaultColor))
+    ];
   }
 
   try {
     final result = hl.highlight.parse(code, language: language);
-    final spans = _convertNodes(result.nodes ?? []);
+    final spans = _convertNodes(result.nodes ?? [], syntaxColors);
     if (spans.isEmpty) {
-      return [TextSpan(text: code, style: const TextStyle(color: Color(0xFFE0E0E0)))];
+      return [
+        TextSpan(
+            text: code,
+            style: TextStyle(
+                color: (syntaxColors ?? SyntaxColors.normal).defaultColor))
+      ];
     }
     return spans;
   } catch (_) {
-    return [TextSpan(text: code, style: const TextStyle(color: Color(0xFFE0E0E0)))];
+    return [
+      TextSpan(
+          text: code,
+          style:
+              TextStyle(color: (syntaxColors ?? SyntaxColors.normal).defaultColor))
+    ];
   }
 }
 
-List<TextSpan> _convertNodes(List<hl.Node> nodes) {
+List<TextSpan> _convertNodes(List<hl.Node> nodes, [SyntaxColors? syntaxColors]) {
   final spans = <TextSpan>[];
   for (final node in nodes) {
     if (node.value != null) {
       spans.add(TextSpan(
         text: node.value,
-        style: TextStyle(color: _colorForClass(node.className)),
+        style: TextStyle(color: _colorForClass(node.className, syntaxColors)),
       ));
     } else if (node.children != null) {
-      final childSpans = _convertNodes(node.children!);
+      final childSpans = _convertNodes(node.children!, syntaxColors);
       if (childSpans.isNotEmpty) {
         spans.addAll(childSpans);
       }
