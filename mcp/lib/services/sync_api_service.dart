@@ -30,6 +30,7 @@ class SyncDocType {
   static const String project = 'project';
   static const String dailyPlan = 'dailyPlan';
   static const String dayPlanTask = 'dayPlanTask';
+  static const String categoryChip = 'categoryChip';
 }
 
 /// Handles CRDT delta sync HTTP requests.
@@ -454,6 +455,15 @@ class SyncApiService {
       }
     }
 
+    // Category Chips
+    final categoryChips = await db.select(db.categoryChips).get();
+    for (final row in categoryChips) {
+      if (_isAfterWatermark(row.crdtClock, since)) {
+        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
+        deltas.add(_wrapDelta(SyncDocType.categoryChip, doc));
+      }
+    }
+
     return deltas;
   }
 
@@ -487,6 +497,8 @@ class SyncApiService {
         await _mergeDailyPlan(id, state);
       case SyncDocType.dayPlanTask:
         await _mergeDayPlanTask(id, state);
+      case SyncDocType.categoryChip:
+        await _mergeCategoryChip(id, state);
       default:
         throw ArgumentError('Unknown delta type: $type');
     }
@@ -600,6 +612,23 @@ class SyncApiService {
     await db
         .into(db.dayPlanTasks)
         .insertOnConflictUpdate(doc.toDriftCompanion());
+  }
+
+  Future<void> _mergeCategoryChip(
+      String id, Map<String, CrdtFieldState> state) async {
+    final rows = await (db.select(db.categoryChips)
+          ..where((t) => t.id.equals(id)))
+        .get();
+
+    final CategoryChipDocument doc;
+    if (rows.isNotEmpty) {
+      doc = CategoryChipDocument.fromDrift(chip: rows.first, clock: clock);
+    } else {
+      doc = CategoryChipDocument.fromState(id: id, clock: clock, state: {});
+    }
+
+    _applyState(doc, state);
+    await db.into(db.categoryChips).insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   // ============================================================
