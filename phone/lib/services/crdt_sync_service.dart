@@ -81,8 +81,8 @@ class CrdtSyncService {
     CryptoSyncService? cryptoClient,
     this.onNeedsPairing,
     required String nodeId,
-  })  : _plainClient = client ?? http.Client(),
-        _cryptoClient = cryptoClient {
+  }) : _plainClient = client ?? http.Client(),
+       _cryptoClient = cryptoClient {
     if (_cryptoClient != null) {
       _pairingService = PhonePairingService(
         cryptoClient: _cryptoClient,
@@ -135,36 +135,44 @@ class CrdtSyncService {
 
     debugPrint('[Sync] Pulling deltas since watermark=$watermark');
 
-    final http.Response response;
+    final int statusCode;
+    final String responseBody;
     if (_cryptoClient != null) {
-      // Use TLS client — auth headers applied automatically
+      // Use TLS client — auth headers applied automatically.
+      // Collect raw bytes and decode with allowMalformed to handle
+      // non-UTF-8 characters in task data (e.g. from Jira sync).
       final httpResponse = await _cryptoClient.get(
         'api/sync/deltas',
-        queryParams: {
-          'since': watermark,
-          'node': nodeId,
-        },
+        queryParams: {'since': watermark, 'node': nodeId},
       );
-      final body = await httpResponse.transform(utf8.decoder).join();
-      response = http.Response(body, httpResponse.statusCode);
+      final bytes = await httpResponse.fold<List<int>>(
+        <int>[],
+        (prev, chunk) => prev..addAll(chunk),
+      );
+      responseBody = utf8.decode(bytes, allowMalformed: true);
+      statusCode = httpResponse.statusCode;
     } else {
       final uri = Uri.parse(
         '$baseUrl/api/sync/deltas?since=${Uri.encodeComponent(watermark)}&node=${Uri.encodeComponent(nodeId)}',
       );
-      response = await _plainClient.get(uri).timeout(const Duration(seconds: 10));
+      final response = await _plainClient
+          .get(uri)
+          .timeout(const Duration(seconds: 10));
+      responseBody = response.body;
+      statusCode = response.statusCode;
     }
 
-    if (response.statusCode == 403) {
+    if (statusCode == 403) {
       debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
       await onNeedsPairing?.call();
       throw Exception('Pairing required (HTTP 403)');
     }
 
-    if (response.statusCode != 200) {
-      throw Exception('Sync pull failed: HTTP ${response.statusCode}');
+    if (statusCode != 200) {
+      throw Exception('Sync pull failed: HTTP $statusCode');
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final json = jsonDecode(responseBody) as Map<String, dynamic>;
     final deltas = json['deltas'] as List<dynamic>? ?? [];
     final newWatermark = json['watermark'] as String? ?? '0';
 
@@ -175,7 +183,9 @@ class CrdtSyncService {
         await _mergeDelta(delta);
         merged++;
       } catch (e) {
-        debugPrint('[CrdtSync] Failed to merge delta ${delta['type']}/${delta['id']}: $e');
+        debugPrint(
+          '[CrdtSync] Failed to merge delta ${delta['type']}/${delta['id']}: $e',
+        );
       }
     }
 
@@ -230,16 +240,24 @@ class CrdtSyncService {
 
     // ---- Phase 1 debug logging: timer delta presence ----
     if (timerCount > 0) {
-      debugPrint('[Sync] Timer deltas RECEIVED from extractDeltas: count=$timerCount');
+      debugPrint(
+        '[Sync] Timer deltas RECEIVED from extractDeltas: count=$timerCount',
+      );
     } else {
-      debugPrint('[Sync] Timer deltas: NONE in extractDeltas response (total deltas=$merged)');
+      debugPrint(
+        '[Sync] Timer deltas: NONE in extractDeltas response (total deltas=$merged)',
+      );
     }
 
-    debugPrint('[Sync] Pulled $merged deltas '
-        '(dailyPlan=$dailyPlanCount, dayPlanTask=$dayPlanTaskCount, '
-        'task=$taskCount, worklog=$worklogCount, timer=$timerCount, '
-        'project=$projectCount, categoryChip=$categoryChipCount)');
-    debugPrint('[Sync] Merged $merged deltas into local DB. New watermark=$newWatermark');
+    debugPrint(
+      '[Sync] Pulled $merged deltas '
+      '(dailyPlan=$dailyPlanCount, dayPlanTask=$dayPlanTaskCount, '
+      'task=$taskCount, worklog=$worklogCount, timer=$timerCount, '
+      'project=$projectCount, categoryChip=$categoryChipCount)',
+    );
+    debugPrint(
+      '[Sync] Merged $merged deltas into local DB. New watermark=$newWatermark',
+    );
     return merged;
   }
 
@@ -285,11 +303,10 @@ class CrdtSyncService {
     }
   }
 
-  Future<void> _mergeTask(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.tasks)
-          ..where((t) => t.id.equals(id)))
-        .get();
+  Future<void> _mergeTask(String id, Map<String, CrdtFieldState> state) async {
+    final rows = await (db.select(
+      db.tasks,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? TaskDocument.fromDrift(task: rows.first, clock: clock)
         : TaskDocument.fromState(id: id, clock: clock, state: {});
@@ -298,19 +315,25 @@ class CrdtSyncService {
   }
 
   Future<void> _mergeWorklog(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.worklogEntries)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
+    final rows = await (db.select(
+      db.worklogEntries,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? WorklogDocument.fromDrift(worklog: rows.first, clock: clock)
         : WorklogDocument.fromState(id: id, clock: clock, state: {});
     _applyState(doc, state);
-    await db.into(db.worklogEntries).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.worklogEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   Future<void> _mergeTimer(
-      String id, Map<String, CrdtFieldState> state) async {
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
     // ---- Phase 1 debug logging ----
     // Log incoming timer delta fields
     final incomingFields = state.entries.map((e) {
@@ -319,11 +342,13 @@ class CrdtSyncService {
       final ts = fieldState.timestamp;
       return '$e.key=$val[t=$ts]';
     }).join(', ');
-    debugPrint('[CrdtSync] Timer delta RECEIVED: id=$id fields=[$incomingFields]');
+    debugPrint(
+      '[CrdtSync] Timer delta RECEIVED: id=$id fields=[$incomingFields]',
+    );
 
-    final rows = await (db.select(db.timerEntries)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    final rows = await (db.select(
+      db.timerEntries,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? TimerDocument.fromDrift(timer: rows.first, clock: clock)
         : TimerDocument.fromState(id: id, clock: clock, state: {});
@@ -331,22 +356,28 @@ class CrdtSyncService {
     try {
       _applyState(doc, state);
       // Log merge outcome: which fields won (using typed getters)
-      debugPrint('[CrdtSync] Timer MERGE SUCCESS: id=$id '
-          'isRunning=${doc.isRunning} startedAtMs=${doc.startedAtMs} '
-          'accumulatedMs=${doc.accumulatedMs} pausedAtMs=${doc.pausedAtMs} '
-          'taskId=${doc.taskId} taskTitle=${doc.taskTitle}');
+      debugPrint(
+        '[CrdtSync] Timer MERGE SUCCESS: id=$id '
+        'isRunning=${doc.isRunning} startedAtMs=${doc.startedAtMs} '
+        'accumulatedMs=${doc.accumulatedMs} pausedAtMs=${doc.pausedAtMs} '
+        'taskId=${doc.taskId} taskTitle=${doc.taskTitle}',
+      );
     } catch (e) {
       debugPrint('[CrdtSync] Timer MERGE FAILURE: id=$id error=$e');
       rethrow;
     }
-    await db.into(db.timerEntries).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.timerEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   Future<void> _mergeProject(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.projects)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
+    final rows = await (db.select(
+      db.projects,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? ProjectDocument.fromDrift(project: rows.first, clock: clock)
         : ProjectDocument.fromState(id: id, clock: clock, state: {});
@@ -355,39 +386,51 @@ class CrdtSyncService {
   }
 
   Future<void> _mergeDailyPlan(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.dailyPlanEntries)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
+    final rows = await (db.select(
+      db.dailyPlanEntries,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? DailyPlanDocument.fromDrift(entry: rows.first, clock: clock)
         : DailyPlanDocument.fromState(id: id, clock: clock, state: {});
     _applyState(doc, state);
-    await db.into(db.dailyPlanEntries).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.dailyPlanEntries)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   Future<void> _mergeDayPlanTask(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.dayPlanTasks)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
+    final rows = await (db.select(
+      db.dayPlanTasks,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? DayPlanTaskDocument.fromDrift(entry: rows.first, clock: clock)
         : DayPlanTaskDocument.fromState(id: id, clock: clock, state: {});
     _applyState(doc, state);
-    await db.into(db.dayPlanTasks).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.dayPlanTasks)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   Future<void> _mergeCategoryChip(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.categoryChips)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    String id,
+    Map<String, CrdtFieldState> state,
+  ) async {
+    final rows = await (db.select(
+      db.categoryChips,
+    )..where((t) => t.id.equals(id))).get();
     final doc = rows.isNotEmpty
         ? CategoryChipDocument.fromDrift(chip: rows.first, clock: clock)
         : CategoryChipDocument.fromState(id: id, clock: clock, state: {});
     _applyState(doc, state);
-    await db.into(db.categoryChips).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.categoryChips)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   void _applyState(CrdtDocument doc, Map<String, CrdtFieldState> state) {
@@ -414,37 +457,40 @@ class CrdtSyncService {
 
     debugPrint('[Sync] Pushing ${deltas.length} deltas');
 
-    final http.Response response;
+    final int statusCode;
+    final String responseBody;
     if (_cryptoClient != null) {
       final httpResponse = await _cryptoClient.post(
         'api/sync/deltas',
         headers: {'Content-Type': 'application/json'},
         body: body,
       );
-      final responseBody = await httpResponse.transform(utf8.decoder).join();
-      response = http.Response(responseBody, httpResponse.statusCode);
+      final bytes = await httpResponse.fold<List<int>>(
+        <int>[],
+        (prev, chunk) => prev..addAll(chunk),
+      );
+      responseBody = utf8.decode(bytes, allowMalformed: true);
+      statusCode = httpResponse.statusCode;
     } else {
       final uri = Uri.parse('$baseUrl/api/sync/deltas');
-      response = await _plainClient
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: body,
-          )
+      final response = await _plainClient
+          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
           .timeout(const Duration(seconds: 10));
+      responseBody = response.body;
+      statusCode = response.statusCode;
     }
 
-    if (response.statusCode == 403) {
+    if (statusCode == 403) {
       debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
       await onNeedsPairing?.call();
       throw Exception('Pairing required (HTTP 403)');
     }
 
-    if (response.statusCode != 200) {
-      throw Exception('Sync push failed: HTTP ${response.statusCode}');
+    if (statusCode != 200) {
+      throw Exception('Sync push failed: HTTP $statusCode');
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final json = jsonDecode(responseBody) as Map<String, dynamic>;
     final merged = (json['merged'] as num?)?.toInt() ?? 0;
     final watermark = json['watermark'] as String?;
 
@@ -464,9 +510,9 @@ class CrdtSyncService {
   // ============================================================
 
   Future<String> _getDesktopWatermark() async {
-    final rows = await (db.select(db.syncWatermarks)
-          ..where((w) => w.nodeId.equals(_kDesktopNodeId)))
-        .get();
+    final rows = await (db.select(
+      db.syncWatermarks,
+    )..where((w) => w.nodeId.equals(_kDesktopNodeId))).get();
     final match = rows.where((r) => r.direction == 'received');
     if (match.isEmpty) return '0';
     final hlc = match.first.lastHlc;
@@ -474,7 +520,9 @@ class CrdtSyncService {
   }
 
   Future<void> _setDesktopWatermark(String hlcPacked) async {
-    await db.into(db.syncWatermarks).insertOnConflictUpdate(
+    await db
+        .into(db.syncWatermarks)
+        .insertOnConflictUpdate(
           SyncWatermarksCompanion.insert(
             nodeId: _kDesktopNodeId,
             lastHlc: Value(hlcPacked),
