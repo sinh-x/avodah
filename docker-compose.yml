@@ -25,8 +25,15 @@ services:
     network_mode: host
     ports:
       - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    volumes:
+      # Mount config dir (read-only) for TLS certificates
+      - ${AVODAH_CONFIG:-~/.config/avodah}:/config:ro
+      # Mount Caddyfile from repo (avoids rebuilding image for config changes)
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     environment:
       - WEB_PORT=${WEB_PORT:-8080}
+      - TLS_CERT=/config/${TLS_CERT_NAME:-drgnfly.tail10c2c6.ts.net.crt}
+      - TLS_KEY=/config/${TLS_KEY_NAME:-drgnfly.tail10c2c6.ts.net.key}
       - SYNC_SERVER_HOST=localhost
       - SYNC_SERVER_PORT=${SYNC_PORT:-9847}
     depends_on:

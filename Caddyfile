@@ -1,14 +1,19 @@
 # Avodah Web UI — Caddy configuration
 #
 # Serves Flutter web static assets with COOP/COEP headers for OPFS support
-# Proxies /api/* and /ws to the sync server (avodah-sync:9847)
+# Proxies /api/* and /ws to the sync server
 #
 # Environment variables:
 #   WEB_PORT — port to listen on (default: 8080)
+#   TLS_CERT — path to TLS certificate (optional, enables HTTPS)
+#   TLS_KEY  — path to TLS private key (optional, enables HTTPS)
 #   SYNC_SERVER_HOST — hostname of sync server (default: avodah-sync)
 #   SYNC_SERVER_PORT — port of sync server (default: 9847)
 
-:{$WEB_PORT:-8080} {
+https://:{$WEB_PORT:-8080} {
+    # TLS with Tailscale certificates mounted from host
+    tls {$TLS_CERT} {$TLS_KEY}
+
     # Serve Flutter web static assets from /srv
     root * /srv
     file_server
