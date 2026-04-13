@@ -328,10 +328,25 @@ class _KanbanBoardScreenState extends State<KanbanBoardScreen> {
               const SizedBox(width: 12),
               ActionChip(
                 avatar: const Icon(Icons.inventory_2_outlined, size: 18),
-                label: const Text('Backlog'),
+                label: ListenableBuilder(
+                  listenable: widget.boardProvider,
+                  builder: (context, _) {
+                    final count = widget.boardProvider.backlogCount;
+                    return Text(count > 0 ? 'Backlog ($count)' : 'Backlog');
+                  },
+                ),
                 onPressed: () {
                   final backlogProvider = BacklogProvider(widget.boardProvider.client);
-                  backlogProvider.fetchBacklog();
+                  backlogProvider.fetchBacklog().then((_) {
+                    if (backlogProvider.totalCount > 0 && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${backlogProvider.totalCount} backlog ticket(s)'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  });
                   Navigator.push(
                     context,
                     MaterialPageRoute<void>(

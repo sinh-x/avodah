@@ -44,6 +44,7 @@ class BoardProvider extends ChangeNotifier {
   String _searchQuery = '';
   Timer? _pollTimer;
   SharedPreferences? _prefs;
+  int _backlogCount = 0;
 
   BoardProvider(this._client) {
     _initPrefs();
@@ -70,6 +71,9 @@ class BoardProvider extends ChangeNotifier {
   String? get selectedAssignee => _selectedAssignee;
   bool get showTerminal => _showTerminal;
   String get searchQuery => _searchQuery;
+
+  /// Backlog ticket count for display on the Kanban board badge.
+  int get backlogCount => _backlogCount;
 
   /// Active (non-terminal, non-on-hold) columns in kanban order.
   List<BoardColumn> get activeColumns {
@@ -169,9 +173,11 @@ class BoardProvider extends ChangeNotifier {
         _client.getBoard(
             project: _selectedProject ?? '', assignee: _selectedAssignee),
         _client.getBulletins(),
+        _client.getBacklog(),
       ]);
       _board = results[0] as BoardView;
       _bulletins = results[1] as List<Bulletin>;
+      _backlogCount = (results[2] as List).length;
       _error = null;
     } catch (e) {
       _error = e.toString();

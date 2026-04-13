@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import '../models/ticket.dart';
 import 'agent_api_client.dart';
 
+/// Sentinel value to distinguish "not provided" from explicit null in copyWith.
+const _sentinel = Object();
+
 /// Filter state for the backlog view.
 class BacklogFilter {
   final String? project;
@@ -22,14 +25,14 @@ class BacklogFilter {
   });
 
   BacklogFilter copyWith({
-    String? project,
+    Object? project = _sentinel,
     List<String>? assignees,
     List<String>? priorities,
     List<String>? tags,
     String? searchQuery,
   }) {
     return BacklogFilter(
-      project: project ?? this.project,
+      project: identical(project, _sentinel) ? this.project : project as String?,
       assignees: assignees ?? this.assignees,
       priorities: priorities ?? this.priorities,
       tags: tags ?? this.tags,
@@ -60,6 +63,7 @@ class BacklogProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
   Timer? _debounceTimer;
+  List<TicketProject> _projects = [];
 
   BacklogProvider(this._client);
 
@@ -79,6 +83,9 @@ class BacklogProvider extends ChangeNotifier {
   /// Total backlog count (unfiltered) for badge display.
   int get totalCount => _allTickets.length;
 
+  /// Available projects for filtering.
+  List<TicketProject> get projects => _projects;
+
   // --- Client access ---
 
   AgentApiClient get client => _client;
@@ -92,12 +99,18 @@ class BacklogProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _allTickets = await _client.getBacklog(
-        project: _filter.project,
-        assignee: _filter.assignees.isNotEmpty ? _filter.assignees.join(',') : null,
-        priority: _filter.priorities.isNotEmpty ? _filter.priorities.join(',') : null,
-        tags: _filter.tags.isNotEmpty ? _filter.tags.join(',') : null,
-      );
+      // Fetch projects and backlog in parallel
+      final results = await Future.wait([
+        _client.getProjects(),
+        _client.getBacklog(
+          project: _filter.project,
+          assignee: _filter.assignees.isNotEmpty ? _filter.assignees.join(',') : null,
+          priority: _filter.priorities.isNotEmpty ? _filter.priorities.join(',') : null,
+          tags: _filter.tags.isNotEmpty ? _filter.tags.join(',') : null,
+        ),
+      ]);
+      _projects = results[0] as List<TicketProject>;
+      _allTickets = results[1] as List<Ticket>;
       _error = null;
     } catch (e) {
       _error = e.toString();

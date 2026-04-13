@@ -6,6 +6,7 @@ import '../services/kanban_constants.dart';
 import '../widgets/assignee_picker_sheet.dart';
 import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
+import '../widgets/tag_picker_sheet.dart';
 
 /// Backlog view — shows all inactive tickets (tag-based + status-based).
 ///
@@ -218,8 +219,8 @@ class _BacklogScreenState extends State<BacklogScreen> {
 
   Future<void> _showActivateDialog(BuildContext context, Ticket ticket) async {
     String? selectedStatus;
-    // Default to 'idea' if already in backlog statuses, otherwise keep current
-    selectedStatus = backlogStatuses.contains(ticket.status) ? 'idea' : ticket.status;
+    // Default to 'implementing' (active status) if in backlog, otherwise keep current
+    selectedStatus = backlogStatuses.contains(ticket.status) ? 'implementing' : ticket.status;
 
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -340,15 +341,7 @@ class _BacklogScreenState extends State<BacklogScreen> {
   Future<void> _activateTicket(
       BuildContext context, Ticket ticket, String newStatus) async {
     try {
-      // Build updated fields: new status + remove 'backlog' tag
-      final updates = <String, dynamic>{'status': newStatus};
-      if (ticket.tags.contains('backlog')) {
-        final newTags = List<String>.from(ticket.tags)..remove('backlog');
-        updates['tags'] = newTags;
-      }
-
-      await widget.backlogProvider.client.updateTicket(ticket.id, updates);
-      await widget.backlogProvider.refresh();
+      await widget.backlogProvider.activateTicket(ticket.id, newStatus);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -417,6 +410,12 @@ class _BacklogScreenState extends State<BacklogScreen> {
               label: const Text('Assignee'),
               onPressed: () => _showBulkAssigneePicker(context),
             ),
+            // Tags picker
+            TextButton.icon(
+              icon: const Icon(Icons.label_outlined, size: 18),
+              label: const Text('Tags'),
+              onPressed: () => _showBulkTagsPicker(context),
+            ),
             // Apply button
             FilledButton(
               onPressed: () => _applyBulkUpdate(context),
@@ -471,6 +470,34 @@ class _BacklogScreenState extends State<BacklogScreen> {
     );
     if (result != null && context.mounted) {
       await _bulkUpdate(context, {'assignee': result});
+    }
+  }
+
+  Future<void> _showBulkTagsPicker(BuildContext context) async {
+    final allTags = _uniqueTags(widget.backlogProvider.allTickets);
+    final selectedTags = <String>[];
+
+    // Pre-select tags that all selected tickets share
+    final selectedTickets = widget.backlogProvider.allTickets
+        .where((t) => widget.backlogProvider.selectedIds.contains(t.id))
+        .toList();
+    if (selectedTickets.isNotEmpty) {
+      final firstTags = selectedTickets.first.tags;
+      selectedTags.addAll(firstTags.where(
+        (t) => selectedTickets.every((ticket) => ticket.tags.contains(t)),
+      ));
+    }
+
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      builder: (ctx) => TagPickerSheet(
+        availableTags: allTags,
+        selectedTags: selectedTags,
+        onSelect: (tags) => Navigator.pop(ctx, tags),
+      ),
+    );
+    if (result != null && context.mounted) {
+      await _bulkUpdate(context, {'tags': result});
     }
   }
 
@@ -607,16 +634,17 @@ class _BacklogScreenState extends State<BacklogScreen> {
           }
 
           // Fetch projects for the filter row dropdown
-          Future<List<TicketProject>> projectsFuture =
-              provider.client.getProjects();
-
           return Column(
             children: [
               // Filter bar
               FutureBuilder<List<TicketProject>>(
-                future: projectsFuture,
+                future: provider.projects.isNotEmpty
+                    ? Future.value(provider.projects)
+                    : provider.client.getProjects(),
                 builder: (context, snapshot) {
-                  final projects = snapshot.data ?? [];
+                  final projects = provider.projects.isNotEmpty
+                      ? provider.projects
+                      : (snapshot.data ?? []);
                   return _buildFilterRow(projects);
                 },
               ),
