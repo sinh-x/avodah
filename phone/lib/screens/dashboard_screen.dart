@@ -395,7 +395,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : '${lastUpdated.inMinutes}m ago';
 
     return RefreshIndicator(
-      onRefresh: () => widget.dashboardProvider.refresh(),
+      onRefresh: () async {
+        await widget.crdtSyncService?.pullFromDesktop();
+        await widget.dashboardProvider.refresh();
+      },
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
