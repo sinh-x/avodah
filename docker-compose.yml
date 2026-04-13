@@ -36,6 +36,8 @@ services:
       - TLS_KEY=/config/${TLS_KEY_NAME:-drgnfly.tail10c2c6.ts.net.key}
       - SYNC_SERVER_HOST=localhost
       - SYNC_SERVER_PORT=${SYNC_PORT:-9847}
+      - AGENT_API_HOST=localhost
+      - AGENT_API_PORT=${AGENT_PORT:-9848}
     depends_on:
       - avodah-sync
     restart: unless-stopped
