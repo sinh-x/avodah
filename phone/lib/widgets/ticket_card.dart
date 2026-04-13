@@ -111,11 +111,7 @@ class _TicketCardBody extends StatelessWidget {
                   if (ticket.estimate != null)
                     _EstimateBadge(estimate: ticket.estimate!),
                   if (ticket.docRefs.isNotEmpty)
-                    Icon(
-                      Icons.description_outlined,
-                      size: 14,
-                      color: theme.colorScheme.primary,
-                    ),
+                    _DocRefIndicator(docRefs: ticket.docRefs),
                 ],
               ),
               if (ticket.assignee != null) ...[
@@ -404,6 +400,51 @@ class _BadgeChip extends StatelessWidget {
           letterSpacing: 0.5,
         ),
       ),
+    );
+  }
+}
+
+/// Shows a camera/image count badge when a ticket has image doc_refs,
+/// otherwise shows a generic document icon.
+class _DocRefIndicator extends StatelessWidget {
+  final List<DocRef> docRefs;
+
+  const _DocRefIndicator({required this.docRefs});
+
+  @override
+  Widget build(BuildContext context) {
+    final imageCount = docRefs.where(
+      (r) => r.displayType == DocRefDisplayType.image,
+    ).length;
+    if (imageCount > 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.photo_camera, size: 11, color: Colors.blue),
+            const SizedBox(width: 2),
+            Text(
+              '$imageCount',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.blue,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return const Icon(
+      Icons.description_outlined,
+      size: 14,
+      color: Colors.blue,
     );
   }
 }

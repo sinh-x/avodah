@@ -915,6 +915,22 @@ class AgentApiClient {
     return DocumentContent.fromJson(response);
   }
 
+  /// Fetch raw image bytes from pa-serve.
+  ///
+  /// GET /api/images?path=<encoded>
+  /// Returns image binary bytes. Throws on non-200 response.
+  Future<List<int>> getImageBytes(String path) async {
+    final encoded = Uri.encodeComponent(path);
+    final uri = Uri.parse('$baseUrl/api/images?path=$encoded');
+    final response = await _client
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      _throwApiException(response.statusCode, response.body);
+    }
+    return response.bodyBytes;
+  }
+
   // --- Bulletins ---
 
   /// List all bulletins.
