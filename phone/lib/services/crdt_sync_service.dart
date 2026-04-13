@@ -228,6 +228,13 @@ class CrdtSyncService {
       }
     }
 
+    // ---- Phase 1 debug logging: timer delta presence ----
+    if (timerCount > 0) {
+      debugPrint('[Sync] Timer deltas RECEIVED from extractDeltas: count=$timerCount');
+    } else {
+      debugPrint('[Sync] Timer deltas: NONE in extractDeltas response (total deltas=$merged)');
+    }
+
     debugPrint('[Sync] Pulled $merged deltas '
         '(dailyPlan=$dailyPlanCount, dayPlanTask=$dayPlanTaskCount, '
         'task=$taskCount, worklog=$worklogCount, timer=$timerCount, '
@@ -304,13 +311,34 @@ class CrdtSyncService {
 
   Future<void> _mergeTimer(
       String id, Map<String, CrdtFieldState> state) async {
+    // ---- Phase 1 debug logging ----
+    // Log incoming timer delta fields
+    final incomingFields = state.entries.map((e) {
+      final fieldState = e.value;
+      final val = fieldState.value;
+      final ts = fieldState.timestamp;
+      return '$e.key=$val[t=$ts]';
+    }).join(', ');
+    debugPrint('[CrdtSync] Timer delta RECEIVED: id=$id fields=[$incomingFields]');
+
     final rows = await (db.select(db.timerEntries)
           ..where((t) => t.id.equals(id)))
         .get();
     final doc = rows.isNotEmpty
         ? TimerDocument.fromDrift(timer: rows.first, clock: clock)
         : TimerDocument.fromState(id: id, clock: clock, state: {});
-    _applyState(doc, state);
+
+    try {
+      _applyState(doc, state);
+      // Log merge outcome: which fields won (using typed getters)
+      debugPrint('[CrdtSync] Timer MERGE SUCCESS: id=$id '
+          'isRunning=${doc.isRunning} startedAtMs=${doc.startedAtMs} '
+          'accumulatedMs=${doc.accumulatedMs} pausedAtMs=${doc.pausedAtMs} '
+          'taskId=${doc.taskId} taskTitle=${doc.taskTitle}');
+    } catch (e) {
+      debugPrint('[CrdtSync] Timer MERGE FAILURE: id=$id error=$e');
+      rethrow;
+    }
     await db.into(db.timerEntries).insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
