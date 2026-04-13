@@ -1,14 +1,24 @@
 # Avodah Web UI — Caddy configuration
 #
 # Serves Flutter web static assets with COOP/COEP headers for OPFS support
-# Proxies /api/* and /ws to the sync server (avodah-sync:9847)
+# Routes API traffic:
+#   /api/sync/* → sync server (HTTPS, port 9847) — CRDT delta sync
+#   /api/*      → pa-serve (HTTP, port 9848)     — tickets, board, deployments
+#   /ws         → sync server (HTTPS, port 9847) — WebSocket
 #
 # Environment variables:
 #   WEB_PORT — port to listen on (default: 8080)
-#   SYNC_SERVER_HOST — hostname of sync server (default: avodah-sync)
+#   TLS_CERT — path to TLS certificate (enables HTTPS)
+#   TLS_KEY  — path to TLS private key (enables HTTPS)
+#   SYNC_SERVER_HOST — hostname of sync server (default: localhost)
 #   SYNC_SERVER_PORT — port of sync server (default: 9847)
+#   AGENT_API_HOST — hostname of pa-serve (default: localhost)
+#   AGENT_API_PORT — port of pa-serve (default: 9848)
 
-:{$WEB_PORT:-8080} {
+https://:{$WEB_PORT:-8080} {
+    # TLS with Tailscale certificates mounted from host
+    tls {$TLS_CERT} {$TLS_KEY}
+
     # Serve Flutter web static assets from /srv
     root * /srv
     file_server
@@ -34,15 +44,29 @@
     }
     respond @health 200 "OK"
 
-    # Proxy /api/* to sync server
+    # CRDT sync routes → sync server (HTTPS, requires pairing auth)
+    @sync {
+        path /api/sync/*
+    }
+    reverse_proxy @sync https://{$SYNC_SERVER_HOST:-localhost}:{$SYNC_SERVER_PORT:-9847} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+
+    # All other /api/* routes → pa-serve directly (no auth required)
     @api {
         path /api/*
     }
-    reverse_proxy @api {$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847}
+    reverse_proxy @api {$AGENT_API_HOST:-localhost}:{$AGENT_API_PORT:-9848}
 
-    # Proxy /ws WebSocket to sync server
+    # Proxy /ws WebSocket to sync server (HTTPS)
     @ws {
         path /ws
     }
-    reverse_proxy @ws {$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847}
+    reverse_proxy @ws https://{$SYNC_SERVER_HOST:-localhost}:{$SYNC_SERVER_PORT:-9847} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
 }
