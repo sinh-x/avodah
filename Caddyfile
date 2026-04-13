@@ -34,15 +34,23 @@
     }
     respond @health 200 "OK"
 
-    # Proxy /api/* to sync server
+    # Proxy /api/* to sync server (HTTPS backend with self-signed cert)
     @api {
         path /api/*
     }
-    reverse_proxy @api {$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847}
+    reverse_proxy @api https://{$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
 
-    # Proxy /ws WebSocket to sync server
+    # Proxy /ws WebSocket to sync server (HTTPS backend with self-signed cert)
     @ws {
         path /ws
     }
-    reverse_proxy @ws {$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847}
+    reverse_proxy @ws https://{$SYNC_SERVER_HOST:-avodah-sync}:{$SYNC_SERVER_PORT:-9847} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
 }
