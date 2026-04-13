@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:avodah_core/avodah_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -64,6 +65,22 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   Future<void> _initApp() async {
+    try {
+      await _initAppInner();
+    } catch (e, st) {
+      debugPrint('[Init] Fatal error during app initialization: $e\n$st');
+      // Show error state instead of infinite loading spinner
+      if (mounted) {
+        setState(() {
+          _initError = e.toString();
+        });
+      }
+    }
+  }
+
+  String? _initError;
+
+  Future<void> _initAppInner() async {
     // Open local database
     final db = await openPhoneDatabase();
 
@@ -83,12 +100,18 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Load stored server URL (already HTTP format)
     final httpBaseUrl = await SettingsScreen.loadServerUrl();
 
-    // TLS-capable HTTP client with certificate verification
-    final cryptoSyncService = CryptoSyncService(
-      baseUrl: httpBaseUrl,
-      nodeId: nodeId,
-    );
-    await cryptoSyncService.loadPersistedState();
+    // TLS-capable HTTP client with certificate verification.
+    // dart:io HttpClient is not available on web — skip CryptoSyncService
+    // entirely. On web, the browser handles TLS natively, and the Caddy
+    // reverse proxy makes cert pinning unnecessary.
+    CryptoSyncService? cryptoSyncService;
+    if (!kIsWeb) {
+      cryptoSyncService = CryptoSyncService(
+        baseUrl: httpBaseUrl,
+        nodeId: nodeId,
+      );
+      await cryptoSyncService.loadPersistedState();
+    }
 
     // CRDT sync service with TLS + pairing integration
     final crdtSyncService = CrdtSyncService(
@@ -103,7 +126,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     // Agent workflow API — inject pairing credentials for authenticated proxy
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
-      ..pairingToken = cryptoSyncService.pairingToken
+      ..pairingToken = cryptoSyncService?.pairingToken
       ..nodeId = nodeId;
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
@@ -375,7 +398,29 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                 extensions: [syntaxTheme],
               ),
           themeMode: display != null ? ThemeMode.system : ThemeMode.light,
-          home: _dashboardProvider == null
+          home: _initError != null
+              ? Scaffold(
+                  body: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline,
+                              size: 48, color: Colors.red),
+                          const SizedBox(height: 16),
+                          const Text('Failed to initialize',
+                              style: TextStyle(fontSize: 18)),
+                          const SizedBox(height: 8),
+                          Text(_initError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : _dashboardProvider == null
               ? const Scaffold(
                   body: Center(child: CircularProgressIndicator()),
                 )

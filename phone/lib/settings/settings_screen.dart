@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,9 +34,12 @@ class SettingsScreen extends StatefulWidget {
   /// Loads the saved server URL, or returns the default.
   ///
   /// Auto-migrates legacy `ws://` URLs to `http://` (Phase 9 removed WebSocket).
+  /// On web, defaults to the page's own origin (same-origin requests go through
+  /// the Caddy reverse proxy) instead of the hardcoded Tailscale IP.
   static Future<String> loadServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    var url = prefs.getString(kServerUrlKey) ?? kDefaultServerUrl;
+    final defaultUrl = kIsWeb ? Uri.base.origin : kDefaultServerUrl;
+    var url = prefs.getString(kServerUrlKey) ?? defaultUrl;
     if (url.startsWith('ws://') || url.startsWith('wss://')) {
       url = url.replaceFirst(RegExp(r'^wss?://'), 'http://');
     }
