@@ -31,6 +31,35 @@ class DocRef {
   }
 }
 
+/// Display type for doc_ref rendering.
+enum DocRefDisplayType { image, markdown, url, pdf, unknown }
+
+/// Classifies a [DocRef] by its content type based on path extension and URL prefix.
+extension DocRefClassifier on DocRef {
+  DocRefDisplayType get displayType {
+    final path = this.path;
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return DocRefDisplayType.url;
+    }
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.svg')) {
+      return DocRefDisplayType.image;
+    }
+    if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
+      return DocRefDisplayType.markdown;
+    }
+    if (lower.endsWith('.pdf')) {
+      return DocRefDisplayType.pdf;
+    }
+    return DocRefDisplayType.unknown;
+  }
+}
+
 class TicketComment {
   final String id;
   final String author;

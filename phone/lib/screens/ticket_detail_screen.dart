@@ -15,6 +15,7 @@ import '../widgets/priority_picker_sheet.dart';
 import '../widgets/status_picker_sheet.dart';
 import '../widgets/assignee_picker_sheet.dart';
 import '../widgets/image_attachment_picker.dart';
+import '../widgets/doc_ref_section.dart';
 import '../widgets/no_select_text_field.dart';
 import '../widgets/text_input_sheet.dart';
 import '../widgets/ticket_deployments_section.dart';
@@ -1251,21 +1252,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           ],
           if (ticket.docRefs.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _SectionLabel('Doc Refs'),
-            const SizedBox(height: 4),
-            ...ticket.docRefs.map(
-              (ref) => _DocRefRow(
-                docRef: ref,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DocumentViewerScreen(
-                      path: ref.path,
-                      client: widget.boardProvider.client,
-                    ),
-                  ),
-                ),
-              ),
+            DocRefSection(
+              docRefs: ticket.docRefs,
+              client: widget.boardProvider.client,
             ),
           ],
           // Image attachments — "Add photo" button + picker
