@@ -175,6 +175,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
+  /// pullFromDesktop() is called on EVERY cycle regardless of prior failure state.
   Future<void> _syncAndRefresh() async {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
@@ -185,6 +186,22 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       syncOk = true;
     } catch (e) {
       debugPrint('[Sync] Pull failed: $e');
+      // Surface pull failure to user via snackbar (AC4)
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Sync failed — will retry on next cycle'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        });
+      } else {
+        debugPrint('[Sync] Pull failed but ScaffoldMessenger unavailable '
+            'for snackbar notification');
+      }
     }
     await dashboard.refresh();
     // Override the indicator to reflect actual sync status, not just local DB read
