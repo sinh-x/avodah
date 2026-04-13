@@ -177,45 +177,58 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
   /// pullFromDesktop() is called on EVERY cycle regardless of prior failure state.
+  /// When already disconnected, skip the pull to avoid 10s blocking timeout
+  /// and just refresh the local dashboard.
   Future<void> _syncAndRefresh() async {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
     if (sync == null || dashboard == null) return;
     var syncOk = false;
-    try {
-      await sync.pullFromDesktop();
-      syncOk = true;
-      // Flush queued timer deltas after successful pull
-      if (_pendingTimerDeltas.isNotEmpty) {
-        final queued = List<Map<String, dynamic>>.from(_pendingTimerDeltas);
-        _pendingTimerDeltas.clear();
-        try {
-          await sync.pushToDesktop(queued);
-          debugPrint('[Sync] Flushed ${queued.length} queued timer delta(s)');
-        } catch (e) {
-          debugPrint('[Sync] Queued timer push failed: $e — re-queueing');
-          _pendingTimerDeltas.addAll(queued);
+
+    // If already disconnected, skip pull to avoid blocking 10s TCP timeout.
+    // Just refresh the local dashboard and retry pull on next cycle.
+    final alreadyOffline =
+        dashboard.connectionState.value == SyncConnectionState.disconnected;
+
+    if (!alreadyOffline) {
+      try {
+        await sync.pullFromDesktop();
+        syncOk = true;
+        // Flush queued timer deltas after successful pull
+        if (_pendingTimerDeltas.isNotEmpty) {
+          final queued = List<Map<String, dynamic>>.from(_pendingTimerDeltas);
+          _pendingTimerDeltas.clear();
+          try {
+            await sync.pushToDesktop(queued);
+            debugPrint('[Sync] Flushed ${queued.length} queued timer delta(s)');
+          } catch (e) {
+            debugPrint('[Sync] Queued timer push failed: $e — re-queueing');
+            _pendingTimerDeltas.addAll(queued);
+          }
+        }
+      } catch (e) {
+        debugPrint('[Sync] Pull failed: $e');
+        // Surface pull failure to user via snackbar (AC4)
+        final messenger = _scaffoldMessengerKey.currentState;
+        if (messenger != null) {
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Sync failed — will retry on next cycle'),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          });
+        } else {
+          debugPrint('[Sync] Pull failed but ScaffoldMessenger unavailable '
+              'for snackbar notification');
         }
       }
-    } catch (e) {
-      debugPrint('[Sync] Pull failed: $e');
-      // Surface pull failure to user via snackbar (AC4)
-      final messenger = _scaffoldMessengerKey.currentState;
-      if (messenger != null) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Sync failed — will retry on next cycle'),
-              duration: Duration(seconds: 4),
-            ),
-          );
-        });
-      } else {
-        debugPrint('[Sync] Pull failed but ScaffoldMessenger unavailable '
-            'for snackbar notification');
-      }
+    } else {
+      debugPrint('[Sync] Skipping pull — already offline');
     }
+
     await dashboard.refresh();
     // Override the indicator to reflect actual sync status, not just local DB read
     if (!syncOk) {
