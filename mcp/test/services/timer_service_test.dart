@@ -92,6 +92,40 @@ void main() {
         throwsA(isA<NoTimerRunningException>()),
       );
     });
+
+    test('handles orphan timer with null taskId (AVO-101)', () async {
+      // Simulate an orphan timer loaded from DB with null taskId
+      // (orphaned timer from schema migration or DB corruption)
+      final timer = TimerDocument(
+        id: activeTimerId,
+        clock: clock,
+      );
+      timer.taskId = null;
+      timer.taskTitle = '';
+      timer.startedAtMs = DateTime.now().millisecondsSinceEpoch;
+      timer.isRunning = true;
+      timer.pausedAtMs = null;
+      timer.accumulatedMs = 0;
+      timer.category = 'Working';
+      await db
+          .into(db.timerEntries)
+          .insertOnConflictUpdate(timer.toDriftCompanion());
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Should not throw — stop() handles null taskId gracefully
+      final result = await service.stop();
+
+      expect(result.taskId, equals(''));
+      expect(result.worklogId, isNotEmpty);
+
+      // Verify worklog was created with empty taskId
+      final worklogs = await db.select(db.worklogEntries).get();
+      expect(worklogs, hasLength(1));
+      final wl = WorklogDocument.fromDrift(worklog: worklogs.first, clock: clock);
+      expect(wl.taskId, equals(''));
+      expect(wl.category, equals('Working'));
+    });
   });
 
   group('_resolveOrCreateTask skips deleted tasks', () {

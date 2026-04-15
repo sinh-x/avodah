@@ -134,9 +134,9 @@ class TimerService {
     if (timer == null) throw NoTimerRunningException();
 
     // Capture values before stop() clears them
-    final taskId = timer.taskId!;
+    final taskId = timer.taskId ?? '';
     final taskTitle = timer.taskTitle;
-    final startedAt = timer.startedAt!;
+    final startedAt = timer.startedAt ?? DateTime.now();
     final note = timer.note;
     final elapsed = timer.elapsed;
     final category = timer.category;
