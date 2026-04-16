@@ -4,11 +4,13 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
+import 'screens/quick_capture_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
@@ -57,6 +59,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final List<Map<String, dynamic>> _pendingTimerDeltas = [];
+
+  // Share intent handling
+  StreamSubscription<List<SharedMediaFile>>? _shareIntentSubscription;
+  SharedMediaFile? _pendingShareIntent;
+  bool _shareIntentHandled = false;
 
   @override
   void initState() {
@@ -168,11 +175,73 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Initial pull + dashboard render
     await _syncAndRefresh();
 
+    // Listen for share intents while app is running
+    _shareIntentSubscription = ReceiveSharingIntent.instance
+        .getMediaStream()
+        .listen(_handleShareIntent);
+
+    // Handle share intent that started the app (if any)
+    if (!_shareIntentHandled) {
+      _checkInitialShareIntent();
+    }
+
     // Periodic sync + refresh every 5 seconds while app is running
     _syncTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _syncAndRefresh(),
     );
+  }
+
+  /// Check for share intent that started the app (cold start).
+  Future<void> _checkInitialShareIntent() async {
+    try {
+      final initialMedia =
+          await ReceiveSharingIntent.instance.getInitialMedia();
+      if (initialMedia.isNotEmpty && !_shareIntentHandled) {
+        _handleShareIntent(initialMedia);
+      }
+    } catch (e) {
+      debugPrint('[ShareIntent] Failed to get initial media: $e');
+    }
+  }
+
+  /// Handle incoming share intent — show QuickCaptureScreen.
+  void _handleShareIntent(List<SharedMediaFile> mediaFiles) {
+    if (_shareIntentHandled || mediaFiles.isEmpty) return;
+
+    final file = mediaFiles.first;
+    // For text/url types, content is in path; for others (image/video), path is file path
+    final isTextOrUrl =
+        file.type == SharedMediaType.text || file.type == SharedMediaType.url;
+    final sharedText = isTextOrUrl ? file.path : file.path;
+    final isUrl = file.type == SharedMediaType.url;
+
+    if (sharedText.isEmpty) return;
+
+    _shareIntentHandled = true;
+
+    // Clear the intent so it doesn't reprocess on next app start
+    ReceiveSharingIntent.instance.reset();
+
+    // Navigate to QuickCaptureScreen
+    final nav = _navigatorKey.currentState;
+    final apiClient = _apiClient;
+    if (nav != null && apiClient != null) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => QuickCaptureScreen(
+            sharedText: sharedText,
+            sharedUrl: isUrl ? sharedText : null,
+            apiClient: apiClient,
+          ),
+        ),
+      );
+    } else {
+      // Store for later if navigation not ready yet
+      setState(() {
+        _pendingShareIntent = file;
+      });
+    }
   }
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
@@ -408,6 +477,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _shareIntentSubscription?.cancel();
     _syncTimer?.cancel();
     _focusProvider?.dispose();
     _boardProvider?.dispose();
