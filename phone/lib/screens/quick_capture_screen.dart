@@ -29,7 +29,7 @@ class QuickCaptureScreen extends StatefulWidget {
 }
 
 class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
-  static const _categories = ['learning', 'personal', 'work', 'video', 'article'];
+  static const _categories = ['learning', 'personal', 'work', 'video', 'article', 'code'];
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
@@ -214,7 +214,8 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
 
             // Category
             DropdownButtonFormField<String>(
-              value: _category,
+              key: ValueKey(_category),
+              initialValue: _category,
               decoration: const InputDecoration(
                 labelText: 'Category',
                 border: OutlineInputBorder(),

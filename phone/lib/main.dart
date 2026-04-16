@@ -66,7 +66,6 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
   // Share intent handling
   StreamSubscription<List<SharedMediaFile>>? _shareIntentSubscription;
-  SharedMediaFile? _pendingShareIntent;
   bool _shareIntentHandled = false;
 
   @override
@@ -243,7 +242,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final nav = _navigatorKey.currentState;
     final captureSync = _captureSyncService;
     if (nav != null && captureSync != null) {
-      nav.push(
+      nav.push<bool>(
         MaterialPageRoute(
           builder: (_) => QuickCaptureScreen(
             sharedText: sharedText,
@@ -251,12 +250,13 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
             captureSyncService: captureSync,
           ),
         ),
-      );
-    } else {
-      // Store for later if navigation not ready yet
-      setState(() {
-        _pendingShareIntent = file;
+      ).then((_) {
+        // Reset so subsequent shares in the same session are handled
+        _shareIntentHandled = false;
       });
+    } else {
+      // Navigation not ready — defer until init completes
+      debugPrint('[ShareIntent] Navigation not ready, deferring share intent');
     }
   }
 

@@ -22,9 +22,15 @@ class TitleExtractionService {
   /// Returns the title text on success, null on timeout or error.
   /// Errors are logged but not thrown — this is best-effort.
   Future<String?> fetchTitle(String url) async {
+    // Only fetch http/https URLs — reject file://, ftp://, etc.
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+
     try {
       final response = await _client
-          .get(Uri.parse(url))
+          .get(uri)
           .timeout(_timeout, onTimeout: () {
         throw TimeoutException('Title fetch timed out');
       });
@@ -59,13 +65,27 @@ class TitleExtractionService {
   ///
   /// Trims whitespace and decodes common HTML entities.
   String _cleanTitle(String raw) {
-    return raw
+    var result = raw
         .replaceAll(RegExp(r'\s+'), ' ')
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'")
-        .trim();
+        .replaceAll('&apos;', "'");
+
+    // Decode decimal numeric entities: &#NNN;
+    result = result.replaceAllMapped(
+      RegExp(r'&#(\d+);'),
+      (m) => String.fromCharCode(int.parse(m.group(1)!)),
+    );
+
+    // Decode hex numeric entities: &#xHHH;
+    result = result.replaceAllMapped(
+      RegExp(r'&#x([0-9a-fA-F]+);'),
+      (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 16)),
+    );
+
+    return result.trim();
   }
 }
