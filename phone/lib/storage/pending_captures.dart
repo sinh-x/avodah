@@ -12,6 +12,8 @@ class PendingCaptures extends Table {
   TextColumn get category =>
       text().withDefault(const Constant('learning'))();
   TextColumn get sharedText => text().nullable()();
+  TextColumn get project =>
+      text().withDefault(const Constant('learning-management'))();
   IntColumn get createdAt => integer()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
 }

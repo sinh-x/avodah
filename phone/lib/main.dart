@@ -241,13 +241,15 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Navigate to QuickCaptureScreen
     final nav = _navigatorKey.currentState;
     final captureSync = _captureSyncService;
-    if (nav != null && captureSync != null) {
+    final apiClient = _apiClient;
+    if (nav != null && captureSync != null && apiClient != null) {
       nav.push<bool>(
         MaterialPageRoute(
           builder: (_) => QuickCaptureScreen(
             sharedText: sharedText,
             sharedUrl: isUrl ? sharedText : null,
             captureSyncService: captureSync,
+            apiClient: apiClient,
           ),
         ),
       ).then((_) {

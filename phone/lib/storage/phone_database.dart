@@ -13,5 +13,18 @@ class PhoneDatabase extends _$PhoneDatabase {
   PhoneDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onUpgrade: (m, from, to) async {
+        if (from < 2) {
+          try {
+            await m.addColumn(pendingCaptures, pendingCaptures.project);
+          } on Exception catch (_) {}
+        }
+      },
+    );
+  }
 }

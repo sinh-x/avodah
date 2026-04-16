@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/ticket.dart';
+import '../services/agent_api_client.dart';
 import '../services/capture_sync_service.dart';
 import '../services/title_extraction_service.dart';
 import '../utils/category_detection.dart';
@@ -16,12 +18,14 @@ class QuickCaptureScreen extends StatefulWidget {
   final String sharedText;
   final String? sharedUrl;
   final CaptureSyncService captureSyncService;
+  final AgentApiClient apiClient;
 
   const QuickCaptureScreen({
     super.key,
     required this.sharedText,
     this.sharedUrl,
     required this.captureSyncService,
+    required this.apiClient,
   });
 
   @override
@@ -37,6 +41,9 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   late final TextEditingController _notesController;
 
   String _category = 'learning';
+  String _project = 'learning-management';
+  List<TicketProject> _projects = [];
+  bool _loadingProjects = false;
   bool _submitting = false;
   bool _fetchingTitle = false;
   Timer? _debounceTimer;
@@ -47,6 +54,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   void initState() {
     super.initState();
     _titleService = TitleExtractionService();
+    _loadProjects();
 
     // Pre-fill URL if shared text is a URL, otherwise use as title.
     // extractUrl handles both scheme URLs and scheme-less (e.g., news.google.com/...)
@@ -70,6 +78,27 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       final detected = detectCategoryFromUrl(prefillUrl);
       if (detected != 'learning') {
         _category = detected;
+      }
+    }
+  }
+
+  Future<void> _loadProjects() async {
+    setState(() => _loadingProjects = true);
+    try {
+      final projects = await widget.apiClient.getProjects();
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _loadingProjects = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          // Keep default LM only on error
+          _projects = [];
+          _loadingProjects = false;
+        });
       }
     }
   }
@@ -136,6 +165,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
         notes: notes.isNotEmpty ? notes : null,
         category: _category,
         sharedText: widget.sharedText,
+        project: _project,
       );
 
       // Trigger immediate sync to PA (best-effort — doesn't block UI)
@@ -197,6 +227,24 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               autofocus: _titleController.text.isEmpty,
               textInputAction: TextInputAction.next,
             ),
+            const SizedBox(height: 16),
+
+            // Project
+            if (_loadingProjects)
+              const LinearProgressIndicator()
+            else
+              DropdownButtonFormField<String>(
+                key: ValueKey(_project),
+                value: _project,
+                decoration: const InputDecoration(
+                  labelText: 'Project',
+                  border: OutlineInputBorder(),
+                ),
+                items: _projects.isEmpty
+                    ? [const DropdownMenuItem(value: 'learning-management', child: Text('learning-management'))]
+                    : _projects.map((p) => DropdownMenuItem(value: p.key, child: Text(p.key))).toList(),
+                onChanged: (v) => setState(() => _project = v ?? 'learning-management'),
+              ),
             const SizedBox(height: 16),
 
             // URL

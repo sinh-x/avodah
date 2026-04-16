@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/create_idea_payload.dart';
 import '../storage/phone_database.dart';
 import 'agent_api_client.dart';
 
@@ -47,16 +46,25 @@ class CaptureSyncService {
 
   /// Syncs a single capture to the PA system and marks it as synced.
   Future<void> _syncCapture(PendingCapture capture) async {
-    final payload = CreateIdeaPayload(
-      title: capture.title,
-      category: capture.category,
-      notes: _buildNotes(capture),
-      tags: capture.url != null && capture.url!.isNotEmpty
-          ? ['shared-link']
-          : [],
-    );
+    final data = <String, dynamic>{
+      'project': capture.project,
+      'title': capture.title,
+      'type': 'idea',
+      'status': 'idea',
+      'priority': 'normal',
+      'estimate': 'XS',
+      'summary': _buildSummary(capture),
+      'doc_refs': [
+        if (capture.url != null && capture.url!.isNotEmpty)
+          {'type': 'url', 'path': capture.url},
+      ],
+      'tags': [
+        capture.category,
+        if (capture.url != null && capture.url!.isNotEmpty) 'shared-link',
+      ],
+    };
 
-    await apiClient.createIdea(payload);
+    await apiClient.createTicket(data);
 
     // Mark as synced
     await (db.update(db.pendingCaptures)
@@ -66,10 +74,10 @@ class CaptureSyncService {
     debugPrint('[CaptureSync] Synced capture ${capture.id}: "${capture.title}"');
   }
 
-  /// Builds notes field from URL + notes content.
+  /// Builds summary field from URL + notes content.
   ///
-  /// If URL is present and distinct from notes, prepends it.
-  String? _buildNotes(PendingCapture capture) {
+  /// If URL is present, prepended to notes.
+  String? _buildSummary(PendingCapture capture) {
     final parts = <String>[];
 
     if (capture.url != null &&
@@ -96,6 +104,7 @@ class CaptureSyncService {
     String? notes,
     String category = 'learning',
     String? sharedText,
+    String project = 'learning-management',
   }) async {
     final id = await db.into(db.pendingCaptures).insert(
           PendingCapturesCompanion.insert(
@@ -104,6 +113,7 @@ class CaptureSyncService {
             notes: Value(notes),
             category: Value(category),
             sharedText: Value(sharedText),
+            project: Value(project),
             createdAt: DateTime.now().millisecondsSinceEpoch,
             synced: const Value(false),
           ),

@@ -72,6 +72,18 @@ class $PendingCapturesTable extends PendingCaptures
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _projectMeta = const VerificationMeta(
+    'project',
+  );
+  @override
+  late final GeneratedColumn<String> project = GeneratedColumn<String>(
+    'project',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('learning-management'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -104,6 +116,7 @@ class $PendingCapturesTable extends PendingCaptures
     notes,
     category,
     sharedText,
+    project,
     createdAt,
     synced,
   ];
@@ -154,6 +167,12 @@ class $PendingCapturesTable extends PendingCaptures
         sharedText.isAcceptableOrUnknown(data['shared_text']!, _sharedTextMeta),
       );
     }
+    if (data.containsKey('project')) {
+      context.handle(
+        _projectMeta,
+        project.isAcceptableOrUnknown(data['project']!, _projectMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -201,6 +220,10 @@ class $PendingCapturesTable extends PendingCaptures
         DriftSqlType.string,
         data['${effectivePrefix}shared_text'],
       ),
+      project: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -225,6 +248,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
   final String? notes;
   final String category;
   final String? sharedText;
+  final String project;
   final int createdAt;
   final bool synced;
   const PendingCapture({
@@ -234,6 +258,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
     this.notes,
     required this.category,
     this.sharedText,
+    required this.project,
     required this.createdAt,
     required this.synced,
   });
@@ -252,6 +277,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
     if (!nullToAbsent || sharedText != null) {
       map['shared_text'] = Variable<String>(sharedText);
     }
+    map['project'] = Variable<String>(project);
     map['created_at'] = Variable<int>(createdAt);
     map['synced'] = Variable<bool>(synced);
     return map;
@@ -269,6 +295,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
       sharedText: sharedText == null && nullToAbsent
           ? const Value.absent()
           : Value(sharedText),
+      project: Value(project),
       createdAt: Value(createdAt),
       synced: Value(synced),
     );
@@ -286,6 +313,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
       notes: serializer.fromJson<String?>(json['notes']),
       category: serializer.fromJson<String>(json['category']),
       sharedText: serializer.fromJson<String?>(json['sharedText']),
+      project: serializer.fromJson<String>(json['project']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       synced: serializer.fromJson<bool>(json['synced']),
     );
@@ -300,6 +328,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
       'notes': serializer.toJson<String?>(notes),
       'category': serializer.toJson<String>(category),
       'sharedText': serializer.toJson<String?>(sharedText),
+      'project': serializer.toJson<String>(project),
       'createdAt': serializer.toJson<int>(createdAt),
       'synced': serializer.toJson<bool>(synced),
     };
@@ -312,6 +341,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
     Value<String?> notes = const Value.absent(),
     String? category,
     Value<String?> sharedText = const Value.absent(),
+    String? project,
     int? createdAt,
     bool? synced,
   }) => PendingCapture(
@@ -321,6 +351,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
     notes: notes.present ? notes.value : this.notes,
     category: category ?? this.category,
     sharedText: sharedText.present ? sharedText.value : this.sharedText,
+    project: project ?? this.project,
     createdAt: createdAt ?? this.createdAt,
     synced: synced ?? this.synced,
   );
@@ -334,6 +365,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
       sharedText: data.sharedText.present
           ? data.sharedText.value
           : this.sharedText,
+      project: data.project.present ? data.project.value : this.project,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       synced: data.synced.present ? data.synced.value : this.synced,
     );
@@ -348,6 +380,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
           ..write('notes: $notes, ')
           ..write('category: $category, ')
           ..write('sharedText: $sharedText, ')
+          ..write('project: $project, ')
           ..write('createdAt: $createdAt, ')
           ..write('synced: $synced')
           ..write(')'))
@@ -362,6 +395,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
     notes,
     category,
     sharedText,
+    project,
     createdAt,
     synced,
   );
@@ -375,6 +409,7 @@ class PendingCapture extends DataClass implements Insertable<PendingCapture> {
           other.notes == this.notes &&
           other.category == this.category &&
           other.sharedText == this.sharedText &&
+          other.project == this.project &&
           other.createdAt == this.createdAt &&
           other.synced == this.synced);
 }
@@ -386,6 +421,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
   final Value<String?> notes;
   final Value<String> category;
   final Value<String?> sharedText;
+  final Value<String> project;
   final Value<int> createdAt;
   final Value<bool> synced;
   const PendingCapturesCompanion({
@@ -395,6 +431,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
     this.notes = const Value.absent(),
     this.category = const Value.absent(),
     this.sharedText = const Value.absent(),
+    this.project = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.synced = const Value.absent(),
   });
@@ -405,6 +442,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
     this.notes = const Value.absent(),
     this.category = const Value.absent(),
     this.sharedText = const Value.absent(),
+    this.project = const Value.absent(),
     required int createdAt,
     this.synced = const Value.absent(),
   }) : title = Value(title),
@@ -416,6 +454,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
     Expression<String>? notes,
     Expression<String>? category,
     Expression<String>? sharedText,
+    Expression<String>? project,
     Expression<int>? createdAt,
     Expression<bool>? synced,
   }) {
@@ -426,6 +465,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
       if (notes != null) 'notes': notes,
       if (category != null) 'category': category,
       if (sharedText != null) 'shared_text': sharedText,
+      if (project != null) 'project': project,
       if (createdAt != null) 'created_at': createdAt,
       if (synced != null) 'synced': synced,
     });
@@ -438,6 +478,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
     Value<String?>? notes,
     Value<String>? category,
     Value<String?>? sharedText,
+    Value<String>? project,
     Value<int>? createdAt,
     Value<bool>? synced,
   }) {
@@ -448,6 +489,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
       notes: notes ?? this.notes,
       category: category ?? this.category,
       sharedText: sharedText ?? this.sharedText,
+      project: project ?? this.project,
       createdAt: createdAt ?? this.createdAt,
       synced: synced ?? this.synced,
     );
@@ -474,6 +516,9 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
     if (sharedText.present) {
       map['shared_text'] = Variable<String>(sharedText.value);
     }
+    if (project.present) {
+      map['project'] = Variable<String>(project.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -492,6 +537,7 @@ class PendingCapturesCompanion extends UpdateCompanion<PendingCapture> {
           ..write('notes: $notes, ')
           ..write('category: $category, ')
           ..write('sharedText: $sharedText, ')
+          ..write('project: $project, ')
           ..write('createdAt: $createdAt, ')
           ..write('synced: $synced')
           ..write(')'))
@@ -520,6 +566,7 @@ typedef $$PendingCapturesTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<String> category,
       Value<String?> sharedText,
+      Value<String> project,
       required int createdAt,
       Value<bool> synced,
     });
@@ -531,6 +578,7 @@ typedef $$PendingCapturesTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<String> category,
       Value<String?> sharedText,
+      Value<String> project,
       Value<int> createdAt,
       Value<bool> synced,
     });
@@ -571,6 +619,11 @@ class $$PendingCapturesTableFilterComposer
 
   ColumnFilters<String> get sharedText => $composableBuilder(
     column: $table.sharedText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get project => $composableBuilder(
+    column: $table.project,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -624,6 +677,11 @@ class $$PendingCapturesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get project => $composableBuilder(
+    column: $table.project,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -663,6 +721,9 @@ class $$PendingCapturesTableAnnotationComposer
     column: $table.sharedText,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get project =>
+      $composableBuilder(column: $table.project, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -714,6 +775,7 @@ class $$PendingCapturesTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String> category = const Value.absent(),
                 Value<String?> sharedText = const Value.absent(),
+                Value<String> project = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
               }) => PendingCapturesCompanion(
@@ -723,6 +785,7 @@ class $$PendingCapturesTableTableManager
                 notes: notes,
                 category: category,
                 sharedText: sharedText,
+                project: project,
                 createdAt: createdAt,
                 synced: synced,
               ),
@@ -734,6 +797,7 @@ class $$PendingCapturesTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String> category = const Value.absent(),
                 Value<String?> sharedText = const Value.absent(),
+                Value<String> project = const Value.absent(),
                 required int createdAt,
                 Value<bool> synced = const Value.absent(),
               }) => PendingCapturesCompanion.insert(
@@ -743,6 +807,7 @@ class $$PendingCapturesTableTableManager
                 notes: notes,
                 category: category,
                 sharedText: sharedText,
+                project: project,
                 createdAt: createdAt,
                 synced: synced,
               ),
