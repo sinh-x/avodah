@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/capture_sync_service.dart';
+import '../services/title_extraction_service.dart';
+import '../utils/url_utils.dart';
 
 /// Minimal capture form shown when Android share intent is received.
 ///
@@ -33,12 +37,19 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
 
   String _category = 'learning';
   bool _submitting = false;
+  bool _fetchingTitle = false;
+  Timer? _debounceTimer;
+
+  late final TitleExtractionService _titleService;
 
   @override
   void initState() {
     super.initState();
+    _titleService = TitleExtractionService();
+
     // Pre-fill URL if shared text is a URL, otherwise use as title
-    final isUrl = _looksLikeUrl(widget.sharedText);
+    final sharedUrl = extractUrl(widget.sharedText);
+    final isUrl = sharedUrl != null;
     _titleController = TextEditingController(
       text: isUrl ? '' : widget.sharedText,
     );
@@ -48,15 +59,45 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     _notesController = TextEditingController(
       text: isUrl ? widget.sharedText : '',
     );
+
+    // Trigger title extraction if URL is pre-filled
+    if (isUrl) {
+      _fetchTitleForUrl(widget.sharedUrl ?? widget.sharedText);
+    }
   }
 
-  bool _looksLikeUrl(String text) {
-    final trimmed = text.trim();
-    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  Future<void> _fetchTitleForUrl(String url) async {
+    if (url.isEmpty) return;
+
+    setState(() => _fetchingTitle = true);
+
+    final title = await _titleService.fetchTitle(url);
+
+    if (mounted && title != null) {
+      // Only pre-fill if title field is still empty (user hasn't edited it)
+      if (_titleController.text.isEmpty) {
+        _titleController.text = title;
+      }
+    }
+
+    if (mounted) {
+      setState(() => _fetchingTitle = false);
+    }
+  }
+
+  void _onUrlChanged(String value) {
+    // Debounce URL changes to avoid excessive fetches
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (isUrl(value)) {
+        _fetchTitleForUrl(value);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _titleController.dispose();
     _urlController.dispose();
     _notesController.dispose();
@@ -123,10 +164,20 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
             // Title
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Title',
                 hintText: 'Auto-filled from shared content',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: _fetchingTitle
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
               autofocus: _titleController.text.isEmpty,
               textInputAction: TextInputAction.next,
@@ -143,6 +194,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               ),
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.next,
+              onChanged: _onUrlChanged,
             ),
             const SizedBox(height: 16),
 
