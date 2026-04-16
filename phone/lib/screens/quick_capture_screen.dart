@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/capture_sync_service.dart';
 import '../services/title_extraction_service.dart';
+import '../utils/category_detection.dart';
 import '../utils/url_utils.dart';
 
 /// Minimal capture form shown when Android share intent is received.
@@ -63,6 +64,12 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     // Trigger title extraction if URL is pre-filled
     if (isUrl) {
       _fetchTitleForUrl(widget.sharedUrl ?? widget.sharedText);
+      // Auto-detect category from domain
+      final prefillUrl = widget.sharedUrl ?? widget.sharedText;
+      final detected = detectCategoryFromUrl(prefillUrl);
+      if (detected != 'learning') {
+        _category = detected;
+      }
     }
   }
 
@@ -91,6 +98,13 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
       if (isUrl(value)) {
         _fetchTitleForUrl(value);
+        // Auto-detect category from domain (only override default 'learning')
+        if (_category == 'learning') {
+          final detected = detectCategoryFromUrl(value);
+          if (detected != 'learning') {
+            setState(() => _category = detected);
+          }
+        }
       }
     });
   }

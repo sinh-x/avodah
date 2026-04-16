@@ -337,6 +337,23 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       await sync.syncPendingCaptures();
     } catch (e) {
       debugPrint('[CaptureSync] Sync failed: $e');
+      // Surface capture sync failure to user via snackbar
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Capture sync failed: $e'),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _syncCaptures(),
+              ),
+            ),
+          );
+        });
+      }
     }
   }
 
@@ -604,6 +621,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                   onPushDeltas: _pushDeltas,
                   crdtSyncService: _crdtSyncService,
                   displaySettings: _displaySettings,
+                  captureSyncService: _captureSyncService,
                 ),
         );
       },
@@ -629,6 +647,7 @@ class _HomeShell extends StatefulWidget {
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
   final CrdtSyncService? crdtSyncService;
   final DisplaySettingsService? displaySettings;
+  final CaptureSyncService? captureSyncService;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -642,6 +661,7 @@ class _HomeShell extends StatefulWidget {
     this.onPushDeltas,
     this.crdtSyncService,
     this.displaySettings,
+    this.captureSyncService,
   });
 
   @override
@@ -650,23 +670,45 @@ class _HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<_HomeShell> {
   int _currentIndex = 0;
+  int _unsyncedCount = 0;
+  Timer? _badgeRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     widget.reviewProvider.addListener(_onUpdate);
     widget.boardProvider.addListener(_onUpdate);
+    _refreshUnsyncedCount();
+    // Periodically refresh badge count every 10 seconds
+    _badgeRefreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshUnsyncedCount(),
+    );
   }
 
   @override
   void dispose() {
     widget.reviewProvider.removeListener(_onUpdate);
     widget.boardProvider.removeListener(_onUpdate);
+    _badgeRefreshTimer?.cancel();
     super.dispose();
   }
 
   void _onUpdate() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _refreshUnsyncedCount() async {
+    final sync = widget.captureSyncService;
+    if (sync == null) return;
+    try {
+      final count = await sync.unsyncedCount();
+      if (mounted) {
+        setState(() => _unsyncedCount = count);
+      }
+    } catch (e) {
+      debugPrint('[HomeShell] Failed to get unsynced count: $e');
+    }
   }
 
   @override
@@ -821,9 +863,19 @@ class _HomeShellState extends State<_HomeShell> {
                 : const Icon(Icons.view_kanban),
             label: 'Kanban',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
+          NavigationDestination(
+            icon: _unsyncedCount > 0
+                ? Badge(
+                    label: Text('$_unsyncedCount'),
+                    child: const Icon(Icons.dashboard_outlined),
+                  )
+                : const Icon(Icons.dashboard_outlined),
+            selectedIcon: _unsyncedCount > 0
+                ? Badge(
+                    label: Text('$_unsyncedCount'),
+                    child: const Icon(Icons.dashboard),
+                  )
+                : const Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
           NavigationDestination(
