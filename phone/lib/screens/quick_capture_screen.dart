@@ -59,7 +59,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       text: widget.sharedUrl ?? extractedUrl ?? '',
     );
     _notesController = TextEditingController(
-      text: hasUrl ? widget.sharedText : '',
+      text: widget.sharedText,
     );
 
     // Trigger title extraction if URL is pre-filled
