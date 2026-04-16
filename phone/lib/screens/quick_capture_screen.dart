@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
 
-import '../models/create_idea_payload.dart';
-import '../services/agent_api_client.dart';
+import '../services/capture_sync_service.dart';
 
 /// Minimal capture form shown when Android share intent is received.
 ///
 /// Pre-filled with shared text/URL. Fields: title, URL, notes, category.
-/// On submit: calls createIdea() and stores locally in pending_captures.
+/// On submit: saves to local Drift table (offline-first), then syncs to PA.
 /// Navigation: pops with true on success.
 class QuickCaptureScreen extends StatefulWidget {
   final String sharedText;
   final String? sharedUrl;
-  final AgentApiClient apiClient;
+  final CaptureSyncService captureSyncService;
 
   const QuickCaptureScreen({
     super.key,
     required this.sharedText,
     this.sharedUrl,
-    required this.apiClient,
+    required this.captureSyncService,
   });
 
   @override
@@ -74,15 +73,19 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     setState(() => _submitting = true);
 
     try {
-      final payload = CreateIdeaPayload(
+      // Save to local Drift table (offline-first)
+      await widget.captureSyncService.saveCapture(
         title: title.isEmpty ? (url.isEmpty ? 'Quick capture' : url) : title,
+        url: url.isNotEmpty ? url : null,
+        notes: notes.isNotEmpty ? notes : null,
         category: _category,
-        notes: notes.isEmpty ? null : notes,
-        tags: url.isNotEmpty ? ['shared-link'] : [],
+        sharedText: widget.sharedText,
       );
 
-      // Include URL in notes if separate URL field has content
-      await widget.apiClient.createIdea(payload);
+      // Trigger immediate sync to PA (best-effort — doesn't block UI)
+      widget.captureSyncService.syncPendingCaptures().catchError((e) {
+        debugPrint('[QuickCapture] Sync error: $e');
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

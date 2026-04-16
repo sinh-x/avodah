@@ -16,6 +16,7 @@ import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
 import 'services/board_provider.dart';
+import 'services/capture_sync_service.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/crypto_sync_service.dart';
 import 'services/deployment_provider.dart';
@@ -25,6 +26,7 @@ import 'services/local_dashboard_provider.dart';
 import 'services/local_write_service.dart';
 import 'services/review_provider.dart';
 import 'services/team_browser_provider.dart';
+import 'storage/phone_database.dart';
 import 'settings/settings_screen.dart';
 import 'storage/database.dart';
 import 'widgets/connection_indicator.dart';
@@ -43,6 +45,7 @@ class AvodahViewerApp extends StatefulWidget {
 class _AvodahViewerAppState extends State<AvodahViewerApp>
     with WidgetsBindingObserver {
   AppDatabase? _db;
+  PhoneDatabase? _phoneDb;
   LocalDashboardProvider? _dashboardProvider;
   LocalWriteService? _writeService;
   CrdtSyncService? _crdtSyncService;
@@ -54,6 +57,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   BoardProvider? _boardProvider;
   FocusProvider? _focusProvider;
   DisplaySettingsService? _displaySettings;
+  CaptureSyncService? _captureSyncService;
   Timer? _syncTimer;
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -91,6 +95,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   Future<void> _initAppInner() async {
     // Open local database
     final db = await openPhoneDatabase();
+    final phoneDb = await openPhoneLocalDatabase();
 
     // Node ID + HLC clock
     final nodeId = await CrdtSyncService.getOrCreateNodeId();
@@ -136,6 +141,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
       ..pairingToken = cryptoSyncService?.pairingToken
       ..nodeId = nodeId;
+    final captureSyncService = CaptureSyncService(
+      db: phoneDb,
+      apiClient: apiClient,
+    );
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -159,11 +168,13 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     setState(() {
       _db = db;
+      _phoneDb = phoneDb;
       _dashboardProvider = dashboardProvider;
       _writeService = writeService;
       _crdtSyncService = crdtSyncService;
       _cryptoSyncService = cryptoSyncService;
       _apiClient = apiClient;
+      _captureSyncService = captureSyncService;
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
       _teamBrowserProvider = teamBrowserProvider;
@@ -174,6 +185,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     // Initial pull + dashboard render
     await _syncAndRefresh();
+    // Sync pending captures to PA (offline queue — P2)
+    await _syncCaptures();
 
     // Listen for share intents while app is running
     _shareIntentSubscription = ReceiveSharingIntent.instance
@@ -188,7 +201,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Periodic sync + refresh every 5 seconds while app is running
     _syncTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) => _syncAndRefresh(),
+      (_) {
+        _syncAndRefresh();
+        _syncCaptures();
+      },
     );
   }
 
@@ -225,14 +241,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     // Navigate to QuickCaptureScreen
     final nav = _navigatorKey.currentState;
-    final apiClient = _apiClient;
-    if (nav != null && apiClient != null) {
+    final captureSync = _captureSyncService;
+    if (nav != null && captureSync != null) {
       nav.push(
         MaterialPageRoute(
           builder: (_) => QuickCaptureScreen(
             sharedText: sharedText,
             sharedUrl: isUrl ? sharedText : null,
-            apiClient: apiClient,
+            captureSyncService: captureSync,
           ),
         ),
       );
@@ -302,6 +318,25 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Override the indicator to reflect actual sync status, not just local DB read
     if (!syncOk) {
       dashboard.connectionState.value = SyncConnectionState.disconnected;
+    }
+  }
+
+  /// Syncs pending captures from local Drift storage to PA via API.
+  Future<void> _syncCaptures() async {
+    final sync = _captureSyncService;
+    if (sync == null) return;
+
+    // Only sync if connected (avoids hammering API when offline)
+    final dashboard = _dashboardProvider;
+    if (dashboard != null &&
+        dashboard.connectionState.value == SyncConnectionState.disconnected) {
+      return;
+    }
+
+    try {
+      await sync.syncPendingCaptures();
+    } catch (e) {
+      debugPrint('[CaptureSync] Sync failed: $e');
     }
   }
 
@@ -490,6 +525,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     _dashboardProvider?.dispose();
     _displaySettings?.dispose();
     _db?.close();
+    _phoneDb?.close();
     super.dispose();
   }
 

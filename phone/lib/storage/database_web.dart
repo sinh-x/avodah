@@ -1,6 +1,8 @@
 import 'package:drift/wasm.dart';
 import 'package:avodah_core/avodah_core.dart';
 
+import 'phone_database.dart';
+
 /// Opens the Avodah database on web platforms using WasmDatabase.
 ///
 /// Uses IndexedDB via OPFS (Origin Private File System) for storage.
@@ -20,4 +22,12 @@ Future<AppDatabase> openPhoneDatabase() async {
 
   final executor = result.resolvedExecutor;
   return AppDatabase(executor);
+}
+
+/// Phone-local database not supported on web.
+/// Web doesn't support Android share intents, so this is never needed.
+Future<PhoneDatabase> openPhoneLocalDatabase() async {
+  throw UnsupportedError(
+    'Phone-local database is not supported on web.',
+  );
 }
