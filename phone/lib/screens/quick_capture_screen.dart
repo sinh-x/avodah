@@ -48,24 +48,25 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     super.initState();
     _titleService = TitleExtractionService();
 
-    // Pre-fill URL if shared text is a URL, otherwise use as title
-    final sharedUrl = extractUrl(widget.sharedText);
-    final isUrl = sharedUrl != null;
+    // Pre-fill URL if shared text is a URL, otherwise use as title.
+    // extractUrl handles both scheme URLs and scheme-less (e.g., news.google.com/...)
+    final extractedUrl = extractUrl(widget.sharedText);
+    final hasUrl = extractedUrl != null;
     _titleController = TextEditingController(
-      text: isUrl ? '' : widget.sharedText,
+      text: hasUrl ? '' : widget.sharedText,
     );
     _urlController = TextEditingController(
-      text: widget.sharedUrl ?? (isUrl ? widget.sharedText : ''),
+      text: widget.sharedUrl ?? extractedUrl ?? '',
     );
     _notesController = TextEditingController(
-      text: isUrl ? widget.sharedText : '',
+      text: hasUrl ? widget.sharedText : '',
     );
 
     // Trigger title extraction if URL is pre-filled
-    if (isUrl) {
-      _fetchTitleForUrl(widget.sharedUrl ?? widget.sharedText);
+    if (hasUrl) {
+      final prefillUrl = widget.sharedUrl ?? extractedUrl;
+      _fetchTitleForUrl(prefillUrl);
       // Auto-detect category from domain
-      final prefillUrl = widget.sharedUrl ?? widget.sharedText;
       final detected = detectCategoryFromUrl(prefillUrl);
       if (detected != 'learning') {
         _category = detected;
