@@ -4,16 +4,19 @@ import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
+import 'screens/quick_capture_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
 import 'services/board_provider.dart';
+import 'services/capture_sync_service.dart';
 import 'services/crdt_sync_service.dart';
 import 'services/crypto_sync_service.dart';
 import 'services/deployment_provider.dart';
@@ -23,6 +26,7 @@ import 'services/local_dashboard_provider.dart';
 import 'services/local_write_service.dart';
 import 'services/review_provider.dart';
 import 'services/team_browser_provider.dart';
+import 'storage/phone_database.dart';
 import 'settings/settings_screen.dart';
 import 'storage/database.dart';
 import 'widgets/connection_indicator.dart';
@@ -41,6 +45,7 @@ class AvodahViewerApp extends StatefulWidget {
 class _AvodahViewerAppState extends State<AvodahViewerApp>
     with WidgetsBindingObserver {
   AppDatabase? _db;
+  PhoneDatabase? _phoneDb;
   LocalDashboardProvider? _dashboardProvider;
   LocalWriteService? _writeService;
   CrdtSyncService? _crdtSyncService;
@@ -52,11 +57,16 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   BoardProvider? _boardProvider;
   FocusProvider? _focusProvider;
   DisplaySettingsService? _displaySettings;
+  CaptureSyncService? _captureSyncService;
   Timer? _syncTimer;
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final List<Map<String, dynamic>> _pendingTimerDeltas = [];
+
+  // Share intent handling
+  StreamSubscription<List<SharedMediaFile>>? _shareIntentSubscription;
+  bool _shareIntentHandled = false;
 
   @override
   void initState() {
@@ -84,6 +94,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   Future<void> _initAppInner() async {
     // Open local database
     final db = await openPhoneDatabase();
+    final phoneDb = await openPhoneLocalDatabase();
 
     // Node ID + HLC clock
     final nodeId = await CrdtSyncService.getOrCreateNodeId();
@@ -129,6 +140,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
       ..pairingToken = cryptoSyncService?.pairingToken
       ..nodeId = nodeId;
+    final captureSyncService = CaptureSyncService(
+      db: phoneDb,
+      apiClient: apiClient,
+    );
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -152,11 +167,13 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     setState(() {
       _db = db;
+      _phoneDb = phoneDb;
       _dashboardProvider = dashboardProvider;
       _writeService = writeService;
       _crdtSyncService = crdtSyncService;
       _cryptoSyncService = cryptoSyncService;
       _apiClient = apiClient;
+      _captureSyncService = captureSyncService;
       _reviewProvider = reviewProvider;
       _deploymentProvider = deploymentProvider;
       _teamBrowserProvider = teamBrowserProvider;
@@ -167,12 +184,82 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     // Initial pull + dashboard render
     await _syncAndRefresh();
+    // Sync pending captures to PA (offline queue — P2)
+    await _syncCaptures();
+
+    // Listen for share intents while app is running
+    _shareIntentSubscription = ReceiveSharingIntent.instance
+        .getMediaStream()
+        .listen(_handleShareIntent);
+
+    // Handle share intent that started the app (if any)
+    if (!_shareIntentHandled) {
+      _checkInitialShareIntent();
+    }
 
     // Periodic sync + refresh every 5 seconds while app is running
     _syncTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) => _syncAndRefresh(),
+      (_) {
+        _syncAndRefresh();
+        _syncCaptures();
+      },
     );
+  }
+
+  /// Check for share intent that started the app (cold start).
+  Future<void> _checkInitialShareIntent() async {
+    try {
+      final initialMedia =
+          await ReceiveSharingIntent.instance.getInitialMedia();
+      if (initialMedia.isNotEmpty && !_shareIntentHandled) {
+        _handleShareIntent(initialMedia);
+      }
+    } catch (e) {
+      debugPrint('[ShareIntent] Failed to get initial media: $e');
+    }
+  }
+
+  /// Handle incoming share intent — show QuickCaptureScreen.
+  void _handleShareIntent(List<SharedMediaFile> mediaFiles) {
+    if (_shareIntentHandled || mediaFiles.isEmpty) return;
+
+    final file = mediaFiles.first;
+    // For text/url types, content is in path; for others (image/video), path is file path
+    final isTextOrUrl =
+        file.type == SharedMediaType.text || file.type == SharedMediaType.url;
+    final sharedText = isTextOrUrl ? file.path : file.path;
+    final isUrl = file.type == SharedMediaType.url;
+
+    if (sharedText.isEmpty) return;
+
+    _shareIntentHandled = true;
+
+    // Clear the intent so it doesn't reprocess on next app start
+    ReceiveSharingIntent.instance.reset();
+
+    // Navigate to QuickCaptureScreen
+    final nav = _navigatorKey.currentState;
+    final captureSync = _captureSyncService;
+    final apiClient = _apiClient;
+    if (nav != null && captureSync != null && apiClient != null) {
+      nav.push<bool>(
+        MaterialPageRoute(
+          builder: (_) => QuickCaptureScreen(
+            sharedText: sharedText,
+            sharedUrl: isUrl ? sharedText : null,
+            captureSyncService: captureSync,
+            apiClient: apiClient,
+          ),
+        ),
+      ).then((_) {
+        // Reset so subsequent shares in the same session are handled
+        _shareIntentHandled = false;
+      });
+    } else {
+      // Navigation not ready — defer until init completes
+      debugPrint('[ShareIntent] Navigation not ready, deferring share intent');
+    }
   }
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
@@ -233,6 +320,42 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Override the indicator to reflect actual sync status, not just local DB read
     if (!syncOk) {
       dashboard.connectionState.value = SyncConnectionState.disconnected;
+    }
+  }
+
+  /// Syncs pending captures from local Drift storage to PA via API.
+  Future<void> _syncCaptures() async {
+    final sync = _captureSyncService;
+    if (sync == null) return;
+
+    // Only sync if connected (avoids hammering API when offline)
+    final dashboard = _dashboardProvider;
+    if (dashboard != null &&
+        dashboard.connectionState.value == SyncConnectionState.disconnected) {
+      return;
+    }
+
+    try {
+      await sync.syncPendingCaptures();
+    } catch (e) {
+      debugPrint('[CaptureSync] Sync failed: $e');
+      // Surface capture sync failure to user via snackbar
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Capture sync failed: $e'),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _syncCaptures(),
+              ),
+            ),
+          );
+        });
+      }
     }
   }
 
@@ -408,6 +531,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _shareIntentSubscription?.cancel();
     _syncTimer?.cancel();
     _focusProvider?.dispose();
     _boardProvider?.dispose();
@@ -420,6 +544,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     _dashboardProvider?.dispose();
     _displaySettings?.dispose();
     _db?.close();
+    _phoneDb?.close();
     super.dispose();
   }
 
@@ -498,6 +623,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                   onPushDeltas: _pushDeltas,
                   crdtSyncService: _crdtSyncService,
                   displaySettings: _displaySettings,
+                  captureSyncService: _captureSyncService,
                 ),
         );
       },
@@ -523,6 +649,7 @@ class _HomeShell extends StatefulWidget {
   final Future<void> Function(List<Map<String, dynamic>>)? onPushDeltas;
   final CrdtSyncService? crdtSyncService;
   final DisplaySettingsService? displaySettings;
+  final CaptureSyncService? captureSyncService;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -536,6 +663,7 @@ class _HomeShell extends StatefulWidget {
     this.onPushDeltas,
     this.crdtSyncService,
     this.displaySettings,
+    this.captureSyncService,
   });
 
   @override
@@ -544,23 +672,45 @@ class _HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<_HomeShell> {
   int _currentIndex = 0;
+  int _unsyncedCount = 0;
+  Timer? _badgeRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     widget.reviewProvider.addListener(_onUpdate);
     widget.boardProvider.addListener(_onUpdate);
+    _refreshUnsyncedCount();
+    // Periodically refresh badge count every 10 seconds
+    _badgeRefreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshUnsyncedCount(),
+    );
   }
 
   @override
   void dispose() {
     widget.reviewProvider.removeListener(_onUpdate);
     widget.boardProvider.removeListener(_onUpdate);
+    _badgeRefreshTimer?.cancel();
     super.dispose();
   }
 
   void _onUpdate() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _refreshUnsyncedCount() async {
+    final sync = widget.captureSyncService;
+    if (sync == null) return;
+    try {
+      final count = await sync.unsyncedCount();
+      if (mounted) {
+        setState(() => _unsyncedCount = count);
+      }
+    } catch (e) {
+      debugPrint('[HomeShell] Failed to get unsynced count: $e');
+    }
   }
 
   @override
@@ -715,9 +865,19 @@ class _HomeShellState extends State<_HomeShell> {
                 : const Icon(Icons.view_kanban),
             label: 'Kanban',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
+          NavigationDestination(
+            icon: _unsyncedCount > 0
+                ? Badge(
+                    label: Text('$_unsyncedCount'),
+                    child: const Icon(Icons.dashboard_outlined),
+                  )
+                : const Icon(Icons.dashboard_outlined),
+            selectedIcon: _unsyncedCount > 0
+                ? Badge(
+                    label: Text('$_unsyncedCount'),
+                    child: const Icon(Icons.dashboard),
+                  )
+                : const Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
           NavigationDestination(

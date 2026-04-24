@@ -32,6 +32,9 @@ dependencies:
   cryptography: ^2.7.0
   flutter_secure_storage: ^9.2.2
 
+  # Share intent receiver (for Android share-to-capture, P1)
+  receive_sharing_intent: ^1.1.2
+
 dependency_overrides:
   # 2.3.0 pulls in jni/jni_flutter which requires NDK 28 (not available in Nix env)
   path_provider_android: 2.2.23
