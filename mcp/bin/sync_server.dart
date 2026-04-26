@@ -3,25 +3,27 @@
 /// Avodah Sync Server — HTTP API server.
 ///
 /// HTTP API: CRDT delta sync endpoints + reverse proxy for agent API.
+/// Plain HTTP only — TLS is terminated by an upstream reverse proxy
+/// (e.g. drgnfly-caddy at https://drgnfly/avodah).
 ///
 /// Usage:
-///   dart run mcp/bin/sync_server.dart [--port 9847]
+///   dart run mcp/bin/sync_server.dart [--port 9847] [--host 127.0.0.1]
 ///
 /// Environment variables:
 ///   JIRA_ENABLED    Enable Jira sync (default: false)
 ///   AGENT_API_URL   Upstream agent API URL for /api/* and /ws proxy
 ///                   (default: http://localhost:9848)
+///   SYNC_HOST       Default bind host (default: 0.0.0.0; use 127.0.0.1
+///                   when behind an upstream reverse proxy)
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:uuid/uuid.dart';
 import 'package:avodah_core/version.dart' as version;
-import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
@@ -30,10 +32,6 @@ import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
 import 'package:http/http.dart' as http;
-
-/// Server fingerprint computed from the TLS certificate (SHA-256, base64).
-/// Set during TLS binding and used in the /api/sync/status response.
-String? serverFingerprint;
 
 /// Server start time for uptime calculation.
 DateTime? startTime;
@@ -130,38 +128,6 @@ Future<void> main(List<String> args) async {
   final agentApiUrl =
       Platform.environment['AGENT_API_URL'] ?? 'http://localhost:9848';
 
-  // HTTPS-only mode: when true + TLS configured, reject plain HTTP requests
-  final httpsOnly =
-      Platform.environment['SYNC_HTTPS_ONLY']?.toLowerCase() == 'true';
-
-  // Phase 4: Config validation on startup
-  // These will be redeclared in the binding block, but we use them here for
-  // validation and to pass values to the binding block via shared scope
-  var tlsCertPath = config.syncTlsCertPath;
-  var tlsKeyPath = config.syncTlsKeyPath;
-
-  // Validate TLS cert file exists if path is set
-  if (tlsCertPath != null && !File(tlsCertPath).existsSync()) {
-    stderr.writeln('WARNING: TLS certificate not found: $tlsCertPath');
-    stderr.writeln('WARNING: TLS disabled — falling back to HTTP mode');
-  }
-  // Validate TLS key file exists if path is set
-  if (tlsKeyPath != null && !File(tlsKeyPath).existsSync()) {
-    stderr.writeln('WARNING: TLS key not found: $tlsKeyPath');
-    stderr.writeln('WARNING: TLS disabled — falling back to HTTP mode');
-  }
-
-  // If either cert or key is missing when TLS is configured, nullify to force HTTP
-  if (tlsCertPath != null || tlsKeyPath != null) {
-    final certMissing = tlsCertPath != null && !File(tlsCertPath).existsSync();
-    final keyMissing = tlsKeyPath != null && !File(tlsKeyPath).existsSync();
-    if (certMissing || keyMissing) {
-      // Can't use TLS — nullify to force HTTP fallback
-      tlsCertPath = null;
-      tlsKeyPath = null;
-    }
-  }
-
   // Validate Jira credentials if JIRA is enabled
   if (jiraEnabled) {
     final jiraCredPath = paths.jiraCredentialsPath;
@@ -171,10 +137,8 @@ Future<void> main(List<String> args) async {
     }
   }
 
-  // Log config summary
-  final tlsEnabled = tlsCertPath != null && tlsKeyPath != null;
   stderr.writeln(
-      'Config: TLS=${tlsEnabled ? "enabled" : "disabled"}, port=$port, Jira=${jiraEnabled ? "yes" : "no"}');
+      'Config: port=$port, host=${bindHost.address}, Jira=${jiraEnabled ? "yes" : "no"}');
 
   // Initialize database and services (same pattern as server.dart)
   final db = openDatabase(paths.databasePath);
@@ -203,84 +167,17 @@ Future<void> main(List<String> args) async {
     pairingService: pairingService,
   );
 
-  // Start server(s): HTTPS on all interfaces + HTTP on localhost (when TLS enabled),
-  // or HTTP only on localhost (when TLS disabled).
-  // Each entry is (server, isSecure): isSecure=true for HTTPS, false for HTTP.
-  final serverList = <(HttpServer, bool)>[];
-
-  if (tlsCertPath != null && tlsKeyPath != null) {
-    // TLS mode: load certificate and bind securely
-    // Note: Phase 4 already validated these files exist and nullified if missing
-    final certFile = File(tlsCertPath);
-    final keyFile = File(tlsKeyPath);
-
-    // Belt-and-suspenders check — Phase 4 should have already validated
-    final certExists = await certFile.exists();
-    final keyExists = await keyFile.exists();
-
-    if (!certExists) {
-      stderr.writeln('WARNING: TLS certificate not found at bind time: $tlsCertPath');
-      stderr.writeln('WARNING: Falling back to HTTP mode');
-    } else if (!keyExists) {
-      stderr.writeln('WARNING: TLS key not found at bind time: $tlsKeyPath');
-      stderr.writeln('WARNING: Falling back to HTTP mode');
-    } else {
-      // All files present — proceed with TLS binding
-      final context = SecurityContext();
-      try {
-        context.useCertificateChainBytes(await certFile.readAsBytes());
-        context.usePrivateKeyBytes(await keyFile.readAsBytes());
-      } catch (e) {
-        stderr.writeln('ERROR: Failed to load TLS certificate/key: $e');
-        stderr.writeln('WARNING: Falling back to HTTP mode');
-      }
-
-      // Compute server fingerprint from the certificate (SHA-256, base64)
-      serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
-
-      // HTTPS on configured bind address (TLS + auth required)
-      final httpsServer = await HttpServer.bindSecure(
-        bindHost,
-        port,
-        context,
-      );
-      serverList.add((httpsServer, true)); // isSecure = true
-      stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on ${bindHost.address}:$port');
-      stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
-
-      // HTTP on localhost (for pa-serve proxy, no TLS needed)
-      // Skip when HTTPS-only mode is enabled — TLS required, HTTP rejected
-      // Also skip if already bound to loopback (no need for second HTTP listener)
-      if (!httpsOnly && bindHost != InternetAddress.loopbackIPv4) {
-        final localhostHttpServer = await HttpServer.bind(
-          InternetAddress.loopbackIPv4,
-          port,
-        );
-        serverList.add((localhostHttpServer, false)); // isSecure = false
-        stderr.writeln('Avodah Sync Server (HTTP/loopback) listening on 127.0.0.1:$port');
-      } else if (httpsOnly) {
-        stderr.writeln('HTTPS-only mode: localhost HTTP binding skipped — HTTPS required');
-      }
-    }
-  }
-
-  // Fallback HTTP server if TLS mode was skipped or failed
-  if (serverList.isEmpty) {
-    final httpServer = await HttpServer.bind(bindHost, port);
-    serverList.add((httpServer, false)); // isSecure = false
-    stderr.writeln('Avodah Sync Server (HTTP) listening on ${bindHost.address}:$port');
-    stderr.writeln('WARNING: HTTP mode — sync traffic is NOT encrypted. Use TLS for production.');
-  }
-
+  // HTTP-only bind. TLS is terminated upstream by drgnfly-caddy.
+  final server = await HttpServer.bind(bindHost, port);
+  stderr.writeln(
+      'Avodah Sync Server (HTTP) listening on ${bindHost.address}:$port');
   stderr.writeln(
       'Agent API proxy → $agentApiUrl (Jira: ${jiraEnabled ? "enabled" : "disabled"})');
 
   // Handle SIGINT and SIGTERM for graceful shutdown
   Future<void> shutdown() async {
     stderr.writeln('\nShutting down...');
-    for (final (s, _) in serverList) {
-      await s.close();
-    }
+    await server.close();
     await db.close();
     exit(0);
   }
@@ -288,61 +185,22 @@ Future<void> main(List<String> args) async {
   ProcessSignal.sigint.watch().listen((_) => shutdown());
   ProcessSignal.sigterm.watch().listen((_) => shutdown());
 
-  // Accept connections — handle each request concurrently across all servers.
+  // Accept connections — handle each request concurrently.
   // Use listen() with cancelOnError:false so a single SocketException
-  // (e.g. TLS handshake failure) doesn't kill the entire server loop.
-  for (final (server, isSecure) in serverList) {
-    server.listen(
-      (request) => _handleRequest(
-          request, syncApi, pairingService, agentApiUrl, httpsOnly,
-          isSecure, paths, tlsEnabled, port, jiraEnabled),
-      onError: (Object error, StackTrace stack) {
-        lastError = error.toString();
-        stderr.writeln('Server socket error (continuing): $error');
-      },
-      cancelOnError: false,
-    );
-  }
+  // doesn't kill the entire server loop.
+  server.listen(
+    (request) => _handleRequest(
+        request, syncApi, pairingService, agentApiUrl, paths, port, jiraEnabled),
+    onError: (Object error, StackTrace stack) {
+      lastError = error.toString();
+      stderr.writeln('Server socket error (continuing): $error');
+    },
+    cancelOnError: false,
+  );
   }, (error, stack) {
     lastError = error.toString();
     stderr.writeln('Uncaught error (server continues): $error\n$stack');
   });
-}
-
-/// Computes a SHA-256 fingerprint from a PEM-encoded certificate.
-Future<String?> _computeFingerprint(List<int> certBytes) async {
-  try {
-    // Extract the certificate der bytes from PEM if needed
-    String pem = String.fromCharCodes(certBytes);
-    List<int> derBytes;
-
-    if (pem.contains('-----BEGIN CERTIFICATE-----')) {
-      // PEM format — extract first certificate only (chain may have multiple)
-      final beginMarker = '-----BEGIN CERTIFICATE-----';
-      final endMarker = '-----END CERTIFICATE-----';
-      final start = pem.indexOf(beginMarker) + beginMarker.length;
-      final end = pem.indexOf(endMarker);
-      final base64Content = pem.substring(start, end).replaceAll(RegExp(r'\s'), '');
-      derBytes = base64.decode(base64Content);
-    } else {
-      // Assume DER format
-      derBytes = certBytes;
-    }
-
-    // SHA-256 hash and base64 encode
-    final fingerprint = await _sha256(Uint8List.fromList(derBytes));
-    return base64.encode(fingerprint);
-  } catch (e) {
-    stderr.writeln('Warning: could not compute TLS fingerprint: $e');
-    return null;
-  }
-}
-
-/// SHA-256 digest helper.
-Future<Uint8List> _sha256(Uint8List data) async {
-  final sha256 = crypto.Sha256();
-  final digest = await sha256.hash(data);
-  return Uint8List.fromList(digest.bytes);
 }
 
 Future<void> _handleRequest(
@@ -350,23 +208,11 @@ Future<void> _handleRequest(
   SyncApiService syncApi,
   PairingService pairingService,
   String agentApiUrl,
-  bool httpsOnly,
-  bool isSecure,
   AvodahPaths paths,
-  bool tlsEnabled,
   int port,
   bool jiraEnabled,
 ) async {
   try {
-    // HTTPS-only mode: reject plain HTTP requests when TLS is configured
-    if (httpsOnly && !isSecure) {
-      _jsonResponse(request, HttpStatus.forbidden, {
-        'error': 'HTTP not allowed when TLS is configured. Use HTTPS.',
-        'code': 'HTTPS_ONLY',
-      });
-      return;
-    }
-
     // WebSocket upgrade requests → proxy to AGENT_API_URL (requires auth)
     if (WebSocketTransformer.isUpgradeRequest(request)) {
       final nodeId = request.headers.value('X-Av-Node-Id');
@@ -443,7 +289,7 @@ Future<void> _handleRequest(
       _jsonResponse(request, HttpStatus.ok, {
         'status': 'ok',
         'service': 'avodah-sync',
-        'tls': tlsEnabled,
+        'tls': false,
         'uptime': uptime,
         'port': port,
         'jira': {
@@ -478,10 +324,6 @@ Future<void> _handleSyncStatus(
   }
 
   final status = await pairingService.getStatus();
-  // Include serverFingerprint if TLS is configured
-  if (serverFingerprint != null) {
-    status['serverFingerprint'] = serverFingerprint;
-  }
   _jsonResponse(request, HttpStatus.ok, status);
 }
 
@@ -539,7 +381,7 @@ Future<void> _handlePairConfirm(
     final nodeId = json['nodeId'] as String? ?? 'phone';
     final phonePubKey = json['phonePubKey'] as String?;
     final hmacProof = json['hmacProof'] as String?;
-    // Capture origin for CORS restriction (e.g. "https://100.64.0.1:9847")
+    // Capture origin for CORS restriction (e.g. "https://drgnfly.tail10c2c6.ts.net")
     final origin = request.headers.value('origin');
 
     if (phonePubKey == null || hmacProof == null) {

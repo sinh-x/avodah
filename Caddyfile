@@ -1,6 +1,8 @@
 # Avodah web app — HTTP-only, terminated upstream by drgnfly-caddy.
-# TLS is handled by the external (drgnfly) Caddy; this server sits behind it
-# on localhost:8080 and speaks plain HTTP.
+# TLS is handled by the external (drgnfly) Caddy at https://drgnfly/avodah,
+# which strips the /avodah prefix before forwarding to localhost:8080.
+# This Caddy only serves the Flutter web bundle; API and WebSocket routes
+# are handled directly by drgnfly-caddy → sync_server (9847) / pa-serve (9848).
 http://:{$WEB_PORT:-8080} {
     # Serve Flutter web static assets from /srv
     root * /srv
@@ -30,31 +32,4 @@ http://:{$WEB_PORT:-8080} {
         path /health
     }
     respond @health 200
-
-    # /avodah/api/sync/* → sync server (HTTP loopback; drgnfly-caddy terminates TLS)
-    @sync {
-        path /avodah/api/sync/*
-    }
-    handle @sync {
-        uri strip_prefix /avodah
-        reverse_proxy {$SYNC_SERVER_HOST:-127.0.0.1}:{$SYNC_SERVER_PORT:-9847}
-    }
-
-    # /avodah/ws → sync server WebSocket (HTTP loopback)
-    @ws {
-        path /avodah/ws
-    }
-    handle @ws {
-        uri strip_prefix /avodah
-        reverse_proxy {$SYNC_SERVER_HOST:-127.0.0.1}:{$SYNC_SERVER_PORT:-9847}
-    }
-
-    # All other /avodah/api/* routes → pa-serve directly (no auth required)
-    @api {
-        path /avodah/api/*
-    }
-    handle @api {
-        uri strip_prefix /avodah
-        reverse_proxy {$AGENT_API_HOST:-127.0.0.1}:{$AGENT_API_PORT:-9848}
-    }
 }
