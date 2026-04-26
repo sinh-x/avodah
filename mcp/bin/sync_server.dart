@@ -112,10 +112,15 @@ Future<void> main(List<String> args) async {
     ..addOption('port',
         abbr: 'p',
         defaultsTo: config.syncPort.toString(),
-        help: 'Port to listen on');
+        help: 'Port to listen on')
+    ..addOption('host',
+        abbr: 'h',
+        defaultsTo: Platform.environment['SYNC_HOST'] ?? '0.0.0.0',
+        help: 'Host to bind to (default: 0.0.0.0, use 127.0.0.1 for localhost-only)');
 
   final parsed = parser.parse(args);
   final port = int.parse(parsed['port'] as String);
+  final bindHost = InternetAddress(parsed['host'] as String);
 
   // JIRA_ENABLED toggle (default false)
   final jiraEnabled =
@@ -233,26 +238,27 @@ Future<void> main(List<String> args) async {
       // Compute server fingerprint from the certificate (SHA-256, base64)
       serverFingerprint = await _computeFingerprint(await certFile.readAsBytes());
 
-      // HTTPS on all interfaces (TLS + auth required)
+      // HTTPS on configured bind address (TLS + auth required)
       final httpsServer = await HttpServer.bindSecure(
-        InternetAddress.anyIPv4,
+        bindHost,
         port,
         context,
       );
       serverList.add((httpsServer, true)); // isSecure = true
-      stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on 0.0.0.0:$port');
+      stderr.writeln('Avodah Sync Server (HTTPS/TLS) listening on ${bindHost.address}:$port');
       stderr.writeln('TLS fingerprint: ${serverFingerprint ?? "unknown"}');
 
       // HTTP on localhost (for pa-serve proxy, no TLS needed)
       // Skip when HTTPS-only mode is enabled — TLS required, HTTP rejected
-      if (!httpsOnly) {
+      // Also skip if already bound to loopback (no need for second HTTP listener)
+      if (!httpsOnly && bindHost != InternetAddress.loopbackIPv4) {
         final localhostHttpServer = await HttpServer.bind(
           InternetAddress.loopbackIPv4,
           port,
         );
         serverList.add((localhostHttpServer, false)); // isSecure = false
         stderr.writeln('Avodah Sync Server (HTTP/loopback) listening on 127.0.0.1:$port');
-      } else {
+      } else if (httpsOnly) {
         stderr.writeln('HTTPS-only mode: localhost HTTP binding skipped — HTTPS required');
       }
     }
@@ -260,9 +266,9 @@ Future<void> main(List<String> args) async {
 
   // Fallback HTTP server if TLS mode was skipped or failed
   if (serverList.isEmpty) {
-    final httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    final httpServer = await HttpServer.bind(bindHost, port);
     serverList.add((httpServer, false)); // isSecure = false
-    stderr.writeln('Avodah Sync Server (HTTP) listening on 0.0.0.0:$port');
+    stderr.writeln('Avodah Sync Server (HTTP) listening on ${bindHost.address}:$port');
     stderr.writeln('WARNING: HTTP mode — sync traffic is NOT encrypted. Use TLS for production.');
   }
 

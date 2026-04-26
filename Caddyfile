@@ -1,24 +1,7 @@
-# Avodah Web UI — Caddy configuration
-#
-# Serves Flutter web static assets with COOP/COEP headers for OPFS support
-# Routes API traffic:
-#   /api/sync/* → sync server (HTTPS, port 9847) — CRDT delta sync
-#   /api/*      → pa-serve (HTTP, port 9848)     — tickets, board, deployments
-#   /ws         → sync server (HTTPS, port 9847) — WebSocket
-#
-# Environment variables:
-#   WEB_PORT — port to listen on (default: 8080)
-#   TLS_CERT — path to TLS certificate (enables HTTPS)
-#   TLS_KEY  — path to TLS private key (enables HTTPS)
-#   SYNC_SERVER_HOST — hostname of sync server (default: localhost)
-#   SYNC_SERVER_PORT — port of sync server (default: 9847)
-#   AGENT_API_HOST — hostname of pa-serve (default: localhost)
-#   AGENT_API_PORT — port of pa-serve (default: 9848)
-
-https://:{$WEB_PORT:-8080} {
-    # TLS with Tailscale certificates mounted from host
-    tls {$TLS_CERT} {$TLS_KEY}
-
+# Avodah web app — HTTP-only, terminated upstream by drgnfly-caddy.
+# TLS is handled by the external (drgnfly) Caddy; this server sits behind it
+# on localhost:8080 and speaks plain HTTP.
+http://:{$WEB_PORT:-8080} {
     # Serve Flutter web static assets from /srv
     root * /srv
     file_server
@@ -28,9 +11,13 @@ https://:{$WEB_PORT:-8080} {
     header Cross-Origin-Embedder-Policy require-corp
 
     # WASM and JS MIME types (required for Drift WasmDatabase)
-    @wasm path *.wasm
+    @wasm {
+        path *.wasm
+    }
     header @wasm Content-Type application/wasm
-    @js path *.js
+    @js {
+        path *.js
+    }
     header @js Content-Type application/javascript
 
     # Security headers
@@ -42,31 +29,32 @@ https://:{$WEB_PORT:-8080} {
     @health {
         path /health
     }
-    respond @health 200 "OK"
+    respond @health 200
 
-    # CRDT sync routes → sync server (HTTPS, requires pairing auth)
+    # /avodah/api/sync/* → sync server (HTTP loopback; drgnfly-caddy terminates TLS)
     @sync {
-        path /api/sync/*
+        path /avodah/api/sync/*
     }
-    reverse_proxy @sync https://{$SYNC_SERVER_HOST:-localhost}:{$SYNC_SERVER_PORT:-9847} {
-        transport http {
-            tls_insecure_skip_verify
-        }
+    handle @sync {
+        uri strip_prefix /avodah
+        reverse_proxy {$SYNC_SERVER_HOST:-127.0.0.1}:{$SYNC_SERVER_PORT:-9847}
     }
 
-    # All other /api/* routes → pa-serve directly (no auth required)
-    @api {
-        path /api/*
-    }
-    reverse_proxy @api {$AGENT_API_HOST:-localhost}:{$AGENT_API_PORT:-9848}
-
-    # Proxy /ws WebSocket to sync server (HTTPS)
+    # /avodah/ws → sync server WebSocket (HTTP loopback)
     @ws {
-        path /ws
+        path /avodah/ws
     }
-    reverse_proxy @ws https://{$SYNC_SERVER_HOST:-localhost}:{$SYNC_SERVER_PORT:-9847} {
-        transport http {
-            tls_insecure_skip_verify
-        }
+    handle @ws {
+        uri strip_prefix /avodah
+        reverse_proxy {$SYNC_SERVER_HOST:-127.0.0.1}:{$SYNC_SERVER_PORT:-9847}
+    }
+
+    # All other /avodah/api/* routes → pa-serve directly (no auth required)
+    @api {
+        path /avodah/api/*
+    }
+    handle @api {
+        uri strip_prefix /avodah
+        reverse_proxy {$AGENT_API_HOST:-127.0.0.1}:{$AGENT_API_PORT:-9848}
     }
 }
