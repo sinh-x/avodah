@@ -94,7 +94,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   Future<void> _initAppInner() async {
     // Open local database
     final db = await openPhoneDatabase();
-    final phoneDb = await openPhoneLocalDatabase();
+    // Phone-local DB backs share-intent captures, which are native-only.
+    // Web has no share intents, so skip it and leave related services null.
+    final phoneDb = kIsWeb ? null : await openPhoneLocalDatabase();
 
     // Node ID + HLC clock
     final nodeId = await CrdtSyncService.getOrCreateNodeId();
@@ -140,10 +142,12 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
       ..pairingToken = cryptoSyncService?.pairingToken
       ..nodeId = nodeId;
-    final captureSyncService = CaptureSyncService(
-      db: phoneDb,
-      apiClient: apiClient,
-    );
+    final captureSyncService = phoneDb == null
+        ? null
+        : CaptureSyncService(
+            db: phoneDb,
+            apiClient: apiClient,
+          );
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -187,14 +191,16 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Sync pending captures to PA (offline queue — P2)
     await _syncCaptures();
 
-    // Listen for share intents while app is running
-    _shareIntentSubscription = ReceiveSharingIntent.instance
-        .getMediaStream()
-        .listen(_handleShareIntent);
+    // Share intents are Android-only; skip wiring on web.
+    if (!kIsWeb) {
+      _shareIntentSubscription = ReceiveSharingIntent.instance
+          .getMediaStream()
+          .listen(_handleShareIntent);
 
-    // Handle share intent that started the app (if any)
-    if (!_shareIntentHandled) {
-      _checkInitialShareIntent();
+      // Handle share intent that started the app (if any)
+      if (!_shareIntentHandled) {
+        _checkInitialShareIntent();
+      }
     }
 
     // Periodic sync + refresh every 5 seconds while app is running

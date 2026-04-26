@@ -11,7 +11,7 @@ import '../services/crdt_sync_service.dart';
 import '../services/display_settings_service.dart';
 
 const kServerUrlKey = 'sync_server_url';
-const kDefaultServerUrl = 'http://100.64.0.1:9847';
+const kDefaultServerUrl = 'https://drgnfly.tail10c2c6.ts.net/avodah';
 
 class SettingsScreen extends StatefulWidget {
   /// Optional API client for chip management. If not provided, creates one
@@ -38,8 +38,24 @@ class SettingsScreen extends StatefulWidget {
   /// the Caddy reverse proxy) instead of the hardcoded Tailscale IP.
   static Future<String> loadServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    final defaultUrl = kIsWeb ? Uri.base.origin : kDefaultServerUrl;
-    var url = prefs.getString(kServerUrlKey) ?? defaultUrl;
+    // On web, Uri.base comes from <base href> in index.html (set at build time
+    // via --base-href). It already includes the reverse-proxy mount path, so
+    // same-origin API calls go through the correct Caddy route.
+    final defaultUrl = kIsWeb ? Uri.base.toString() : kDefaultServerUrl;
+    var storedUrl = prefs.getString(kServerUrlKey);
+    // On web, migrate any stored URL that's missing the app's mount path
+    // (e.g. from an older build that used Uri.base.origin).
+    if (kIsWeb && storedUrl != null) {
+      final baseUri = Uri.base;
+      final storedUri = Uri.tryParse(storedUrl);
+      if (storedUri != null &&
+          storedUri.origin == baseUri.origin &&
+          storedUri.path.replaceAll('/', '').isEmpty &&
+          baseUri.path.replaceAll('/', '').isNotEmpty) {
+        storedUrl = null; // force re-default to pick up the correct mount path
+      }
+    }
+    var url = storedUrl ?? defaultUrl;
     if (url.startsWith('ws://') || url.startsWith('wss://')) {
       url = url.replaceFirst(RegExp(r'^wss?://'), 'http://');
     }

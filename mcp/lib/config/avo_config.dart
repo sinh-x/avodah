@@ -25,13 +25,6 @@ class AvoConfig {
   ///           'Learning': ['reading', 'course']}
   final Map<String, List<String>> categoryChips;
 
-  /// Path to the TLS certificate PEM file for the sync server.
-  /// If set, the sync server uses HTTPS. If null, uses plain HTTP.
-  final String? syncTlsCertPath;
-
-  /// Path to the TLS private key PEM file for the sync server.
-  final String? syncTlsKeyPath;
-
   static const defaultCategories = [
     'Learning',
     'Working',
@@ -45,8 +38,6 @@ class AvoConfig {
     this.syncPort = 9847,
     this.syncInterval = 30,
     this.categoryChips = const {},
-    this.syncTlsCertPath,
-    this.syncTlsKeyPath,
   });
 
   /// Effective categories list — user's if set, otherwise defaults.
@@ -91,17 +82,11 @@ class AvoConfig {
       }
     }
 
-    final tlsMap = json['syncTls'] as Map<String, dynamic>?;
-    final syncTlsCertPath = tlsMap?['certPath'] as String?;
-    final syncTlsKeyPath = tlsMap?['keyPath'] as String?;
-
     return AvoConfig(
       categories: categories,
       syncPort: syncPort,
       syncInterval: syncInterval,
       categoryChips: categoryChips,
-      syncTlsCertPath: syncTlsCertPath,
-      syncTlsKeyPath: syncTlsKeyPath,
     );
   }
 
@@ -114,10 +99,6 @@ class AvoConfig {
         'intervalSeconds': syncInterval,
       },
       'categoryChips': categoryChips,
-      'syncTls': {
-        if (syncTlsCertPath != null) 'certPath': syncTlsCertPath,
-        if (syncTlsKeyPath != null) 'keyPath': syncTlsKeyPath,
-      },
     };
   }
 
@@ -135,15 +116,11 @@ class AvoConfig {
     int? syncPort,
     int? syncInterval,
     Map<String, List<String>>? categoryChips,
-    String? syncTlsCertPath,
-    String? syncTlsKeyPath,
   }) =>
       AvoConfig(
         categories: categories ?? this.categories,
         syncPort: syncPort ?? this.syncPort,
         syncInterval: syncInterval ?? this.syncInterval,
         categoryChips: categoryChips ?? this.categoryChips,
-        syncTlsCertPath: syncTlsCertPath ?? this.syncTlsCertPath,
-        syncTlsKeyPath: syncTlsKeyPath ?? this.syncTlsKeyPath,
       );
 }

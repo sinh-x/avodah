@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | **1.0.0** | Stable CLI + MCP — quality gate                      | No critical bugs        |
 | **2.0.0** | Flutter UI + multi-user + GitHub sync                | #54, #59, Flutter app   |
 
+## [Unreleased]
+
+### Changed
+- AVO-105: sync server now runs HTTP-only behind centralized `drgnfly-caddy`
+  reverse proxy at `https://drgnfly.tail10c2c6.ts.net/avodah`. Removed
+  in-container TLS bind, `syncTls` config block, and dual HTTP/HTTPS listener.
+- Sync server adds `--host` flag (env `SYNC_HOST`) for localhost-only bind.
+- Phone web build uses `--base-href=/avodah/`; default server URL updated
+  to the upstream `/avodah` path.
+
 ## [0.4.3] - 2026-03-18
 
 ### Added

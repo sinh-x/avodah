@@ -55,80 +55,19 @@ JIRA_ENABLED=false
 
 > **Warning:** Only one sync server instance should access the SQLite database at a time. Running both the Docker container and the native `avodah-sync` binary simultaneously will cause SQLite locking errors.
 
-## TLS Setup (Tailscale)
+## TLS Termination (Upstream Reverse Proxy)
 
-The sync server supports HTTPS via Tailscale-provisioned Let's Encrypt certs.
-With TLS enabled, the phone connects to `https://<hostname>.ts.net:9847`
-and no manual certificate approval is needed (trusted CA chain).
+The sync server speaks plain HTTP only. TLS is terminated by an upstream
+reverse proxy (e.g. `drgnfly-caddy`) that fronts the container at
+`https://drgnfly.tail10c2c6.ts.net/avodah` and forwards to `localhost:9847`.
 
-### Prerequisites
+The container binds HTTP on the host's loopback interface — it should not
+be exposed externally. Use `SYNC_HOST=127.0.0.1` to enforce localhost-only.
 
-Enable HTTPS certificates for your Tailscale tailnet:
-1. Go to [tailscale.com/admin/dns](https://tailscale.com/admin/dns)
-2. Enable "HTTPS Certificates"
-
-### Generate Certs
-
-```bash
-./tool/tailscale-cert.sh
-# Or with a custom domain:
-./tool/tailscale-cert.sh myhost.tail12345.ts.net
-```
-
-This writes certs to `~/.config/avodah/` (already mounted as `/config` in the container).
-
-### Configure config.json
-
-Edit `~/.config/avodah/config.json` and set the `syncTls` block:
-
-```json
-{
-  "syncTls": {
-    "certPath": "/config/drgnfly.tail10c2c6.ts.net.crt",
-    "keyPath":  "/config/drgnfly.tail10c2c6.ts.net.key"
-  }
-}
-```
-
-> **Note:** Paths use `/config/` (the container mount point). When running natively
-> (outside Docker), use the full host path instead (e.g. `~/.config/avodah/...`).
-
-Then restart the container:
-
-```bash
-docker compose restart avodah-sync
-```
-
-Verify TLS is active:
-
-```bash
-curl https://drgnfly.tail10c2c6.ts.net:9847/
-# Expected: {"status":"ok","service":"avodah-sync"}
-```
-
-### Phone Connection
-
-After enabling TLS, update the phone's server URL in Settings to:
-```
-https://drgnfly.tail10c2c6.ts.net:9847
-```
-
-Since the cert is Let's Encrypt-signed, no fingerprint approval dialog appears.
-
-### Cert Renewal
-
-Tailscale certs expire every ~90 days. Renew by re-running the script and restarting:
-
-```bash
-./tool/tailscale-cert.sh
-docker compose restart avodah-sync
-```
-
-Optional monthly cron:
-
-```
-0 3 1 * * /path/to/avodah/tool/tailscale-cert.sh && docker compose -f /path/to/avodah/docker-compose.yml restart avodah-sync
-```
+The phone connects to the upstream HTTPS URL (e.g.
+`https://drgnfly.tail10c2c6.ts.net/avodah`); the upstream Caddy strips the
+`/avodah` path prefix and forwards `/api/sync/*`, `/api/*`, and `/ws`
+requests on to the sync server / `pa serve` on the host.
 
 ## Proxy Architecture
 

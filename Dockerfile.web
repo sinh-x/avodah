@@ -38,9 +38,12 @@ RUN flutter pub get
 RUN curl -L -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
     && curl -L -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
 
-# Build Flutter web release
-# --base-href=/ ensures assets load from root (required for Caddy file_server)
-RUN flutter build web --release --base-href=/
+# Build Flutter web release.
+# --base-href=/avodah/ matches the drgnfly-caddy mount path so Uri.base in the
+# running app reflects the real URL (used by loadServerUrl on web). Flutter's
+# own asset URLs then become /avodah/... which drgnfly-caddy rewrites back to
+# / before reaching this container's Caddy file_server.
+RUN flutter build web --release --base-href=/avodah/
 
 # ──────────────────────────────────────────────────────────────
 # Stage 2: Serve — Caddy static file server
