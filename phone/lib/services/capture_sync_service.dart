@@ -51,8 +51,9 @@ class CaptureSyncService {
       'title': capture.title,
       'type': 'idea',
       'status': 'idea',
-      'priority': 'normal',
+      'priority': 'medium',
       'estimate': 'XS',
+      'assignee': 'requirements',
       'summary': _buildSummary(capture),
       'doc_refs': [
         if (capture.url != null && capture.url!.isNotEmpty)

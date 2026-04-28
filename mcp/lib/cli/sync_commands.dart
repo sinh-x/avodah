@@ -20,11 +20,10 @@ class SyncCommand extends Command<void> {
   String get name => 'sync';
 
   @override
-  String get description =>
-      'CRDT sync status and diagnostics (status)';
+  String get description => 'CRDT sync status and diagnostics (status)';
 }
 
-/// Shows current sync state, watermarks, and per-document delta counts.
+/// Shows current sync state, watermarks, and local document counts.
 class SyncStatusCommand extends Command<void> {
   final AppDatabase db;
   final HybridLogicalClock clock;
@@ -35,7 +34,7 @@ class SyncStatusCommand extends Command<void> {
   String get name => 'status';
 
   @override
-  String get description => 'Show sync state, watermarks, and delta counts';
+  String get description => 'Show sync state, watermarks, and document counts';
 
   @override
   String get invocation => 'avo sync status';
@@ -54,7 +53,8 @@ class SyncStatusCommand extends Command<void> {
 
     // Last sync from phone (received)
     final phoneWatermark = diagnostics['phoneWatermark'] as String? ?? '0';
-    final lastPhoneSync = _formatTimestamp(diagnostics['lastPhoneSync'] as int?);
+    final lastPhoneSync =
+        _formatTimestamp(diagnostics['lastPhoneSync'] as int?);
     print(kvRow('Phone watermark:', phoneWatermark));
     print(kvRow('Last phone sync:', lastPhoneSync));
 
@@ -63,7 +63,7 @@ class SyncStatusCommand extends Command<void> {
     print(kvRow('Desktop HLC:', clock.now().pack()));
 
     print('');
-    print('  Per-document delta counts:');
+    print('  Local document counts (not pending sync):');
     final counts = diagnostics['deltaCounts'] as Map<String, int>;
     print(kvRow('  dailyPlan:', '${counts['dailyPlan'] ?? 0}'));
     print(kvRow('  dayPlanTask:', '${counts['dayPlanTask'] ?? 0}'));
