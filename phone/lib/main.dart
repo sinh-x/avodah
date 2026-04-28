@@ -59,10 +59,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   DisplaySettingsService? _displaySettings;
   CaptureSyncService? _captureSyncService;
   Timer? _syncTimer;
+  bool _syncInProgress = false;
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  final List<Map<String, dynamic>> _pendingTimerDeltas = [];
+  final List<Map<String, dynamic>> _pendingSyncDeltas = [];
 
   // Share intent handling
   StreamSubscription<List<SharedMediaFile>>? _shareIntentSubscription;
@@ -144,10 +145,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       ..nodeId = nodeId;
     final captureSyncService = phoneDb == null
         ? null
-        : CaptureSyncService(
-            db: phoneDb,
-            apiClient: apiClient,
-          );
+        : CaptureSyncService(db: phoneDb, apiClient: apiClient);
     final reviewProvider = ReviewProvider(apiClient);
     reviewProvider.startAutoRefresh();
 
@@ -204,20 +202,17 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     }
 
     // Periodic sync + refresh every 5 seconds while app is running
-    _syncTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) {
-        _syncAndRefresh();
-        _syncCaptures();
-      },
-    );
+    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _syncAndRefresh();
+      _syncCaptures();
+    });
   }
 
   /// Check for share intent that started the app (cold start).
   Future<void> _checkInitialShareIntent() async {
     try {
-      final initialMedia =
-          await ReceiveSharingIntent.instance.getInitialMedia();
+      final initialMedia = await ReceiveSharingIntent.instance
+          .getInitialMedia();
       if (initialMedia.isNotEmpty && !_shareIntentHandled) {
         _handleShareIntent(initialMedia);
       }
@@ -249,19 +244,21 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final captureSync = _captureSyncService;
     final apiClient = _apiClient;
     if (nav != null && captureSync != null && apiClient != null) {
-      nav.push<bool>(
-        MaterialPageRoute(
-          builder: (_) => QuickCaptureScreen(
-            sharedText: sharedText,
-            sharedUrl: isUrl ? sharedText : null,
-            captureSyncService: captureSync,
-            apiClient: apiClient,
-          ),
-        ),
-      ).then((_) {
-        // Reset so subsequent shares in the same session are handled
-        _shareIntentHandled = false;
-      });
+      nav
+          .push<bool>(
+            MaterialPageRoute(
+              builder: (_) => QuickCaptureScreen(
+                sharedText: sharedText,
+                sharedUrl: isUrl ? sharedText : null,
+                captureSyncService: captureSync,
+                apiClient: apiClient,
+              ),
+            ),
+          )
+          .then((_) {
+            // Reset so subsequent shares in the same session are handled
+            _shareIntentHandled = false;
+          });
     } else {
       // Navigation not ready — defer until init completes
       debugPrint('[ShareIntent] Navigation not ready, deferring share intent');
@@ -269,63 +266,59 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   /// Pull CRDT deltas from desktop, then refresh the dashboard from local DB.
-  /// pullFromDesktop() is called on EVERY cycle regardless of prior failure state.
-  /// When already disconnected, skip the pull to avoid 10s blocking timeout
-  /// and just refresh the local dashboard.
+  /// pullFromDesktop() is called on every non-overlapping cycle regardless of
+  /// prior failure state so the app can recover after transient disconnects.
   Future<void> _syncAndRefresh() async {
     final sync = _crdtSyncService;
     final dashboard = _dashboardProvider;
     if (sync == null || dashboard == null) return;
+    if (_syncInProgress) return;
+
+    _syncInProgress = true;
     var syncOk = false;
 
-    // If already disconnected, skip pull to avoid blocking 10s TCP timeout.
-    // Just refresh the local dashboard and retry pull on next cycle.
-    final alreadyOffline =
-        dashboard.connectionState.value == SyncConnectionState.disconnected;
-
-    if (!alreadyOffline) {
-      try {
-        await sync.pullFromDesktop();
-        syncOk = true;
-        // Flush queued timer deltas after successful pull
-        if (_pendingTimerDeltas.isNotEmpty) {
-          final queued = List<Map<String, dynamic>>.from(_pendingTimerDeltas);
-          _pendingTimerDeltas.clear();
-          try {
-            await sync.pushToDesktop(queued);
-            debugPrint('[Sync] Flushed ${queued.length} queued timer delta(s)');
-          } catch (e) {
-            debugPrint('[Sync] Queued timer push failed: $e — re-queueing');
-            _pendingTimerDeltas.addAll(queued);
-          }
-        }
-      } catch (e) {
-        debugPrint('[Sync] Pull failed: $e');
-        // Surface pull failure to user via snackbar (AC4)
-        final messenger = _scaffoldMessengerKey.currentState;
-        if (messenger != null) {
-          SchedulerBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('Sync failed — will retry on next cycle'),
-                duration: Duration(seconds: 4),
-              ),
-            );
-          });
-        } else {
-          debugPrint('[Sync] Pull failed but ScaffoldMessenger unavailable '
-              'for snackbar notification');
+    try {
+      await sync.pullFromDesktop();
+      syncOk = true;
+      // Flush queued local deltas after successful pull.
+      if (_pendingSyncDeltas.isNotEmpty) {
+        final queued = List<Map<String, dynamic>>.from(_pendingSyncDeltas);
+        _pendingSyncDeltas.clear();
+        try {
+          await sync.pushToDesktop(queued);
+          debugPrint('[Sync] Flushed ${queued.length} queued local delta(s)');
+        } catch (e) {
+          debugPrint('[Sync] Queued local push failed: $e — re-queueing');
+          _pendingSyncDeltas.addAll(queued);
         }
       }
-    } else {
-      debugPrint('[Sync] Skipping pull — already offline');
-    }
-
-    await dashboard.refresh();
-    // Override the indicator to reflect actual sync status, not just local DB read
-    if (!syncOk) {
-      dashboard.connectionState.value = SyncConnectionState.disconnected;
+    } catch (e) {
+      debugPrint('[Sync] Pull failed: $e');
+      // Surface pull failure to user via snackbar (AC4)
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Sync failed — will retry on next cycle'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        });
+      } else {
+        debugPrint(
+          '[Sync] Pull failed but ScaffoldMessenger unavailable '
+          'for snackbar notification',
+        );
+      }
+    } finally {
+      await dashboard.refresh();
+      // Override the indicator to reflect actual sync status, not just local DB read
+      if (!syncOk) {
+        dashboard.connectionState.value = SyncConnectionState.disconnected;
+      }
+      _syncInProgress = false;
     }
   }
 
@@ -366,34 +359,28 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   /// Push CRDT deltas from phone to desktop (non-fatal on failure).
-  /// Timer deltas that fail to push are queued and retried on the next sync cycle.
+  /// Local deltas that fail to push are queued and retried on the next sync cycle.
   Future<void> _pushDeltas(List<Map<String, dynamic>> deltas) async {
     if (deltas.isEmpty) return;
-
-    // Queue timer deltas on failure for later retry
-    final timerDeltas = deltas.where((d) => d['type'] == 'timer').toList();
 
     try {
       // Always try to push all deltas together
       await _crdtSyncService?.pushToDesktop(deltas);
-      // On success, flush any queued timer deltas too
-      if (_pendingTimerDeltas.isNotEmpty) {
-        final queued = List<Map<String, dynamic>>.from(_pendingTimerDeltas);
-        _pendingTimerDeltas.clear();
+      // On success, flush any queued deltas too
+      if (_pendingSyncDeltas.isNotEmpty) {
+        final queued = List<Map<String, dynamic>>.from(_pendingSyncDeltas);
+        _pendingSyncDeltas.clear();
         try {
           await _crdtSyncService?.pushToDesktop(queued);
         } catch (e) {
-          debugPrint('[Sync] Queued timer push failed: $e');
-          _pendingTimerDeltas.addAll(queued);
+          debugPrint('[Sync] Queued local push failed: $e');
+          _pendingSyncDeltas.addAll(queued);
         }
       }
     } catch (e) {
       debugPrint('[Sync] Push failed: $e');
-      // Queue timer deltas for retry; non-timer deltas are dropped (fire-and-forget)
-      if (timerDeltas.isNotEmpty) {
-        _pendingTimerDeltas.addAll(timerDeltas);
-        debugPrint('[Sync] Queued ${timerDeltas.length} timer delta(s) for retry');
-      }
+      _pendingSyncDeltas.addAll(deltas);
+      debugPrint('[Sync] Queued ${deltas.length} local delta(s) for retry');
       // Surface failure to user via snackbar (not spam — ScaffoldMessenger
       // only shows one snackbar at a time)
       final messenger = _scaffoldMessengerKey.currentState;
@@ -402,7 +389,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
           if (!mounted) return;
           messenger.showSnackBar(
             SnackBar(
-              content: Text('Sync failed${_pendingTimerDeltas.isNotEmpty ? ' — timer will retry' : ''}'),
+              content: Text(
+                'Sync failed — ${_pendingSyncDeltas.length} local change(s) will retry',
+              ),
               duration: const Duration(seconds: 4),
             ),
           );
@@ -503,10 +492,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       final result = await nav.push<bool>(
         MaterialPageRoute(
           builder: (_) => PairingScreen(
-            args: PairingScreenArgs(
-              cryptoClient: crypto,
-              nodeId: nodeId,
-            ),
+            args: PairingScreenArgs(cryptoClient: crypto, nodeId: nodeId),
           ),
         ),
       );
@@ -572,18 +558,16 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
           navigatorKey: _navigatorKey,
           title: 'Avodah',
           debugShowCheckedModeBanner: false,
-          theme: display?.lightTheme().copyWith(
-                extensions: [syntaxTheme],
-              ) ??
+          theme:
+              display?.lightTheme().copyWith(extensions: [syntaxTheme]) ??
               ThemeData(
                 colorSchemeSeed: const Color(0xFF6750A4),
                 useMaterial3: true,
                 brightness: Brightness.light,
                 extensions: [syntaxTheme],
               ),
-          darkTheme: display?.darkTheme().copyWith(
-                extensions: [syntaxTheme],
-              ) ??
+          darkTheme:
+              display?.darkTheme().copyWith(extensions: [syntaxTheme]) ??
               ThemeData(
                 colorSchemeSeed: const Color(0xFF6750A4),
                 useMaterial3: true,
@@ -599,24 +583,29 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.error_outline,
-                              size: 48, color: Colors.red),
+                          const Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
                           const SizedBox(height: 16),
-                          const Text('Failed to initialize',
-                              style: TextStyle(fontSize: 18)),
+                          const Text(
+                            'Failed to initialize',
+                            style: TextStyle(fontSize: 18),
+                          ),
                           const SizedBox(height: 8),
-                          Text(_initError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.grey)),
+                          Text(
+                            _initError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 )
               : _dashboardProvider == null
-              ? const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                )
+              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : _HomeShell(
                   dashboardProvider: _dashboardProvider!,
                   writeService: _writeService!,
@@ -729,14 +718,14 @@ class _HomeShellState extends State<_HomeShell> {
         index: _currentIndex,
         children: [
           KanbanBoardScreen(
-              boardProvider: widget.boardProvider,
-              dashboardProvider: widget.dashboardProvider,
-              focusProvider: widget.focusProvider,
-              deploymentProvider: widget.deploymentProvider,
-              crdtSyncService: widget.crdtSyncService,
-              apiClient: widget.apiClient,
-              displaySettings: widget.displaySettings,
-            ),
+            boardProvider: widget.boardProvider,
+            dashboardProvider: widget.dashboardProvider,
+            focusProvider: widget.focusProvider,
+            deploymentProvider: widget.deploymentProvider,
+            crdtSyncService: widget.crdtSyncService,
+            apiClient: widget.apiClient,
+            displaySettings: widget.displaySettings,
+          ),
           DashboardScreen(
             dashboardProvider: widget.dashboardProvider,
             writeService: widget.writeService,
@@ -761,10 +750,12 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(
+                      builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
                         crdtSyncService: widget.crdtSyncService,
-                        displaySettings: widget.displaySettings)),
+                        displaySettings: widget.displaySettings,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -790,10 +781,12 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(
+                      builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
                         crdtSyncService: widget.crdtSyncService,
-                        displaySettings: widget.displaySettings)),
+                        displaySettings: widget.displaySettings,
+                      ),
+                    ),
                   ),
                 ),
                 IconButton(
@@ -823,10 +816,12 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SettingsScreen(
+                      builder: (_) => SettingsScreen(
                         apiClient: widget.apiClient,
                         crdtSyncService: widget.crdtSyncService,
-                        displaySettings: widget.displaySettings)),
+                        displaySettings: widget.displaySettings,
+                      ),
+                    ),
                   ),
                 ),
                 IconButton(
@@ -835,8 +830,7 @@ class _HomeShellState extends State<_HomeShell> {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          TimersScreen(apiClient: widget.apiClient),
+                      builder: (_) => TimersScreen(apiClient: widget.apiClient),
                     ),
                   ),
                 ),
@@ -846,15 +840,13 @@ class _HomeShellState extends State<_HomeShell> {
                 ),
               ],
             ),
-            body: TeamBrowserScreen(
-                teamProvider: widget.teamBrowserProvider),
+            body: TeamBrowserScreen(teamProvider: widget.teamBrowserProvider),
           ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _currentIndex = index),
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: [
           NavigationDestination(
             icon: actionableCount > 0

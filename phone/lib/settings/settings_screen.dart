@@ -26,7 +26,12 @@ class SettingsScreen extends StatefulWidget {
   /// _DisplaySettingsSection creates its own (dual-instance bug fix).
   final DisplaySettingsService? displaySettings;
 
-  const SettingsScreen({super.key, this.apiClient, this.crdtSyncService, this.displaySettings});
+  const SettingsScreen({
+    super.key,
+    this.apiClient,
+    this.crdtSyncService,
+    this.displaySettings,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -120,9 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Forget Server'),
           ),
         ],
@@ -137,14 +140,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.crdtSyncService?.revokePairing();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Server forgotten. Please restart the app.')),
+          const SnackBar(
+            content: Text('Server forgotten. Please restart the app.'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to forget server: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to forget server: $e')));
       }
     } finally {
       if (mounted) setState(() => _forgetting = false);
@@ -157,17 +162,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pushed = await widget.crdtSyncService?.forceFullSync() ?? 0;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Full sync complete. Pushed $pushed deltas. Pull will refresh shortly.')),
+          SnackBar(
+            content: Text(
+              'Full sync complete. Pushed $pushed deltas. Pull will refresh shortly.',
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Full sync failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Full sync failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _fullSyncing = false);
+    }
+  }
+
+  Future<void> _showP2pDiagnostics() async {
+    final sync = widget.crdtSyncService;
+    if (sync == null) return;
+
+    try {
+      final diagnostics = await sync.debugDiagnostics();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('P2P Sync Diagnostics'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                diagnostics.toDebugText(),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Diagnostics failed: $e')));
+      }
     }
   }
 
@@ -193,7 +239,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final categories = await client.getCategories();
       setState(() {
         _categoryChips = chips;
-        _categories = categories.isNotEmpty ? categories : _getDefaultCategories();
+        _categories = categories.isNotEmpty
+            ? categories
+            : _getDefaultCategories();
         _loadingChips = false;
       });
     } catch (e) {
@@ -206,7 +254,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   List<String> _getDefaultCategories() {
-    return ['Learning', 'Working', 'Side-project', 'Administrative', 'Meetings'];
+    return [
+      'Learning',
+      'Working',
+      'Side-project',
+      'Administrative',
+      'Meetings',
+    ];
   }
 
   Future<void> _addChip() async {
@@ -223,15 +277,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _chipController.clear();
       await _loadChips();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added "$chip" to $category')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Added "$chip" to $category')));
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to add chip')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to add chip')));
       }
     }
   }
@@ -251,9 +305,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to remove chip')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to remove chip')));
       }
     }
   }
@@ -279,13 +333,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final url = _controller.text.trim();
       // Use root health endpoint (no auth required)
       final uri = Uri.parse('$url/');
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 5));
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         setState(() => _testResult = 'Connected successfully!');
       } else {
         setState(
-            () => _testResult = 'Connection failed: HTTP ${response.statusCode}');
+          () => _testResult = 'Connection failed: HTTP ${response.statusCode}',
+        );
       }
     } catch (e) {
       setState(() => _testResult = 'Connection failed: $e');
@@ -328,7 +382,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _startStatusPolling(String url) {
     _statusPollTimer?.cancel();
     final client = widget.apiClient ?? AgentApiClient(baseUrl: url);
-    _statusPollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    _statusPollTimer = Timer.periodic(const Duration(seconds: 5), (
+      timer,
+    ) async {
       final status = await client.getSelfUpdateStatus();
 
       if (status == null) return;
@@ -354,9 +410,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final snackMsg = status.isSuccess
               ? 'Update complete!'
               : 'Build failed. Check logs for details.';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(snackMsg)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(snackMsg)));
         }
       }
     });
@@ -411,8 +467,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Comment Chip Presets',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Comment Chip Presets',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   TextButton.icon(
                     onPressed: () async {
                       _selectedCategory = null;
@@ -468,16 +526,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: const InputDecoration(
                       hintText: 'New chip text',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     onSubmitted: (_) => _addChip(),
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _addChip,
-                  child: const Text('Add'),
-                ),
+                FilledButton(onPressed: _addChip, child: const Text('Add')),
               ],
             ),
           ),
@@ -504,8 +562,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Sync Server URL',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Sync Server URL',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _controller,
@@ -526,14 +586,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Test Connection'),
                   ),
                   const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _save,
-                    child: const Text('Save'),
-                  ),
+                  FilledButton(onPressed: _save, child: const Text('Save')),
                 ],
               ),
               if (_testResult != null) ...[
@@ -558,8 +616,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Server Connection',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Server Connection',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 const Text(
                   'Remove pairing with the current sync server.',
@@ -575,10 +635,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.sync),
                     label: Text(
-                        _fullSyncing ? 'Syncing...' : 'Force Full Sync'),
+                      _fullSyncing ? 'Syncing...' : 'Force Full Sync',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -590,15 +654,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
+                    onPressed: _showP2pDiagnostics,
+                    icon: const Icon(Icons.bug_report_outlined),
+                    label: const Text('P2P Sync Diagnostics'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Shows local worklog counts, watermarks, and last push result.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
                     onPressed: _forgetting ? null : _forgetServer,
                     icon: _forgetting
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.link_off, color: Colors.red),
                     label: Text(
-                        _forgetting ? 'Forgetting...' : 'Forget This Server'),
+                      _forgetting ? 'Forgetting...' : 'Forget This Server',
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                     ),
@@ -615,8 +695,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('App Updates',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'App Updates',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Build and install the latest version on your device.',
@@ -631,15 +713,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: _updateStatus == 'Update complete!'
                         ? Colors.green.shade50
                         : _updateStatus == 'Build failed'
-                            ? Colors.red.shade50
-                            : Colors.blue.shade50,
+                        ? Colors.red.shade50
+                        : Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: _updateStatus == 'Update complete!'
                           ? Colors.green.shade200
                           : _updateStatus == 'Build failed'
-                              ? Colors.red.shade200
-                              : Colors.blue.shade200,
+                          ? Colors.red.shade200
+                          : Colors.blue.shade200,
                     ),
                   ),
                   child: Column(
@@ -672,8 +754,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 color: _updateStatus == 'Update complete!'
                                     ? Colors.green.shade700
                                     : _updateStatus == 'Build failed'
-                                        ? Colors.red.shade700
-                                        : Colors.blue.shade700,
+                                    ? Colors.red.shade700
+                                    : Colors.blue.shade700,
                               ),
                             ),
                           ),
@@ -763,7 +845,8 @@ class _DisplaySettingsSection extends StatefulWidget {
   const _DisplaySettingsSection({required this.service});
 
   @override
-  State<_DisplaySettingsSection> createState() => _DisplaySettingsSectionState();
+  State<_DisplaySettingsSection> createState() =>
+      _DisplaySettingsSectionState();
 }
 
 class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
@@ -802,8 +885,7 @@ class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Display',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text('Display', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               const Text(
                 'Customize brightness, accent color, and contrast.',
@@ -812,23 +894,25 @@ class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
               const SizedBox(height: 16),
 
               // Brightness
-              Text('Brightness',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              Text('Brightness', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 8),
               SegmentedButton<DisplayBrightness>(
                 segments: const [
                   ButtonSegment(
-                      value: DisplayBrightness.light,
-                      label: Text('Light'),
-                      icon: Icon(Icons.light_mode)),
+                    value: DisplayBrightness.light,
+                    label: Text('Light'),
+                    icon: Icon(Icons.light_mode),
+                  ),
                   ButtonSegment(
-                      value: DisplayBrightness.dark,
-                      label: Text('Dark'),
-                      icon: Icon(Icons.dark_mode)),
+                    value: DisplayBrightness.dark,
+                    label: Text('Dark'),
+                    icon: Icon(Icons.dark_mode),
+                  ),
                   ButtonSegment(
-                      value: DisplayBrightness.system,
-                      label: Text('System'),
-                      icon: Icon(Icons.brightness_auto)),
+                    value: DisplayBrightness.system,
+                    label: Text('System'),
+                    icon: Icon(Icons.brightness_auto),
+                  ),
                 ],
                 selected: {_service.brightness},
                 onSelectionChanged: (selected) {
@@ -838,14 +922,17 @@ class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
               const SizedBox(height: 20),
 
               // Accent color
-              Text('Accent Color',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Accent Color',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: kAccentColors.map((color) {
-                  final isSelected = _service.accentColor.toARGB32() == color.toARGB32();
+                  final isSelected =
+                      _service.accentColor.toARGB32() == color.toARGB32();
                   return GestureDetector(
                     onTap: () => _service.setAccentColor(color),
                     child: Container(
@@ -863,12 +950,16 @@ class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
                                   color: color.withAlpha(128),
                                   blurRadius: 8,
                                   spreadRadius: 2,
-                                )
+                                ),
                               ]
                             : null,
                       ),
                       child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
                           : null,
                     ),
                   );
@@ -877,19 +968,20 @@ class _DisplaySettingsSectionState extends State<_DisplaySettingsSection> {
               const SizedBox(height: 20),
 
               // Contrast
-              Text('Contrast',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              Text('Contrast', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 8),
               SegmentedButton<DisplayContrast>(
                 segments: const [
                   ButtonSegment(
-                      value: DisplayContrast.normal,
-                      label: Text('Normal'),
-                      icon: Icon(Icons.text_fields)),
+                    value: DisplayContrast.normal,
+                    label: Text('Normal'),
+                    icon: Icon(Icons.text_fields),
+                  ),
                   ButtonSegment(
-                      value: DisplayContrast.high,
-                      label: Text('High'),
-                      icon: Icon(Icons.contrast)),
+                    value: DisplayContrast.high,
+                    label: Text('High'),
+                    icon: Icon(Icons.contrast),
+                  ),
                 ],
                 selected: {_service.contrast},
                 onSelectionChanged: (selected) {

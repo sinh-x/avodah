@@ -51,6 +51,108 @@ class _SyncDocType {
 /// Callback type invoked when the server indicates pairing is required.
 typedef OnNeedsPairingCallback = Future<void> Function();
 
+class P2pSyncDiagnostics {
+  final String desktopWatermark;
+  final Map<String, int> localCounts;
+  final List<Map<String, Object?>> watermarks;
+  final List<P2pSyncRecentWorklog> recentWorklogs;
+  final DateTime? lastPushStartedAt;
+  final DateTime? lastPushCompletedAt;
+  final int? lastPushDeltaCount;
+  final Map<String, int> lastPushDeltaTypes;
+  final int? lastPushMergedCount;
+  final String? lastPushWatermark;
+  final String? lastPushError;
+
+  const P2pSyncDiagnostics({
+    required this.desktopWatermark,
+    required this.localCounts,
+    required this.watermarks,
+    required this.recentWorklogs,
+    required this.lastPushStartedAt,
+    required this.lastPushCompletedAt,
+    required this.lastPushDeltaCount,
+    required this.lastPushDeltaTypes,
+    required this.lastPushMergedCount,
+    required this.lastPushWatermark,
+    required this.lastPushError,
+  });
+
+  String toDebugText() {
+    final buffer = StringBuffer()
+      ..writeln('P2P Sync Diagnostics')
+      ..writeln('Generated: ${DateTime.now().toIso8601String()}')
+      ..writeln('Desktop watermark: $desktopWatermark')
+      ..writeln()
+      ..writeln('Last push:')
+      ..writeln('  started: ${lastPushStartedAt?.toIso8601String() ?? 'never'}')
+      ..writeln(
+        '  completed: ${lastPushCompletedAt?.toIso8601String() ?? 'never'}',
+      )
+      ..writeln('  delta count: ${lastPushDeltaCount ?? 'n/a'}')
+      ..writeln(
+        '  delta types: ${lastPushDeltaTypes.isEmpty ? 'n/a' : lastPushDeltaTypes}',
+      )
+      ..writeln('  desktop merged: ${lastPushMergedCount ?? 'n/a'}')
+      ..writeln('  desktop watermark: ${lastPushWatermark ?? 'n/a'}')
+      ..writeln('  error: ${lastPushError ?? 'none'}')
+      ..writeln()
+      ..writeln('Local document counts:');
+    for (final entry in localCounts.entries) {
+      buffer.writeln('  ${entry.key}: ${entry.value}');
+    }
+    buffer
+      ..writeln()
+      ..writeln('Watermarks:');
+    if (watermarks.isEmpty) {
+      buffer.writeln('  none');
+    } else {
+      for (final watermark in watermarks) {
+        buffer.writeln(
+          '  ${watermark['nodeId']} ${watermark['direction']} '
+          '${watermark['lastHlc']} updatedAt=${watermark['updatedAt']}',
+        );
+      }
+    }
+    buffer
+      ..writeln()
+      ..writeln('Recent local worklogs:');
+    if (recentWorklogs.isEmpty) {
+      buffer.writeln('  none');
+    } else {
+      for (final worklog in recentWorklogs) {
+        buffer.writeln(
+          '  ${worklog.id} date=${worklog.date} durationMs=${worklog.durationMs} '
+          'taskId=${worklog.taskId.isEmpty ? '(orphan)' : worklog.taskId} '
+          'category=${worklog.category ?? '(none)'} deleted=${worklog.isDeleted} '
+          'crdtClock=${worklog.crdtClock}',
+        );
+      }
+    }
+    return buffer.toString();
+  }
+}
+
+class P2pSyncRecentWorklog {
+  final String id;
+  final String taskId;
+  final String date;
+  final int durationMs;
+  final String? category;
+  final bool isDeleted;
+  final String crdtClock;
+
+  const P2pSyncRecentWorklog({
+    required this.id,
+    required this.taskId,
+    required this.date,
+    required this.durationMs,
+    required this.category,
+    required this.isDeleted,
+    required this.crdtClock,
+  });
+}
+
 /// Sync service that pulls CRDT deltas from the desktop via HTTP.
 ///
 /// Uses [cryptoClient] for TLS + auth transport when provided.
@@ -65,6 +167,14 @@ class CrdtSyncService {
   final HybridLogicalClock clock;
   final http.Client _plainClient;
   final CryptoSyncService? _cryptoClient;
+
+  DateTime? _lastPushStartedAt;
+  DateTime? _lastPushCompletedAt;
+  int? _lastPushDeltaCount;
+  Map<String, int> _lastPushDeltaTypes = const {};
+  int? _lastPushMergedCount;
+  String? _lastPushWatermark;
+  String? _lastPushError;
 
   /// Phone-side pairing service (initialized after pairing).
   PhonePairingService? get pairingService => _pairingService;
@@ -330,18 +440,17 @@ class CrdtSyncService {
         .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
-  Future<void> _mergeTimer(
-    String id,
-    Map<String, CrdtFieldState> state,
-  ) async {
+  Future<void> _mergeTimer(String id, Map<String, CrdtFieldState> state) async {
     // ---- Phase 1 debug logging ----
     // Log incoming timer delta fields
-    final incomingFields = state.entries.map((e) {
-      final fieldState = e.value;
-      final val = fieldState.value;
-      final ts = fieldState.timestamp;
-      return '$e.key=$val[t=$ts]';
-    }).join(', ');
+    final incomingFields = state.entries
+        .map((e) {
+          final fieldState = e.value;
+          final val = fieldState.value;
+          final ts = fieldState.timestamp;
+          return '$e.key=$val[t=$ts]';
+        })
+        .join(', ');
     debugPrint(
       '[CrdtSync] Timer delta RECEIVED: id=$id fields=[$incomingFields]',
     );
@@ -452,57 +561,143 @@ class CrdtSyncService {
   Future<int> pushToDesktop(List<Map<String, dynamic>> deltas) async {
     if (deltas.isEmpty) return 0;
 
-    final nodeId = await getOrCreateNodeId();
-    final body = jsonEncode({'node': nodeId, 'deltas': deltas});
+    _lastPushStartedAt = DateTime.now();
+    _lastPushCompletedAt = null;
+    _lastPushDeltaCount = deltas.length;
+    _lastPushDeltaTypes = _countDeltaTypes(deltas);
+    _lastPushMergedCount = null;
+    _lastPushWatermark = null;
+    _lastPushError = null;
 
     debugPrint('[Sync] Pushing ${deltas.length} deltas');
 
-    final int statusCode;
-    final String responseBody;
-    if (_cryptoClient != null) {
-      final httpResponse = await _cryptoClient.post(
-        'api/sync/deltas',
-        headers: {'Content-Type': 'application/json'},
-        body: body,
-      );
-      final bytes = await httpResponse.fold<List<int>>(
-        <int>[],
-        (prev, chunk) => prev..addAll(chunk),
-      );
-      responseBody = utf8.decode(bytes, allowMalformed: true);
-      statusCode = httpResponse.statusCode;
-    } else {
-      final uri = Uri.parse('$baseUrl/api/sync/deltas');
-      final response = await _plainClient
-          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(const Duration(seconds: 10));
-      responseBody = response.body;
-      statusCode = response.statusCode;
+    try {
+      final nodeId = await getOrCreateNodeId();
+      final body = jsonEncode({'node': nodeId, 'deltas': deltas});
+
+      final int statusCode;
+      final String responseBody;
+      if (_cryptoClient != null) {
+        final httpResponse = await _cryptoClient.post(
+          'api/sync/deltas',
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        );
+        final bytes = await httpResponse.fold<List<int>>(
+          <int>[],
+          (prev, chunk) => prev..addAll(chunk),
+        );
+        responseBody = utf8.decode(bytes, allowMalformed: true);
+        statusCode = httpResponse.statusCode;
+      } else {
+        final uri = Uri.parse('$baseUrl/api/sync/deltas');
+        final response = await _plainClient
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: body,
+            )
+            .timeout(const Duration(seconds: 10));
+        responseBody = response.body;
+        statusCode = response.statusCode;
+      }
+
+      if (statusCode == 403) {
+        debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
+        await onNeedsPairing?.call();
+        throw Exception('Pairing required (HTTP 403)');
+      }
+
+      if (statusCode != 200) {
+        throw Exception('Sync push failed: HTTP $statusCode');
+      }
+
+      final json = jsonDecode(responseBody) as Map<String, dynamic>;
+      final merged = (json['merged'] as num?)?.toInt() ?? 0;
+      final watermark = json['watermark'] as String?;
+
+      // Advance our clock to the desktop's post-merge watermark
+      if (watermark != null && watermark != '0') {
+        try {
+          clock.receive(HybridTimestamp.parse(watermark));
+        } catch (_) {}
+      }
+
+      _lastPushCompletedAt = DateTime.now();
+      _lastPushMergedCount = merged;
+      _lastPushWatermark = watermark;
+      debugPrint('[Sync] Push completed, server processed $merged deltas');
+      return merged;
+    } catch (e) {
+      _lastPushCompletedAt = DateTime.now();
+      _lastPushError = e.toString();
+      rethrow;
     }
+  }
 
-    if (statusCode == 403) {
-      debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
-      await onNeedsPairing?.call();
-      throw Exception('Pairing required (HTTP 403)');
+  Future<P2pSyncDiagnostics> debugDiagnostics() async {
+    final watermarks = await db.select(db.syncWatermarks).get();
+    final tasks = await db.select(db.tasks).get();
+    final worklogs = await db.select(db.worklogEntries).get();
+    final timers = await db.select(db.timerEntries).get();
+    final projects = await db.select(db.projects).get();
+    final dailyPlans = await db.select(db.dailyPlanEntries).get();
+    final dayPlanTasks = await db.select(db.dayPlanTasks).get();
+    final categoryChips = await db.select(db.categoryChips).get();
+
+    final recentWorklogs = worklogs.toList()
+      ..sort((a, b) => b.created.compareTo(a.created));
+
+    return P2pSyncDiagnostics(
+      desktopWatermark: await _getDesktopWatermark(),
+      localCounts: {
+        'task': tasks.length,
+        'worklog': worklogs.length,
+        'timer': timers.length,
+        'project': projects.length,
+        'dailyPlan': dailyPlans.length,
+        'dayPlanTask': dayPlanTasks.length,
+        'categoryChip': categoryChips.length,
+      },
+      watermarks: watermarks
+          .map(
+            (row) => {
+              'nodeId': row.nodeId,
+              'direction': row.direction,
+              'lastHlc': row.lastHlc,
+              'updatedAt': row.updatedAt,
+            },
+          )
+          .toList(),
+      recentWorklogs: recentWorklogs.take(8).map((row) {
+        final doc = WorklogDocument.fromDrift(worklog: row, clock: clock);
+        return P2pSyncRecentWorklog(
+          id: row.id,
+          taskId: doc.taskId,
+          date: doc.date,
+          durationMs: doc.durationMs,
+          category: doc.category,
+          isDeleted: doc.isDeleted,
+          crdtClock: row.crdtClock,
+        );
+      }).toList(),
+      lastPushStartedAt: _lastPushStartedAt,
+      lastPushCompletedAt: _lastPushCompletedAt,
+      lastPushDeltaCount: _lastPushDeltaCount,
+      lastPushDeltaTypes: _lastPushDeltaTypes,
+      lastPushMergedCount: _lastPushMergedCount,
+      lastPushWatermark: _lastPushWatermark,
+      lastPushError: _lastPushError,
+    );
+  }
+
+  Map<String, int> _countDeltaTypes(List<Map<String, dynamic>> deltas) {
+    final counts = <String, int>{};
+    for (final delta in deltas) {
+      final type = delta['type'] as String? ?? 'unknown';
+      counts[type] = (counts[type] ?? 0) + 1;
     }
-
-    if (statusCode != 200) {
-      throw Exception('Sync push failed: HTTP $statusCode');
-    }
-
-    final json = jsonDecode(responseBody) as Map<String, dynamic>;
-    final merged = (json['merged'] as num?)?.toInt() ?? 0;
-    final watermark = json['watermark'] as String?;
-
-    // Advance our clock to the desktop's post-merge watermark
-    if (watermark != null && watermark != '0') {
-      try {
-        clock.receive(HybridTimestamp.parse(watermark));
-      } catch (_) {}
-    }
-
-    debugPrint('[Sync] Push completed, server processed $merged deltas');
-    return merged;
+    return counts;
   }
 
   // ============================================================

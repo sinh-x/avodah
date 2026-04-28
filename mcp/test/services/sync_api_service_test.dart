@@ -269,9 +269,7 @@ void main() {
         category: 'Working',
         label: 'local-label',
       );
-      await db
-          .into(db.categoryChips)
-          .insert(localChip.toDriftCompanion());
+      await db.into(db.categoryChips).insert(localChip.toDriftCompanion());
 
       // Remote update with a later timestamp
       final remoteTs = HybridTimestamp(
@@ -302,9 +300,7 @@ void main() {
         category: 'Working',
         label: 'Local label',
       );
-      await db
-          .into(db.categoryChips)
-          .insert(localChip.toDriftCompanion());
+      await db.into(db.categoryChips).insert(localChip.toDriftCompanion());
 
       // Remote update with an OLD timestamp
       final remoteTs = HybridTimestamp(
@@ -389,11 +385,9 @@ void main() {
       await syncApi.setWatermark(nodeId, receivedHlc, direction: 'received');
       await syncApi.setWatermark(nodeId, sentHlc, direction: 'sent');
 
-      expect(
-          await syncApi.getWatermark(nodeId, direction: 'received'),
+      expect(await syncApi.getWatermark(nodeId, direction: 'received'),
           equals(receivedHlc));
-      expect(
-          await syncApi.getWatermark(nodeId, direction: 'sent'),
+      expect(await syncApi.getWatermark(nodeId, direction: 'sent'),
           equals(sentHlc));
     });
 
@@ -409,6 +403,20 @@ void main() {
       expect(all, hasLength(3));
       final nodeIds = all.map((e) => e['nodeId']).toSet();
       expect(nodeIds, containsAll(['phone-1', 'phone-2']));
+    });
+
+    test('syncDiagnostics uses most recent phone-* received watermark',
+        () async {
+      await syncApi.setWatermark('phone-older', '1000-0-phone-older',
+          direction: 'received');
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+      await syncApi.setWatermark('phone-newer', '2000-0-phone-newer',
+          direction: 'received');
+
+      final diagnostics = await syncApi.syncDiagnostics();
+
+      expect(diagnostics['phoneWatermark'], equals('2000-0-phone-newer'));
+      expect(diagnostics['lastPhoneSync'], isA<int>());
     });
   });
 
@@ -440,7 +448,10 @@ void main() {
             'fields': {
               'title': {'v': 'Phone task', 't': remoteTs.pack()},
               'isDone': {'v': false, 't': remoteTs.pack()},
-              'created': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'created': {
+                'v': DateTime.now().millisecondsSinceEpoch,
+                't': remoteTs.pack()
+              },
               'timeSpent': {'v': 0, 't': remoteTs.pack()},
               'timeEstimate': {'v': 0, 't': remoteTs.pack()},
             },
@@ -492,7 +503,10 @@ void main() {
             'fields': {
               'taskTitle': {'v': 'Phone timer', 't': remoteTs.pack()},
               'isRunning': {'v': true, 't': remoteTs.pack()},
-              'startedAt': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'startedAt': {
+                'v': DateTime.now().millisecondsSinceEpoch,
+                't': remoteTs.pack()
+              },
               'accumulatedMs': {'v': 0, 't': remoteTs.pack()},
             },
           },
@@ -531,7 +545,10 @@ void main() {
             'fields': {
               'taskTitle': {'v': 'Phone work', 't': remoteTs.pack()},
               'isRunning': {'v': true, 't': remoteTs.pack()},
-              'startedAt': {'v': DateTime.now().millisecondsSinceEpoch, 't': remoteTs.pack()},
+              'startedAt': {
+                'v': DateTime.now().millisecondsSinceEpoch,
+                't': remoteTs.pack()
+              },
               'accumulatedMs': {'v': 0, 't': remoteTs.pack()},
             },
           },
@@ -562,8 +579,7 @@ void main() {
       // Create a "remote" database and merge
       final remoteDb = openMemoryDatabase();
       final remoteClock = HybridLogicalClock(nodeId: 'phone-1');
-      final remoteSyncApi =
-          SyncApiService(db: remoteDb, clock: remoteClock);
+      final remoteSyncApi = SyncApiService(db: remoteDb, clock: remoteClock);
 
       for (final delta in deltas) {
         await remoteSyncApi.mergeDelta(delta);

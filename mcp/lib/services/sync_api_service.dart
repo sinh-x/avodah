@@ -194,7 +194,8 @@ class SyncApiService {
       return;
     }
 
-    final result = await mergePushBatch(remoteNode: remoteNode, deltas: deltasJson);
+    final result =
+        await mergePushBatch(remoteNode: remoteNode, deltas: deltasJson);
 
     _jsonResponse(request, HttpStatus.ok, {
       'merged': result.merged,
@@ -247,7 +248,9 @@ class SyncApiService {
     }
 
     // Fall back to config.categoryChips when DB is empty
-    if (chipModels.isEmpty && config != null && config!.categoryChips.isNotEmpty) {
+    if (chipModels.isEmpty &&
+        config != null &&
+        config!.categoryChips.isNotEmpty) {
       final configChips = config!.categoryChips;
       if (category != null) {
         final chips = configChips[category] ?? [];
@@ -263,9 +266,10 @@ class SyncApiService {
 
     if (category != null) {
       // Return chips for specific category
-      final categoryChipList =
-          chipModels.where((c) => c.category == category).toList()
-            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      final categoryChipList = chipModels
+          .where((c) => c.category == category)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       _jsonResponse(request, HttpStatus.ok, {
         'category': category,
         'chips': categoryChipList.map((c) => c.label).toList(),
@@ -279,9 +283,7 @@ class SyncApiService {
       }
       // Sort each category's chips by sortOrder
       for (final key in chipsMap.keys) {
-        final sorted = chipModels
-            .where((c) => c.category == key)
-            .toList()
+        final sorted = chipModels.where((c) => c.category == key).toList()
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
         chipsMap[key] = sorted.map((c) => c.label!).toList();
       }
@@ -303,8 +305,8 @@ class SyncApiService {
 
     final body = await utf8.decoder.bind(request).join();
     if (body.isEmpty) {
-      _jsonResponse(request, HttpStatus.badRequest,
-          {'error': 'Request body is empty'});
+      _jsonResponse(
+          request, HttpStatus.badRequest, {'error': 'Request body is empty'});
       return;
     }
     final json = jsonDecode(body) as Map<String, dynamic>;
@@ -456,10 +458,10 @@ class SyncApiService {
       onDeltasMerged?.call(merged);
       // Trigger Jira push for any newly merged worklogs (fire-and-forget).
       jiraService?.push().then(
-        (_) {},
-        onError: (Object e) =>
-            stderr.writeln('Jira push after phone sync failed: $e'),
-      );
+            (_) {},
+            onError: (Object e) =>
+                stderr.writeln('Jira push after phone sync failed: $e'),
+          );
     }
 
     return (merged: merged, errors: errors, watermark: watermark);
@@ -573,11 +575,9 @@ class SyncApiService {
     }
   }
 
-  Future<void> _mergeTask(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.tasks)
-          ..where((t) => t.id.equals(id)))
-        .get();
+  Future<void> _mergeTask(String id, Map<String, CrdtFieldState> state) async {
+    final rows =
+        await (db.select(db.tasks)..where((t) => t.id.equals(id))).get();
 
     final TaskDocument doc;
     if (rows.isNotEmpty) {
@@ -609,11 +609,9 @@ class SyncApiService {
         .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
-  Future<void> _mergeTimer(
-      String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.timerEntries)
-          ..where((t) => t.id.equals(id)))
-        .get();
+  Future<void> _mergeTimer(String id, Map<String, CrdtFieldState> state) async {
+    final rows =
+        await (db.select(db.timerEntries)..where((t) => t.id.equals(id))).get();
 
     final TimerDocument doc;
     if (rows.isNotEmpty) {
@@ -630,9 +628,8 @@ class SyncApiService {
 
   Future<void> _mergeProject(
       String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.projects)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    final rows =
+        await (db.select(db.projects)..where((t) => t.id.equals(id))).get();
 
     final ProjectDocument doc;
     if (rows.isNotEmpty) {
@@ -666,9 +663,8 @@ class SyncApiService {
 
   Future<void> _mergeDayPlanTask(
       String id, Map<String, CrdtFieldState> state) async {
-    final rows = await (db.select(db.dayPlanTasks)
-          ..where((t) => t.id.equals(id)))
-        .get();
+    final rows =
+        await (db.select(db.dayPlanTasks)..where((t) => t.id.equals(id))).get();
 
     final DayPlanTaskDocument doc;
     if (rows.isNotEmpty) {
@@ -697,7 +693,9 @@ class SyncApiService {
     }
 
     _applyState(doc, state);
-    await db.into(db.categoryChips).insertOnConflictUpdate(doc.toDriftCompanion());
+    await db
+        .into(db.categoryChips)
+        .insertOnConflictUpdate(doc.toDriftCompanion());
   }
 
   // ============================================================
@@ -705,8 +703,7 @@ class SyncApiService {
   // ============================================================
 
   /// Applies CRDT field state to a document using per-field merge.
-  void _applyState(
-      CrdtDocument doc, Map<String, CrdtFieldState> state) {
+  void _applyState(CrdtDocument doc, Map<String, CrdtFieldState> state) {
     for (final entry in state.entries) {
       doc.mergeField(
         entry.key,
@@ -794,27 +791,28 @@ class SyncApiService {
   /// Returns comprehensive sync diagnostics for CLI status display.
   ///
   /// Returns:
-  /// - phoneWatermark: the last HLC watermark received from the phone
+  /// - phoneWatermark: the last HLC watermark received from any phone node
   /// - lastPhoneSync: epoch millis of last phone sync
-  /// - deltaCounts: per-document-type count of documents with deltas since watermark
+  /// - deltaCounts: per-document-type local document counts, not pending deltas
   Future<Map<String, dynamic>> syncDiagnostics() async {
-    // Get phone watermark (received from phone)
-    final phoneWatermark = await getWatermark('phone', direction: 'received');
-
-    // Get all watermarks to find last phone sync time
     final allWatermarks = await getAllWatermarks();
     int? lastPhoneSync;
+    String phoneWatermark = '0';
     for (final w in allWatermarks) {
-      if (w['nodeId'] == 'phone' && w['direction'] == 'received') {
+      final nodeId = w['nodeId'] as String? ?? '';
+      if (nodeId.startsWith('phone') && w['direction'] == 'received') {
         final ts = w['updatedAt'] as int?;
         if (ts != null && (lastPhoneSync == null || ts > lastPhoneSync)) {
           lastPhoneSync = ts;
+          phoneWatermark = (w['lastHlc'] as String?) ?? '0';
         }
       }
     }
 
-    // Count deltas per document type (docs modified since zero watermark = all docs)
-    final zeroWatermark = HybridTimestamp(physicalTime: 0, counter: 0, nodeId: '');
+    // Count local documents per type. This is a diagnostic inventory, not a
+    // pending-sync count; phone pull watermarks are stored on the phone.
+    final zeroWatermark =
+        HybridTimestamp(physicalTime: 0, counter: 0, nodeId: '');
     final counts = <String, int>{
       'dailyPlan': 0,
       'dayPlanTask': 0,
@@ -826,27 +824,39 @@ class SyncApiService {
 
     // Tasks
     final tasks = await db.select(db.tasks).get();
-    counts['task'] = tasks.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['task'] = tasks
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     // Worklogs
     final worklogs = await db.select(db.worklogEntries).get();
-    counts['worklog'] = worklogs.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['worklog'] = worklogs
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     // Timers
     final timers = await db.select(db.timerEntries).get();
-    counts['timer'] = timers.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['timer'] = timers
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     // Projects
     final projects = await db.select(db.projects).get();
-    counts['project'] = projects.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['project'] = projects
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     // Daily plans
     final dailyPlans = await db.select(db.dailyPlanEntries).get();
-    counts['dailyPlan'] = dailyPlans.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['dailyPlan'] = dailyPlans
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     // Day plan tasks
     final dayPlanTasks = await db.select(db.dayPlanTasks).get();
-    counts['dayPlanTask'] = dayPlanTasks.where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark)).length;
+    counts['dayPlanTask'] = dayPlanTasks
+        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
+        .length;
 
     return {
       'phoneWatermark': phoneWatermark,
@@ -891,7 +901,8 @@ class SyncApiService {
         if (device != null && device.origin != null) {
           // If origin matches the stored origin (or is a sub-origin of it), allow it
           if (origin == device.origin ||
-              origin.startsWith(device.origin!.replaceFirst(RegExp(r'^https?://'), ''))) {
+              origin.startsWith(
+                  device.origin!.replaceFirst(RegExp(r'^https?://'), ''))) {
             allowedOrigin = origin;
           }
         }
@@ -902,8 +913,8 @@ class SyncApiService {
     // (After pairing, the phone sends the same origin it used during pairing)
     allowedOrigin ??= origin ?? '*';
 
-    request.response.headers.add(
-        'Access-Control-Allow-Origin', allowedOrigin == '*' ? '*' : allowedOrigin);
+    request.response.headers.add('Access-Control-Allow-Origin',
+        allowedOrigin == '*' ? '*' : allowedOrigin);
     request.response.headers
         .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     request.response.headers.add('Access-Control-Allow-Headers',
@@ -914,8 +925,7 @@ class SyncApiService {
 
   /// Updates the lastSeen timestamp for a paired device.
   Future<void> _updateLastSeen(String nodeId) async {
-    await (db.update(db.pairedDevices)
-          ..where((d) => d.id.equals(nodeId)))
+    await (db.update(db.pairedDevices)..where((d) => d.id.equals(nodeId)))
         .write(PairedDevicesCompanion(
       lastSeen: Value(DateTime.now().millisecondsSinceEpoch),
     ));
