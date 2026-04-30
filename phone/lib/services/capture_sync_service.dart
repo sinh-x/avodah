@@ -26,9 +26,9 @@ class CaptureSyncService {
   /// Errors are logged but not thrown — sync failures should not crash the app.
   Future<void> syncPendingCaptures() async {
     // Fetch unsynced captures
-    final captures = await (db.select(db.pendingCaptures)
-          ..where((t) => t.synced.equals(false)))
-        .get();
+    final captures = await (db.select(
+      db.pendingCaptures,
+    )..where((t) => t.synced.equals(false))).get();
 
     if (captures.isEmpty) return;
 
@@ -68,11 +68,12 @@ class CaptureSyncService {
     await apiClient.createTicket(data);
 
     // Mark as synced
-    await (db.update(db.pendingCaptures)
-          ..where((t) => t.id.equals(capture.id)))
+    await (db.update(db.pendingCaptures)..where((t) => t.id.equals(capture.id)))
         .write(PendingCapturesCompanion(synced: Value(true)));
 
-    debugPrint('[CaptureSync] Synced capture ${capture.id}: "${capture.title}"');
+    debugPrint(
+      '[CaptureSync] Synced capture ${capture.id}: "${capture.title}"',
+    );
   }
 
   /// Builds summary field from URL + notes content.
@@ -105,9 +106,11 @@ class CaptureSyncService {
     String? notes,
     String category = 'learning',
     String? sharedText,
-    String project = 'learning-management',
+    String project = 'learning',
   }) async {
-    final id = await db.into(db.pendingCaptures).insert(
+    final id = await db
+        .into(db.pendingCaptures)
+        .insert(
           PendingCapturesCompanion.insert(
             title: title,
             url: Value(url),
@@ -126,11 +129,12 @@ class CaptureSyncService {
 
   /// Returns the count of unsynced captures.
   Future<int> unsyncedCount() async {
-    final count = await (db.selectOnly(db.pendingCaptures)
-          ..where(db.pendingCaptures.synced.equals(false))
-          ..addColumns([db.pendingCaptures.id.count()]))
-        .map((row) => row.read(db.pendingCaptures.id.count()))
-        .getSingle();
+    final count =
+        await (db.selectOnly(db.pendingCaptures)
+              ..where(db.pendingCaptures.synced.equals(false))
+              ..addColumns([db.pendingCaptures.id.count()]))
+            .map((row) => row.read(db.pendingCaptures.id.count()))
+            .getSingle();
     return count ?? 0;
   }
 }
