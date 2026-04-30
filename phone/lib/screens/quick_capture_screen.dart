@@ -33,7 +33,14 @@ class QuickCaptureScreen extends StatefulWidget {
 }
 
 class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
-  static const _categories = ['learning', 'personal', 'work', 'video', 'article', 'code'];
+  static const _categories = [
+    'learning',
+    'personal',
+    'work',
+    'video',
+    'article',
+    'code',
+  ];
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
@@ -41,7 +48,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   late final TextEditingController _notesController;
 
   String _category = 'learning';
-  String _project = 'learning-management';
+  String _project = 'learning';
   List<TicketProject> _projects = [];
   bool _loadingProjects = false;
   bool _submitting = false;
@@ -66,9 +73,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     _urlController = TextEditingController(
       text: widget.sharedUrl ?? extractedUrl ?? '',
     );
-    _notesController = TextEditingController(
-      text: widget.sharedText,
-    );
+    _notesController = TextEditingController(text: widget.sharedText);
 
     // Trigger title extraction if URL is pre-filled
     if (hasUrl) {
@@ -174,17 +179,17 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Capture saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Capture saved')));
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _submitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
       }
     }
   }
@@ -241,9 +246,21 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: _projects.isEmpty
-                    ? [const DropdownMenuItem(value: 'learning-management', child: Text('learning-management'))]
-                    : _projects.map((p) => DropdownMenuItem(value: p.key, child: Text(p.key))).toList(),
-                onChanged: (v) => setState(() => _project = v ?? 'learning-management'),
+                    ? [
+                        const DropdownMenuItem(
+                          value: 'learning',
+                          child: Text('learning'),
+                        ),
+                      ]
+                    : _projects
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.key,
+                              child: Text(p.key),
+                            ),
+                          )
+                          .toList(),
+                onChanged: (v) => setState(() => _project = v ?? 'learning'),
               ),
             const SizedBox(height: 16),
 
