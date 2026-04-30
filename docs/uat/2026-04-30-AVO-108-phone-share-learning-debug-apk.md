@@ -2,7 +2,8 @@
 
 Date: 2026-04-30
 Branch: `feature/AVO-108-share-learning-capture`
-Commit: `9dec79aa9ae573beffc4cd301fa84224d2a7c526`
+APK build commit: `9dec79aa9ae573beffc4cd301fa84224d2a7c526`
+Documentation commit reviewed: `689a3033fa6dc4c95e239fda9891625c4a354124`
 
 ## Build
 
