@@ -109,8 +109,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Write service for local CRDT mutations (timer, task, worklog)
     final writeService = LocalWriteService(db: db, clock: clock);
 
-    // One-time backfill: set category on worklogs from task-level timers
-    await writeService.backfillWorklogCategories();
+    // One-time backfill: set category on worklogs from task-level timers.
+    // This is opportunistic and should not block share-intent startup if the
+    // CRDT database is briefly locked by sync or a previous process shutdown.
+    try {
+      await writeService.backfillWorklogCategories();
+    } catch (e) {
+      debugPrint('[Init] Worklog category backfill skipped: $e');
+    }
 
     // Load stored server URL (already HTTP format)
     final httpBaseUrl = await SettingsScreen.loadServerUrl();
@@ -335,7 +341,27 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     }
 
     try {
-      await sync.syncPendingCaptures();
+      final summary = await sync.syncPendingCaptures();
+      if (!summary.hasFailures) return;
+
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Capture sync failed for ${summary.failedCount} item(s); will retry',
+              ),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Retry',
+                onPressed: () => _syncCaptures(),
+              ),
+            ),
+          );
+        });
+      }
     } catch (e) {
       debugPrint('[CaptureSync] Sync failed: $e');
       // Surface capture sync failure to user via snackbar
@@ -740,7 +766,7 @@ class _HomeShellState extends State<_HomeShell> {
               actions: [
                 ValueListenableBuilder<SyncConnectionState>(
                   valueListenable: widget.dashboardProvider.connectionState,
-                  builder: (_, state, __) => Padding(
+                  builder: (context, state, child) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: ConnectionIndicator(state: state),
                   ),
@@ -771,7 +797,7 @@ class _HomeShellState extends State<_HomeShell> {
               actions: [
                 ValueListenableBuilder<SyncConnectionState>(
                   valueListenable: widget.dashboardProvider.connectionState,
-                  builder: (_, state, __) => Padding(
+                  builder: (context, state, child) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: ConnectionIndicator(state: state),
                   ),
@@ -806,7 +832,7 @@ class _HomeShellState extends State<_HomeShell> {
               actions: [
                 ValueListenableBuilder<SyncConnectionState>(
                   valueListenable: widget.dashboardProvider.connectionState,
-                  builder: (_, state, __) => Padding(
+                  builder: (context, state, child) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: ConnectionIndicator(state: state),
                   ),

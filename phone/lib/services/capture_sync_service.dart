@@ -6,6 +6,43 @@ import 'package:flutter/foundation.dart';
 import '../storage/phone_database.dart';
 import 'agent_api_client.dart';
 
+enum CaptureSyncStatus { synced, failed }
+
+class CaptureSyncOutcome {
+  const CaptureSyncOutcome({
+    required this.captureId,
+    required this.status,
+    this.error,
+  });
+
+  final int captureId;
+  final CaptureSyncStatus status;
+  final Object? error;
+}
+
+class CaptureSyncSummary {
+  const CaptureSyncSummary(this.outcomes);
+
+  final List<CaptureSyncOutcome> outcomes;
+
+  int get syncedCount => outcomes
+      .where((outcome) => outcome.status == CaptureSyncStatus.synced)
+      .length;
+
+  int get failedCount => outcomes
+      .where((outcome) => outcome.status == CaptureSyncStatus.failed)
+      .length;
+
+  bool get hasFailures => failedCount > 0;
+
+  CaptureSyncOutcome? outcomeFor(int captureId) {
+    for (final outcome in outcomes) {
+      if (outcome.captureId == captureId) return outcome;
+    }
+    return null;
+  }
+}
+
 /// Syncs pending captures from local Drift storage to the PA system via API.
 ///
 /// Runs on:
@@ -15,6 +52,9 @@ import 'agent_api_client.dart';
 ///
 /// Uses insertOnConflictUpdate for the synced flag — safe to call repeatedly.
 class CaptureSyncService {
+  static const _learningProject = 'learning';
+  static const _oldLearningProject = 'learning-management';
+
   final PhoneDatabase db;
   final AgentApiClient apiClient;
 
@@ -24,30 +64,46 @@ class CaptureSyncService {
   ///
   /// Skipped if already syncing ( concurrent call protection).
   /// Errors are logged but not thrown — sync failures should not crash the app.
-  Future<void> syncPendingCaptures() async {
+  Future<CaptureSyncSummary> syncPendingCaptures() async {
     // Fetch unsynced captures
-    final captures = await (db.select(db.pendingCaptures)
-          ..where((t) => t.synced.equals(false)))
-        .get();
+    final captures = await (db.select(
+      db.pendingCaptures,
+    )..where((t) => t.synced.equals(false))).get();
 
-    if (captures.isEmpty) return;
+    if (captures.isEmpty) return const CaptureSyncSummary([]);
 
     debugPrint('[CaptureSync] Syncing ${captures.length} capture(s)');
 
+    final outcomes = <CaptureSyncOutcome>[];
     for (final capture in captures) {
       try {
         await _syncCapture(capture);
+        outcomes.add(
+          CaptureSyncOutcome(
+            captureId: capture.id,
+            status: CaptureSyncStatus.synced,
+          ),
+        );
       } catch (e) {
         // Log but don't throw — we don't want to lose other captures
         debugPrint('[CaptureSync] Failed to sync capture ${capture.id}: $e');
+        outcomes.add(
+          CaptureSyncOutcome(
+            captureId: capture.id,
+            status: CaptureSyncStatus.failed,
+            error: e,
+          ),
+        );
       }
     }
+
+    return CaptureSyncSummary(outcomes);
   }
 
   /// Syncs a single capture to the PA system and marks it as synced.
   Future<void> _syncCapture(PendingCapture capture) async {
     final data = <String, dynamic>{
-      'project': capture.project,
+      'project': _normalizeProject(capture.project),
       'title': capture.title,
       'type': 'idea',
       'status': 'idea',
@@ -68,11 +124,17 @@ class CaptureSyncService {
     await apiClient.createTicket(data);
 
     // Mark as synced
-    await (db.update(db.pendingCaptures)
-          ..where((t) => t.id.equals(capture.id)))
+    await (db.update(db.pendingCaptures)..where((t) => t.id.equals(capture.id)))
         .write(PendingCapturesCompanion(synced: Value(true)));
 
-    debugPrint('[CaptureSync] Synced capture ${capture.id}: "${capture.title}"');
+    debugPrint(
+      '[CaptureSync] Synced capture ${capture.id}: "${capture.title}"',
+    );
+  }
+
+  String _normalizeProject(String project) {
+    if (project == _oldLearningProject) return _learningProject;
+    return project;
   }
 
   /// Builds summary field from URL + notes content.
@@ -105,9 +167,11 @@ class CaptureSyncService {
     String? notes,
     String category = 'learning',
     String? sharedText,
-    String project = 'learning-management',
+    String project = 'learning',
   }) async {
-    final id = await db.into(db.pendingCaptures).insert(
+    final id = await db
+        .into(db.pendingCaptures)
+        .insert(
           PendingCapturesCompanion.insert(
             title: title,
             url: Value(url),
@@ -126,11 +190,12 @@ class CaptureSyncService {
 
   /// Returns the count of unsynced captures.
   Future<int> unsyncedCount() async {
-    final count = await (db.selectOnly(db.pendingCaptures)
-          ..where(db.pendingCaptures.synced.equals(false))
-          ..addColumns([db.pendingCaptures.id.count()]))
-        .map((row) => row.read(db.pendingCaptures.id.count()))
-        .getSingle();
+    final count =
+        await (db.selectOnly(db.pendingCaptures)
+              ..where(db.pendingCaptures.synced.equals(false))
+              ..addColumns([db.pendingCaptures.id.count()]))
+            .map((row) => row.read(db.pendingCaptures.id.count()))
+            .getSingle();
     return count ?? 0;
   }
 }

@@ -82,7 +82,7 @@ class $PendingCapturesTable extends PendingCaptures
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('learning-management'),
+    defaultValue: const Constant('learning'),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
