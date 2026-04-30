@@ -23,7 +23,20 @@ void main() {
         final summary = await service.syncPendingCaptures();
 
         expect(apiClient.createdTickets, hasLength(1));
-        expect(apiClient.createdTickets.single['project'], 'learning');
+        expect(apiClient.createdTickets.single, {
+          'project': 'learning',
+          'title': 'Shared learning link',
+          'type': 'idea',
+          'status': 'idea',
+          'priority': 'medium',
+          'estimate': 'XS',
+          'assignee': 'requirements',
+          'summary': 'https://example.com/article\nRead later',
+          'doc_refs': [
+            {'type': 'url', 'path': 'https://example.com/article'},
+          ],
+          'tags': ['learning', 'shared-link'],
+        });
         expect(summary.syncedCount, 1);
         expect(summary.failedCount, 0);
         expect(summary.outcomes.single.status, CaptureSyncStatus.synced);
@@ -52,6 +65,20 @@ void main() {
       expect(summary.outcomes.single.error, isA<AgentApiException>());
 
       final captures = await db.select(db.pendingCaptures).get();
+      expect(captures.single.synced, isFalse);
+
+      await db.close();
+    });
+
+    test('defaults new pending captures to learning project', () async {
+      final db = PhoneDatabase(NativeDatabase.memory());
+      final apiClient = _RecordingAgentApiClient();
+      final service = CaptureSyncService(db: db, apiClient: apiClient);
+
+      await service.saveCapture(title: 'New learning capture');
+
+      final captures = await db.select(db.pendingCaptures).get();
+      expect(captures.single.project, 'learning');
       expect(captures.single.synced, isFalse);
 
       await db.close();
