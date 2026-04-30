@@ -12,6 +12,8 @@ services:
     environment:
       - AVODAH_DATA_DIR=/data
       - AVODAH_CONFIG_DIR=/config
+      # Host networking exposes the listener on the host; keep it loopback-only.
+      - SYNC_HOST=${SYNC_HOST:-127.0.0.1}
       - SYNC_PORT=${SYNC_PORT:-9847}
       - JIRA_ENABLED=${JIRA_ENABLED:-false}
       # Agent API URL — proxied to pa serve (same host, port 9848)

@@ -9,7 +9,7 @@ The phone connects only to this container (port 9847). The container transparent
 
 ## Prerequisites
 
-- Docker 20.10+ (for `host.docker.internal` support on Linux)
+- Docker 20.10+
 - Docker Compose v2 (`docker compose` command, not `docker-compose`)
 - Existing Avodah data at `~/.local/share/avodah/` and config at `~/.config/avodah/`
 
@@ -33,15 +33,17 @@ The sync server is available at `http://localhost:9847`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SYNC_PORT` | `9847` | Host-side port the sync server is reachable on |
+| `SYNC_HOST` | `127.0.0.1` | Host/interface the sync server binds to; keep loopback-only behind Caddy |
 | `AGENT_PORT` | `9848` | Port where `pa serve` listens on the host |
 | `JIRA_ENABLED` | `false` | Enable Jira auto-push on worklog sync |
-| `AVODAH_CONFIG` | `~/.config/avodah` | Host path to config directory (mounted read-only) |
+| `AVODAH_CONFIG` | `~/.config/avodah` | Host path to config directory (mounted read-write) |
 | `AVODAH_DATA` | `~/.local/share/avodah` | Host path to data directory (mounted read-write) |
 
 Set these in a `.env` file next to `docker-compose.yml`:
 
 ```env
 SYNC_PORT=9847
+SYNC_HOST=127.0.0.1
 AGENT_PORT=9848
 JIRA_ENABLED=false
 ```
@@ -50,7 +52,7 @@ JIRA_ENABLED=false
 
 | Container path | Host path | Mode | Contents |
 |----------------|-----------|------|----------|
-| `/config` | `~/.config/avodah/` | read-only | `config.toml`, `node-id`, Jira credentials |
+| `/config` | `~/.config/avodah/` | read-write | `config.json`, `node-id`, Jira credentials |
 | `/data` | `~/.local/share/avodah/` | read-write | `avodah.db` (SQLite database) |
 
 > **Warning:** Only one sync server instance should access the SQLite database at a time. Running both the Docker container and the native `avodah-sync` binary simultaneously will cause SQLite locking errors.
@@ -61,8 +63,10 @@ The sync server speaks plain HTTP only. TLS is terminated by an upstream
 reverse proxy (e.g. `drgnfly-caddy`) that fronts the container at
 `https://drgnfly.tail10c2c6.ts.net/avodah` and forwards to `localhost:9847`.
 
-The container binds HTTP on the host's loopback interface — it should not
-be exposed externally. Use `SYNC_HOST=127.0.0.1` to enforce localhost-only.
+The committed Compose configuration binds HTTP on the host's loopback interface
+with `SYNC_HOST=127.0.0.1`; the sync server should not be exposed externally.
+Only override this for isolated local testing where an upstream proxy is not in
+use.
 
 The phone connects to the upstream HTTPS URL (e.g.
 `https://drgnfly.tail10c2c6.ts.net/avodah`); the upstream Caddy strips the
@@ -72,10 +76,14 @@ requests on to the sync server / `pa serve` on the host.
 ## Proxy Architecture
 
 ```
-Phone ──→ :9847 (Docker container — avodah-sync)
-  ├── /sync/*     Handled by Docker (CRDT delta sync)
-  ├── /api/sync/* Handled by Docker (CRDT delta sync)
-  ├── /api/config/* Handled by Docker (category config)
+Phone ──HTTPS──→ drgnfly-caddy /avodah
+  ├── /api/sync/* ──HTTP──→ localhost:9847 (avodah-sync)
+  ├── /api/*      ──HTTP──→ localhost:9848 (pa serve)
+  └── /ws         ──HTTP──→ localhost:9847 (avodah-sync WebSocket proxy)
+
+Host ──→ :9847 (Docker container — avodah-sync)
+  ├── /api/sync/* Handled by sync server (CRDT delta sync)
+  ├── /api/config/* Handled by sync server (category config)
   ├── /api/*      HTTP proxied ──→ host:9848 (pa serve)
   └── /ws         WebSocket proxied ──→ host:9848 (pa serve)
 
@@ -84,7 +92,8 @@ Host ──→ :9848 (pa serve — personal-assistant repo)
   └── /ws         WebSocket real-time events
 ```
 
-The container uses `host.docker.internal` (Docker 20.10+ built-in DNS) to reach `pa serve` on the host. This is configured via `extra_hosts: ["host.docker.internal:host-gateway"]` in `docker-compose.yml`.
+The Compose service uses `network_mode: host`, so `AGENT_API_URL` points to
+`http://localhost:9848` to reach `pa serve` on the same host.
 
 **If `pa serve` is not running:** Proxy requests return HTTP 502. Sync continues working normally — the sync API is always available regardless of agent API availability.
 
@@ -136,16 +145,18 @@ pa serve --port 9848
 
 Sync continues working. Only agent API requests (inbox, teams, deploy) are affected.
 
-### host.docker.internal not resolving
+### Agent API host not reachable
 
-Requires Docker 20.10+. Check:
+With `network_mode: host`, `AGENT_API_URL=http://localhost:9848` should reach
+`pa serve` on the host. Check Docker and `pa serve` first:
 
 ```bash
 docker --version
-# Docker version 20.10.x or higher required
+curl http://localhost:9848/api/health
 ```
 
-On older Docker or Podman, set `AGENT_API_URL` to the host's LAN IP instead:
+If you run without host networking, set `AGENT_API_URL` to a reachable host name
+or LAN IP instead:
 
 ```env
 AGENT_API_URL=http://192.168.1.x:9848
