@@ -20,10 +20,13 @@ void main() {
 
         await _insertPendingCapture(db, project: 'learning-management');
 
-        await service.syncPendingCaptures();
+        final summary = await service.syncPendingCaptures();
 
         expect(apiClient.createdTickets, hasLength(1));
         expect(apiClient.createdTickets.single['project'], 'learning');
+        expect(summary.syncedCount, 1);
+        expect(summary.failedCount, 0);
+        expect(summary.outcomes.single.status, CaptureSyncStatus.synced);
 
         final captures = await db.select(db.pendingCaptures).get();
         expect(captures.single.synced, isTrue);
@@ -39,10 +42,14 @@ void main() {
 
       await _insertPendingCapture(db, project: 'learning-management');
 
-      await service.syncPendingCaptures();
+      final summary = await service.syncPendingCaptures();
 
       expect(apiClient.createdTickets, hasLength(1));
       expect(apiClient.createdTickets.single['project'], 'learning');
+      expect(summary.syncedCount, 0);
+      expect(summary.failedCount, 1);
+      expect(summary.outcomes.single.status, CaptureSyncStatus.failed);
+      expect(summary.outcomes.single.error, isA<AgentApiException>());
 
       final captures = await db.select(db.pendingCaptures).get();
       expect(captures.single.synced, isFalse);
