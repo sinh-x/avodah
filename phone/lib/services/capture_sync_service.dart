@@ -15,6 +15,9 @@ import 'agent_api_client.dart';
 ///
 /// Uses insertOnConflictUpdate for the synced flag — safe to call repeatedly.
 class CaptureSyncService {
+  static const _learningProject = 'learning';
+  static const _oldLearningProject = 'learning-management';
+
   final PhoneDatabase db;
   final AgentApiClient apiClient;
 
@@ -47,7 +50,7 @@ class CaptureSyncService {
   /// Syncs a single capture to the PA system and marks it as synced.
   Future<void> _syncCapture(PendingCapture capture) async {
     final data = <String, dynamic>{
-      'project': capture.project,
+      'project': _normalizeProject(capture.project),
       'title': capture.title,
       'type': 'idea',
       'status': 'idea',
@@ -74,6 +77,11 @@ class CaptureSyncService {
     debugPrint(
       '[CaptureSync] Synced capture ${capture.id}: "${capture.title}"',
     );
+  }
+
+  String _normalizeProject(String project) {
+    if (project == _oldLearningProject) return _learningProject;
+    return project;
   }
 
   /// Builds summary field from URL + notes content.
