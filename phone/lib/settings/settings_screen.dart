@@ -71,6 +71,25 @@ class SettingsScreen extends StatefulWidget {
     await prefs.setString(kServerUrlKey, url);
     return url;
   }
+
+  static Uri syncStatusUriForServerUrl(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) {
+      throw const FormatException('Enter a server URL first');
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw FormatException('Invalid server URL: $trimmed');
+    }
+
+    final basePath = uri.path.replaceFirst(RegExp(r'/+$'), '');
+    return uri.replace(
+      path: '$basePath/api/sync/status',
+      query: null,
+      fragment: null,
+    );
+  }
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
@@ -330,9 +349,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      final url = _controller.text.trim();
-      // Use root health endpoint (no auth required)
-      final uri = Uri.parse('$url/');
+      var url = _controller.text.trim();
+      if (url.isEmpty) {
+        url = await SettingsScreen.loadServerUrl();
+        _controller.text = url;
+      }
+      final uri = SettingsScreen.syncStatusUriForServerUrl(url);
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         setState(() => _testResult = 'Connected successfully!');

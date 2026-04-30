@@ -64,4 +64,35 @@ void main() {
       expect(prefs.getString(kServerUrlKey), 'http://100.64.0.1:9847');
     });
   });
+
+  group('SettingsScreen.syncStatusUriForServerUrl', () {
+    test('appends sync status path to mounted server URL', () {
+      final uri = SettingsScreen.syncStatusUriForServerUrl(
+        'https://drgnfly.tail10c2c6.ts.net/avodah',
+      );
+
+      expect(
+        uri.toString(),
+        'https://drgnfly.tail10c2c6.ts.net/avodah/api/sync/status',
+      );
+    });
+
+    test('handles trailing slash on mounted server URL', () {
+      final uri = SettingsScreen.syncStatusUriForServerUrl(
+        'https://drgnfly.tail10c2c6.ts.net/avodah/',
+      );
+
+      expect(
+        uri.toString(),
+        'https://drgnfly.tail10c2c6.ts.net/avodah/api/sync/status',
+      );
+    });
+
+    test('rejects empty server URL before building request URI', () {
+      expect(
+        () => SettingsScreen.syncStatusUriForServerUrl(''),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
 }
