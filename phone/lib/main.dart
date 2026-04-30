@@ -109,8 +109,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     // Write service for local CRDT mutations (timer, task, worklog)
     final writeService = LocalWriteService(db: db, clock: clock);
 
-    // One-time backfill: set category on worklogs from task-level timers
-    await writeService.backfillWorklogCategories();
+    // One-time backfill: set category on worklogs from task-level timers.
+    // This is opportunistic and should not block share-intent startup if the
+    // CRDT database is briefly locked by sync or a previous process shutdown.
+    try {
+      await writeService.backfillWorklogCategories();
+    } catch (e) {
+      debugPrint('[Init] Worklog category backfill skipped: $e');
+    }
 
     // Load stored server URL (already HTTP format)
     final httpBaseUrl = await SettingsScreen.loadServerUrl();

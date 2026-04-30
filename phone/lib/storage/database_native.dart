@@ -27,7 +27,13 @@ Future<AppDatabase> openPhoneDatabase() async {
     }
   }
   final file = File(p.join(dbFolder.path, 'avodah_phone.db'));
-  final executor = NativeDatabase.createInBackground(file);
+  final executor = NativeDatabase.createInBackground(
+    file,
+    setup: (db) {
+      db.execute('PRAGMA busy_timeout = 5000');
+      db.execute('PRAGMA journal_mode = WAL');
+    },
+  );
   return AppDatabase(executor);
 }
 
@@ -50,6 +56,12 @@ Future<PhoneDatabase> openPhoneLocalDatabase() async {
     }
   }
   final file = File(p.join(dbFolder.path, 'avodah_phone_local.db'));
-  final executor = NativeDatabase.createInBackground(file);
+  final executor = NativeDatabase.createInBackground(
+    file,
+    setup: (db) {
+      db.execute('PRAGMA busy_timeout = 5000');
+      db.execute('PRAGMA journal_mode = WAL');
+    },
+  );
   return PhoneDatabase(executor);
 }
