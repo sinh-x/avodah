@@ -164,7 +164,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
 
     try {
       // Save to local Drift table (offline-first)
-      await widget.captureSyncService.saveCapture(
+      final captureId = await widget.captureSyncService.saveCapture(
         title: title.isEmpty ? (url.isEmpty ? 'Quick capture' : url) : title,
         url: url.isNotEmpty ? url : null,
         notes: notes.isNotEmpty ? notes : null,
@@ -173,15 +173,19 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
         project: _project,
       );
 
-      // Trigger immediate sync to PA (best-effort — doesn't block UI)
-      widget.captureSyncService.syncPendingCaptures().catchError((e) {
-        debugPrint('[QuickCapture] Sync error: $e');
-      });
+      final syncSummary = await widget.captureSyncService.syncPendingCaptures();
+      final syncOutcome = syncSummary.outcomeFor(captureId);
+      final message = switch (syncOutcome?.status) {
+        CaptureSyncStatus.synced => 'Capture saved and ticket created',
+        CaptureSyncStatus.failed =>
+          'Capture saved locally; ticket sync failed; will retry',
+        null => 'Capture saved locally; ticket sync pending',
+      };
 
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Capture saved')));
+        ).showSnackBar(SnackBar(content: Text(message)));
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -240,7 +244,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
             else
               DropdownButtonFormField<String>(
                 key: ValueKey(_project),
-                value: _project,
+                initialValue: _project,
                 decoration: const InputDecoration(
                   labelText: 'Project',
                   border: OutlineInputBorder(),
