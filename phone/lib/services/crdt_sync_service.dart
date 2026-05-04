@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'crypto_sync_service.dart';
 import 'pairing_service.dart';
+import 'sync_error_classifier.dart';
 
 const _kDesktopNodeId = 'desktop';
 const _kPhoneNodeIdKey = 'crdt_node_id';
@@ -234,7 +235,10 @@ class CrdtSyncService {
     if (_cryptoClient != null && !isPaired) {
       final status = await _pairingService?.checkPairingStatus();
       if (status != null && status.needsPairing) {
-        debugPrint('[CrdtSync] Server needs pairing — triggering pairing flow');
+        debugPrint(
+          '[CrdtSync] Server needs pairing — triggering pairing flow '
+          '[category=${SyncErrorCategory.authPairing.name}]',
+        );
         await onNeedsPairing?.call();
         throw Exception('Pairing required');
       }
@@ -273,7 +277,10 @@ class CrdtSyncService {
     }
 
     if (statusCode == 403) {
-      debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
+      debugPrint(
+        '[CrdtSync] HTTP 403 — triggering pairing flow '
+        '[category=${SyncErrorCategory.authPairing.name}]',
+      );
       await onNeedsPairing?.call();
       throw Exception('Pairing required (HTTP 403)');
     }
@@ -293,8 +300,10 @@ class CrdtSyncService {
         await _mergeDelta(delta);
         merged++;
       } catch (e) {
+        final category = classifySyncError(e);
         debugPrint(
-          '[CrdtSync] Failed to merge delta ${delta['type']}/${delta['id']}: $e',
+          '[CrdtSync] Failed to merge delta ${delta['type']}/${delta['id']}: '
+          '$e [category=${category.name}]',
         );
       }
     }
@@ -472,7 +481,11 @@ class CrdtSyncService {
         'taskId=${doc.taskId} taskTitle=${doc.taskTitle}',
       );
     } catch (e) {
-      debugPrint('[CrdtSync] Timer MERGE FAILURE: id=$id error=$e');
+      final category = classifySyncError(e);
+      debugPrint(
+        '[CrdtSync] Timer MERGE FAILURE: id=$id error=$e '
+        '[category=${category.name}]',
+      );
       rethrow;
     }
     await db
@@ -603,7 +616,10 @@ class CrdtSyncService {
       }
 
       if (statusCode == 403) {
-        debugPrint('[CrdtSync] HTTP 403 — triggering pairing flow');
+        debugPrint(
+          '[CrdtSync] HTTP 403 — triggering pairing flow '
+          '[category=${SyncErrorCategory.authPairing.name}]',
+        );
         await onNeedsPairing?.call();
         throw Exception('Pairing required (HTTP 403)');
       }
@@ -631,6 +647,8 @@ class CrdtSyncService {
     } catch (e) {
       _lastPushCompletedAt = DateTime.now();
       _lastPushError = e.toString();
+      final category = classifySyncError(e);
+      debugPrint('[Sync] Push failed: $e [category=${category.name}]');
       rethrow;
     }
   }
