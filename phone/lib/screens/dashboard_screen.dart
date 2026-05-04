@@ -331,17 +331,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
             },
           ),
-          if (snapshot != null && snapshot.unsyncedJiraCount > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Tooltip(
-                message: '${snapshot.unsyncedJiraCount} unsynced Jira worklog${snapshot.unsyncedJiraCount > 1 ? 's' : ''}',
-                child: Badge(
-                  label: Text('${snapshot.unsyncedJiraCount}'),
-                  child: const Icon(Icons.cloud_upload),
-                ),
-              ),
-            ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () async {
