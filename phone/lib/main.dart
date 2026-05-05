@@ -25,6 +25,7 @@ import 'services/focus_provider.dart';
 import 'services/local_dashboard_provider.dart';
 import 'services/local_write_service.dart';
 import 'services/review_provider.dart';
+import 'services/sync_error_classifier.dart';
 import 'services/team_browser_provider.dart';
 import 'storage/phone_database.dart';
 import 'settings/settings_screen.dart';
@@ -299,16 +300,17 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
         }
       }
     } catch (e) {
-      debugPrint('[Sync] Pull failed: $e');
+      final category = classifySyncError(e);
+      debugPrint('[Sync] Pull failed: $e [category=${category.name}]');
       // Surface pull failure to user via snackbar (AC4)
       final messenger = _scaffoldMessengerKey.currentState;
       if (messenger != null) {
         SchedulerBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Sync failed — will retry on next cycle'),
-              duration: Duration(seconds: 4),
+            SnackBar(
+              content: Text(errorMessage(category)),
+              duration: const Duration(seconds: 4),
             ),
           );
         });
