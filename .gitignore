@@ -63,3 +63,4 @@ docker-compose.override.yml
 # Direnv
 .direnv/
 .claude/todos.md
+phone/releases/
