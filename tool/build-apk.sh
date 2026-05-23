@@ -5,7 +5,12 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PHONE_DIR="$ROOT_DIR/phone"
 RELEASES_DIR="$PHONE_DIR/releases"
 PUBSPEC_PATH="$PHONE_DIR/pubspec.yaml"
-SPLIT_OUT_DIR="$PHONE_DIR/build/app/outputs/flutter-apk"
+
+# Shared ABI -> APK output path mapping.
+# shellcheck source=tool/apk-paths.sh
+source "$ROOT_DIR/tool/apk-paths.sh"
+
+SPLIT_OUT_DIR="$(apk_output_dir "$ROOT_DIR")"
 
 if [ ! -f "$PUBSPEC_PATH" ]; then
   echo "ERROR: pubspec.yaml not found at $PUBSPEC_PATH"
@@ -29,8 +34,8 @@ cd "$PHONE_DIR"
 echo "Building split release APKs for ARM targets..."
 flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64
 
-ARM64_SRC="$SPLIT_OUT_DIR/app-arm64-v8a-release.apk"
-ARMV7_SRC="$SPLIT_OUT_DIR/app-armeabi-v7a-release.apk"
+ARM64_SRC="$(apk_path_for_abi "$ROOT_DIR" arm64-v8a)"
+ARMV7_SRC="$(apk_path_for_abi "$ROOT_DIR" armeabi-v7a)"
 
 if [ ! -f "$ARM64_SRC" ] || [ ! -f "$ARMV7_SRC" ]; then
   echo "ERROR: Expected split APKs were not generated."
