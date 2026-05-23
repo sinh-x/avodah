@@ -117,7 +117,7 @@
           avo-run = pkgs.writeShellScriptBin "avo-run" "flutter run -d linux";
           avo-run-android = pkgs.writeShellScriptBin "avo-run-android" "cd $(git rev-parse --show-toplevel)/phone && flutter run -d android";
           avo-build = pkgs.writeShellScriptBin "avo-build" "flutter build linux --release";
-          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "cd $(git rev-parse --show-toplevel)/phone && flutter build apk --release";
+          avo-build-android = pkgs.writeShellScriptBin "avo-build-android" "cd $(git rev-parse --show-toplevel)/phone && flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64";
           avo-test = pkgs.writeShellScriptBin "avo-test" "flutter test";
           avo-analyze = pkgs.writeShellScriptBin "avo-analyze" "flutter analyze";
           avo-clean = pkgs.writeShellScriptBin "avo-clean" "flutter clean && flutter pub get";
