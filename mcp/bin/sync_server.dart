@@ -167,6 +167,13 @@ Future<void> main(List<String> args) async {
     pairingService: pairingService,
   );
 
+  // Pull deltas from paired phone devices on startup (non-blocking).
+  syncApi.pullFromPhone().then(
+    (_) {},
+    onError: (Object e) =>
+        stderr.writeln('Phone pull on startup failed: $e'),
+  );
+
   // HTTP-only bind. TLS is terminated upstream by drgnfly-caddy.
   final server = await HttpServer.bind(bindHost, port);
   stderr.writeln(

@@ -11,9 +11,12 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:drift/drift.dart' show Value;
+
+import 'package:http/http.dart' as http;
 
 import '../config/avo_config.dart';
 import '../config/paths.dart';
@@ -66,6 +69,98 @@ class SyncApiService {
     this.paths,
     this.pairingService,
   });
+
+  /// Pulls CRDT deltas from all paired phone devices on startup.
+  ///
+  /// For each paired device with a `phone`-prefixed node ID, this method:
+  /// 1. Looks up the stored watermark (last received HLC from that device).
+  /// 2. Constructs a sync auth token from the pairing key.
+  /// 3. Calls `GET /api/sync/deltas?since=<watermark>` on the phone with a
+  ///    5-second timeout.
+  /// 4. Merges returned deltas into the local DB via [mergePushBatch].
+  ///
+  /// If a phone is unreachable, a warning is logged and the loop continues.
+  Future<void> pullFromPhone() async {
+    if (pairingService == null) return;
+
+    final devices = await pairingService!.listPairedDevices();
+
+    for (final device in devices) {
+      if (!device.id.startsWith('phone')) continue;
+
+      final pairingKey = device.privateKey;
+      if (pairingKey == null) {
+        stderr.writeln(
+            'Sync: skipping phone ${device.id} — no pairing key stored');
+        continue;
+      }
+
+      final origin = device.origin;
+      if (origin == null || origin.isEmpty) {
+        stderr.writeln(
+            'Sync: skipping phone ${device.id} — no origin stored');
+        continue;
+      }
+
+      final token =
+          await generateSyncVerifyCode(Uint8List.fromList(pairingKey));
+
+      // Determine the phone API URL from the stored origin
+      final phoneUrl = '$origin/api/sync/deltas';
+
+      // Get stored watermark for this phone node (what we've received so far)
+      final since = await getWatermark(device.id);
+
+      try {
+        final uri = Uri.parse(phoneUrl).replace(
+          queryParameters: {'since': since},
+        );
+
+        final client = http.Client();
+        try {
+          final response = await client
+              .get(
+                uri,
+                headers: {
+                  'X-Av-Node-Id': clock.nodeId,
+                  'X-Av-Pair-Token': token,
+                  'Content-Type': 'application/json',
+                },
+              )
+              .timeout(const Duration(seconds: 5));
+
+          if (response.statusCode == 200) {
+            final body =
+                jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true))
+                    as Map<String, dynamic>;
+            final deltasJson = (body['deltas'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>();
+
+            if (deltasJson.isNotEmpty) {
+              final result = await mergePushBatch(
+                remoteNode: device.id,
+                deltas: deltasJson,
+              );
+              stderr.writeln(
+                  'Sync: pulled ${deltasJson.length} deltas from ${device.id} '
+                  '(merged ${result.merged}, errors ${result.errors.length})');
+            } else {
+              stderr.writeln(
+                  'Sync: pulled 0 deltas from ${device.id} (up to date)');
+            }
+          } else {
+            stderr.writeln(
+                'Sync: phone ${device.id} returned ${response.statusCode}');
+          }
+        } finally {
+          client.close();
+        }
+      } catch (e) {
+        stderr.writeln(
+            'Sync: WARNING — could not reach phone ${device.id} at $origin ($e). Continuing.');
+      }
+    }
+  }
 
   /// Routes a sync API request. Returns true if handled.
   Future<bool> handleRequest(HttpRequest request) async {
