@@ -14,13 +14,14 @@ class SyncCommand extends Command<void> {
 
   SyncCommand({required this.db, required this.clock}) {
     addSubcommand(SyncStatusCommand(db: db, clock: clock));
+    addSubcommand(SyncDiffCommand(db: db, clock: clock));
   }
 
   @override
   String get name => 'sync';
 
   @override
-  String get description => 'CRDT sync status and diagnostics (status)';
+  String get description => 'CRDT sync status and diagnostics (status, diff)';
 }
 
 /// Shows current sync state, watermarks, and local document counts.
@@ -71,6 +72,104 @@ class SyncStatusCommand extends Command<void> {
     print(kvRow('  worklog:', '${counts['worklog'] ?? 0}'));
     print(kvRow('  timer:', '${counts['timer'] ?? 0}'));
     print(kvRow('  project:', '${counts['project'] ?? 0}'));
+  }
+
+  String _formatTimestamp(int? millis) {
+    if (millis == null || millis == 0) return 'never';
+    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+}
+
+/// Shows sync diff: watermarks, timer state, and pending delta counts.
+class SyncDiffCommand extends Command<void> {
+  final AppDatabase db;
+  final HybridLogicalClock clock;
+
+  SyncDiffCommand({required this.db, required this.clock});
+
+  @override
+  String get name => 'diff';
+
+  @override
+  String get description =>
+      'Show sync gaps: watermarks, timer state, pending delta counts';
+
+  @override
+  String get invocation => 'avo sync diff';
+
+  @override
+  Future<void> run() async {
+    final syncApi = SyncApiService(db: db, clock: clock);
+    final diagnostics = await syncApi.syncDiagnostics();
+
+    print(sectionHeader('SYNC DIFF'));
+    print('');
+
+    final desktopWatermark =
+        diagnostics['desktopWatermark'] as String? ?? '?';
+    final phoneWatermark = diagnostics['phoneWatermark'] as String? ?? '0';
+    final lastPhoneSync = diagnostics['lastPhoneSync'] as int?;
+    final desktopTimer =
+        diagnostics['desktopTimer'] as Map<String, dynamic>?;
+    final pendingDeltas =
+        diagnostics['pendingDeltas'] as Map<String, dynamic>? ?? {};
+
+    print(kvRow('Desktop watermark:', desktopWatermark));
+    print(kvRow('Phone watermark:', phoneWatermark == '0' ? '0 (never synced)' : phoneWatermark));
+    print(kvRow('Last phone sync:', _formatTimestamp(lastPhoneSync)));
+    print(kvRow('Desktop node:', clock.nodeId));
+
+    print('');
+    print('  Timer state:');
+    if (desktopTimer != null) {
+      print(kvRow('  desktop:', 'RUNNING'));
+      final startedAt = desktopTimer['startedAtMs'] as int?;
+      final taskTitle = desktopTimer['taskTitle'] as String?;
+      if (startedAt != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(startedAt);
+        final now = DateTime.now();
+        final elapsed = now.difference(dt);
+        final h = elapsed.inHours;
+        final m = elapsed.inMinutes.remainder(60);
+        print(kvRow('  started:', '${_formatTimestamp(startedAt)}'));
+        print(kvRow('  elapsed:', '${h}h ${m}m'));
+      }
+      if (taskTitle != null) {
+        print(kvRow('  task:', taskTitle));
+      }
+
+      // Gap between desktop timer start and last phone sync
+      if (startedAt != null && lastPhoneSync != null && lastPhoneSync > 0) {
+        final gapMs = (startedAt - lastPhoneSync).abs();
+        final gapH = gapMs ~/ (3600000);
+        final gapM = (gapMs % 3600000) ~/ 60000;
+        print(kvRow('  timer/sync gap:', '${gapH}h ${gapM}m'));
+      }
+    } else {
+      print('  desktop: idle');
+    }
+
+    // Phone timer state is not directly reachable (local queries only per NFR3)
+    print('  phone: unknown (local queries only)');
+
+    print('');
+    print('  Pending deltas (desktop docs after phone watermark):');
+    final types = ['task', 'worklog', 'timer', 'project', 'dailyPlan', 'dayPlanTask'];
+    var any = false;
+    for (final type in types) {
+      final count = (pendingDeltas[type] as int?) ?? 0;
+      if (count > 0) any = true;
+      print(kvRow('  $type:', '$count'));
+    }
+    if (!any) {
+      print('  (none — desktop and phone are in sync)');
+    }
   }
 
   String _formatTimestamp(int? millis) {

@@ -953,13 +953,18 @@ class SyncApiService {
         .toList();
   }
 
-  /// Returns comprehensive sync diagnostics for CLI status display.
+  /// Returns comprehensive sync diagnostics for CLI display.
   ///
   /// Returns:
+  /// - desktopWatermark: current desktop HLC clock
   /// - phoneWatermark: the last HLC watermark received from any phone node
   /// - lastPhoneSync: epoch millis of last phone sync
-  /// - deltaCounts: per-document-type local document counts, not pending deltas
+  /// - desktopTimer: desktop's active timer state (isRunning, startedAtMs) or null
+  /// - deltaCounts: per-document-type local document counts
+  /// - pendingDeltas: per-document-type count of docs with crdtClock after phone watermark
   Future<Map<String, dynamic>> syncDiagnostics() async {
+    final desktopWatermark = clock.now().pack();
+
     final allWatermarks = await getAllWatermarks();
     int? lastPhoneSync;
     String phoneWatermark = '0';
@@ -974,59 +979,87 @@ class SyncApiService {
       }
     }
 
-    // Count local documents per type. This is a diagnostic inventory, not a
-    // pending-sync count; phone pull watermarks are stored on the phone.
+    final phoneSince = _parseWatermark(phoneWatermark);
+
+    // Desktop timer state
+    Map<String, dynamic>? desktopTimer;
+    final timers = await db.select(db.timerEntries).get();
+    for (final row in timers) {
+      final doc = TimerDocument.fromDrift(timer: row, clock: clock);
+      if (doc.isRunning) {
+        desktopTimer = {
+          'isRunning': true,
+          'startedAtMs': doc.startedAtMs,
+          'taskTitle': doc.taskTitle,
+        };
+        break;
+      }
+    }
+
+    // Local document counts (inventory + pending deltas vs phone watermark)
     final zeroWatermark =
         HybridTimestamp(physicalTime: 0, counter: 0, nodeId: '');
-    final counts = <String, int>{
-      'dailyPlan': 0,
-      'dayPlanTask': 0,
-      'task': 0,
-      'worklog': 0,
-      'timer': 0,
-      'project': 0,
-    };
+    final counts = <String, int>{};
+    final pendingDeltas = <String, int>{};
+
+    int _countAfter(String crdtClock, HybridTimestamp since) =>
+        _isAfterWatermark(crdtClock, since) ? 1 : 0;
 
     // Tasks
     final tasks = await db.select(db.tasks).get();
-    counts['task'] = tasks
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Worklogs
     final worklogs = await db.select(db.worklogEntries).get();
-    counts['worklog'] = worklogs
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Timers
-    final timers = await db.select(db.timerEntries).get();
-    counts['timer'] = timers
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Projects
     final projects = await db.select(db.projects).get();
-    counts['project'] = projects
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Daily plans
     final dailyPlans = await db.select(db.dailyPlanEntries).get();
-    counts['dailyPlan'] = dailyPlans
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Day plan tasks
     final dayPlanTasks = await db.select(db.dayPlanTasks).get();
-    counts['dayPlanTask'] = dayPlanTasks
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
+
+    // Category chips
+    final categoryChips = await db.select(db.categoryChips).get();
+    counts['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     return {
+      'desktopWatermark': desktopWatermark,
       'phoneWatermark': phoneWatermark,
       'lastPhoneSync': lastPhoneSync,
+      'desktopTimer': desktopTimer,
       'deltaCounts': counts,
+      'pendingDeltas': pendingDeltas,
     };
   }
 
