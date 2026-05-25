@@ -338,8 +338,39 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       await sync.pushToDesktop(deltas);
       await write.deletePendingDeltas(encoded);
       debugPrint('[Sync] Flushed ${deltas.length} persisted pending delta(s)');
+      // Notify user of successful sync retry
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                deltas.length == 1
+                    ? 'Synced 1 pending item'
+                    : 'Synced ${deltas.length} pending items',
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        });
+      }
     } catch (e) {
       debugPrint('[Sync] Persisted delta flush failed: $e — will retry');
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Sync retry failed: ${deltas.length} item(s) pending — will retry',
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        });
+      }
     }
   }
 

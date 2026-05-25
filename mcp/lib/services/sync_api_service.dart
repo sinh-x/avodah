@@ -80,6 +80,11 @@ class SyncApiService {
   /// reconciliation logic.
   String? _remoteNodeId;
 
+  /// Tracks reconciliation details for user notification on completion.
+  bool _didReconcile = false;
+  int? _reconciledStoppedAtMs;
+  String? _reconciledWorklogId;
+
   /// Pulls CRDT deltas from all paired phone devices on startup.
   ///
   /// For each paired device with a `phone`-prefixed node ID, this method:
@@ -703,7 +708,8 @@ class SyncApiService {
         .get();
 
     final WorklogDocument doc;
-    if (rows.isNotEmpty) {
+    final existingDocExists = rows.isNotEmpty;
+    if (existingDocExists) {
       doc = WorklogDocument.fromDrift(worklog: rows.first, clock: clock);
     } else {
       doc = WorklogDocument.fromState(id: id, clock: clock, state: {});
@@ -713,6 +719,13 @@ class SyncApiService {
     await db
         .into(db.worklogEntries)
         .insertOnConflictUpdate(doc.toDriftCompanion());
+
+    // Capture worklog ID from reconciliation batch for notification
+    if (_didReconcile &&
+        _reconciledWorklogId == null &&
+        id.startsWith('worklog-')) {
+      _reconciledWorklogId = id;
+    }
   }
 
   Future<void> _mergeTimer(String id, Map<String, CrdtFieldState> state) async {
@@ -742,6 +755,8 @@ class SyncApiService {
         doc.startedAtMs = null;
         doc.pausedAtMs = null;
         doc.accumulatedMs = 0;
+        _didReconcile = true;
+        _reconciledStoppedAtMs = remoteStartedAt;
       } else if (remoteStartedAt != null) {
         stderr.writeln(
             'Sync: skipping timer reconciliation — startedAt outside window '
@@ -1067,6 +1082,7 @@ class SyncApiService {
   /// the last phone sync is older than [avoStaleTimerMinutes] minutes.
   ///
   /// Returns a warning string if a stale timer is detected, null otherwise.
+  /// Prints a user-facing warning to stdout.
   Future<String?> checkStaleTimer() async {
     final diagnostics = await syncDiagnostics();
     final lastPhoneSync = diagnostics['lastPhoneSync'] as int?;
@@ -1083,16 +1099,34 @@ class SyncApiService {
       final doc = TimerDocument.fromDrift(timer: row, clock: clock);
       if (doc.isRunning) {
         final minutes = timeSinceLastSync ~/ 60000;
-        final warning =
-            'Warning: active timer "${doc.taskTitle}" running but last phone '
-            'sync was $minutes min ago (threshold: $avoStaleTimerMinutes min). '
-            'Timer may be stale.';
-        stderr.writeln('Sync: $warning');
+        final startedAt = doc.startedAtMs != null
+            ? DateTime.fromMillisecondsSinceEpoch(doc.startedAtMs!)
+            : null;
+        final warning = 'WARNING: Stale timer detected — started at '
+            '${startedAt?.toIso8601String() ?? "unknown timestamp"} '
+            '($minutes minutes ago). '
+            'Run `avo sync diff` for details.';
+        stdout.writeln(warning);
         return warning;
       }
     }
 
     return null;
+  }
+
+  /// Returns reconciliation result for user notification after merge.
+  ///
+  /// After [mergePushBatch], call this to check if a timer was reconciled
+  /// and get the details for desktop stdout notification.
+  ({int stoppedAtMs, String? worklogId})? consumeReconciliationNotification() {
+    if (!_didReconcile) return null;
+    _didReconcile = false;
+    final stoppedAtMs = _reconciledStoppedAtMs;
+    final worklogId = _reconciledWorklogId;
+    _reconciledStoppedAtMs = null;
+    _reconciledWorklogId = null;
+    if (stoppedAtMs == null) return null;
+    return (stoppedAtMs: stoppedAtMs, worklogId: worklogId);
   }
 
   /// Sends a JSON response.

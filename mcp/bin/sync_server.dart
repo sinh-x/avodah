@@ -168,11 +168,22 @@ Future<void> main(List<String> args) async {
   );
 
   // Pull deltas from paired phone devices on startup (non-blocking).
-  syncApi.pullFromPhone().then(
-    (_) {},
-    onError: (Object e) =>
-        stderr.writeln('Phone pull on startup failed: $e'),
-  );
+  syncApi.pullFromPhone().then((_) {
+    final recon = syncApi.consumeReconciliationNotification();
+    if (recon != null) {
+      final stoppedAt =
+          DateTime.fromMillisecondsSinceEpoch(recon.stoppedAtMs).toIso8601String();
+      final worklogInfo = recon.worklogId != null
+          ? ' — worklog ${recon.worklogId} created.'
+          : '.';
+      stdout.writeln(
+          'Timer reconciled: stopped at $stoppedAt$worklogInfo');
+    }
+    syncApi.checkStaleTimer();
+  }, onError: (Object e) {
+    stderr.writeln('Phone pull on startup failed: $e');
+    syncApi.checkStaleTimer();
+  });
 
   // HTTP-only bind. TLS is terminated upstream by drgnfly-caddy.
   final server = await HttpServer.bind(bindHost, port);

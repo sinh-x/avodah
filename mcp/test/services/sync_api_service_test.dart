@@ -640,9 +640,8 @@ void main() {
 
       final warning = await syncApi.checkStaleTimer();
       expect(warning, isNotNull);
-      expect(warning, contains('Warning'));
-      expect(warning, contains('Running task'));
-      expect(warning, contains('stale'));
+      expect(warning, contains('WARNING'));
+      expect(warning, contains('avo sync diff'));
     });
   });
 
