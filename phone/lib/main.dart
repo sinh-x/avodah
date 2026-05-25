@@ -330,13 +330,13 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final sync = _crdtSyncService;
     if (write == null || sync == null) return;
 
-    final deltas = await write.loadPendingDeltas();
+    final pending = await write.loadPendingDeltas();
+    final deltas = pending.deltas;
     if (deltas.isEmpty) return;
 
-    final encoded = deltas.map((d) => jsonEncode(d)).toList();
     try {
       await sync.pushToDesktop(deltas);
-      await write.deletePendingDeltas(encoded);
+      await write.deletePendingDeltas(pending.ids);
       debugPrint('[Sync] Flushed ${deltas.length} persisted pending delta(s)');
       // Notify user of successful sync retry
       final messenger = _scaffoldMessengerKey.currentState;
@@ -444,7 +444,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       debugPrint('[Sync] Push failed: $e');
       await _writeService?.persistDeltas(deltas);
       debugPrint('[Sync] Persisted ${deltas.length} local delta(s) for retry');
-      final pendingCount = await _writeService?.loadPendingDeltas() ?? [];
+      final pendingData = await _writeService?.loadPendingDeltas();
+      final pendingCount = pendingData?.deltas.length ?? 0;
       // Surface failure to user via snackbar (not spam — ScaffoldMessenger
       // only shows one snackbar at a time)
       final messenger = _scaffoldMessengerKey.currentState;
@@ -454,7 +455,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
           messenger.showSnackBar(
             SnackBar(
               content: Text(
-                'Sync failed — ${pendingCount.length} local change(s) will retry',
+                'Sync failed — $pendingCount local change(s) will retry',
               ),
               duration: const Duration(seconds: 4),
             ),

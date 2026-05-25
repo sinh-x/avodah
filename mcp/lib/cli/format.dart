@@ -82,6 +82,20 @@ String formatDate(DateTime date) {
   return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
 }
 
+/// Formats an epoch-millis timestamp as a relative string like "2h ago".
+///
+/// Returns "never" for null or zero timestamps.
+String formatTimestamp(int? millis) {
+  if (millis == null || millis == 0) return 'never';
+  final dt = DateTime.fromMillisecondsSinceEpoch(millis);
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
+}
+
 /// Formats a DateTime as a relative string like "2 days ago" or "just now".
 String formatRelativeDate(DateTime date) {
   final now = DateTime.now();

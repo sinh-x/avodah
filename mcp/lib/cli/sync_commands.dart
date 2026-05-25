@@ -5,7 +5,7 @@ import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart';
 
 import '../services/sync_api_service.dart';
-import 'format.dart' show sectionHeader, kvRow;
+import 'format.dart' show sectionHeader, kvRow, formatTimestamp;
 
 /// Sync management command group.
 class SyncCommand extends Command<void> {
@@ -55,7 +55,7 @@ class SyncStatusCommand extends Command<void> {
     // Last sync from phone (received)
     final phoneWatermark = diagnostics['phoneWatermark'] as String? ?? '0';
     final lastPhoneSync =
-        _formatTimestamp(diagnostics['lastPhoneSync'] as int?);
+        formatTimestamp(diagnostics['lastPhoneSync'] as int?);
     print(kvRow('Phone watermark:', phoneWatermark));
     print(kvRow('Last phone sync:', lastPhoneSync));
 
@@ -74,16 +74,6 @@ class SyncStatusCommand extends Command<void> {
     print(kvRow('  project:', '${counts['project'] ?? 0}'));
   }
 
-  String _formatTimestamp(int? millis) {
-    if (millis == null || millis == 0) return 'never';
-    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
 }
 
 /// Shows sync diff: watermarks, timer state, and pending delta counts.
@@ -122,7 +112,7 @@ class SyncDiffCommand extends Command<void> {
 
     print(kvRow('Desktop watermark:', desktopWatermark));
     print(kvRow('Phone watermark:', phoneWatermark == '0' ? '0 (never synced)' : phoneWatermark));
-    print(kvRow('Last phone sync:', _formatTimestamp(lastPhoneSync)));
+    print(kvRow('Last phone sync:', formatTimestamp(lastPhoneSync)));
     print(kvRow('Desktop node:', clock.nodeId));
 
     print('');
@@ -137,7 +127,7 @@ class SyncDiffCommand extends Command<void> {
         final elapsed = now.difference(dt);
         final h = elapsed.inHours;
         final m = elapsed.inMinutes.remainder(60);
-        print(kvRow('  started:', '${_formatTimestamp(startedAt)}'));
+        print(kvRow('  started:', '${formatTimestamp(startedAt)}'));
         print(kvRow('  elapsed:', '${h}h ${m}m'));
       }
       if (taskTitle != null) {
@@ -168,18 +158,7 @@ class SyncDiffCommand extends Command<void> {
       print(kvRow('  $type:', '$count'));
     }
     if (!any) {
-      print('  (none — desktop and phone are in sync)');
+      print('  (none \u2014 desktop and phone are in sync)');
     }
-  }
-
-  String _formatTimestamp(int? millis) {
-    if (millis == null || millis == 0) return 'never';
-    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
   }
 }

@@ -532,44 +532,48 @@ class LocalWriteService {
 
   /// Loads all pending deltas from the phone-local table.
   ///
-  /// Returns a list of decoded delta maps, ordered oldest-first.
-  Future<List<Map<String, dynamic>>> loadPendingDeltas() async {
+  /// Returns decoded delta maps and their auto-increment row IDs,
+  /// ordered oldest-first.
+  Future<({List<Map<String, dynamic>> deltas, List<int> ids})>
+      loadPendingDeltas() async {
     final pdb = phoneDb;
-    if (pdb == null) return [];
+    if (pdb == null) return (deltas: [], ids: []);
 
     final rows = await (pdb.select(pdb.pendingSyncDeltas)
           ..orderBy([(t) => OrderingTerm.asc(t.id)]))
         .get();
 
-    final result = <Map<String, dynamic>>[];
+    final deltas = <Map<String, dynamic>>[];
+    final ids = <int>[];
     for (final row in rows) {
       try {
         final decoded = jsonDecode(row.deltaJson) as Map<String, dynamic>;
-        result.add(decoded);
+        deltas.add(decoded);
+        ids.add(row.id);
       } catch (e) {
         debugPrint('[LocalWrite] Failed to decode pending delta row ${row.id}: $e');
       }
     }
-    return result;
+    return (deltas: deltas, ids: ids);
   }
 
-  /// Deletes pending delta rows that were successfully flushed to desktop.
+  /// Deletes pending delta rows by their auto-increment row IDs.
   ///
-  /// [deltaJsons] are the JSON-encoded deltas that were pushed successfully.
-  Future<void> deletePendingDeltas(List<String> deltaJsons) async {
+  /// [ids] are the row IDs from [loadPendingDeltas] that were flushed.
+  Future<void> deletePendingDeltas(List<int> ids) async {
     final pdb = phoneDb;
     if (pdb == null) return;
-    if (deltaJsons.isEmpty) return;
+    if (ids.isEmpty) return;
 
     await pdb.transaction(() async {
-      for (final json in deltaJsons) {
+      for (final id in ids) {
         await (pdb.delete(pdb.pendingSyncDeltas)
-              ..where((t) => t.deltaJson.equals(json)))
+              ..where((t) => t.id.equals(id)))
             .go();
       }
     });
 
-    debugPrint('[LocalWrite] Deleted ${deltaJsons.length} flushed pending delta(s)');
+    debugPrint('[LocalWrite] Deleted ${ids.length} flushed pending delta(s)');
   }
 
   // ============================================================

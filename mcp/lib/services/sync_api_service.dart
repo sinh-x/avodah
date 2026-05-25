@@ -29,6 +29,9 @@ const int avoStaleTimerMinutes = 10;
 /// Reconciliation window for timer startedAtMs matching (5 minutes in ms).
 const int avoTimerReconciliationWindowMs = 5 * 60 * 1000;
 
+/// Maximum body size for POST /api/sync/deltas (5 MB).
+const int avoMaxPushDeltaBodyBytes = 5 * 1024 * 1024;
+
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
   SyncDocType._();
@@ -287,10 +290,32 @@ class SyncApiService {
   ///
   /// Accepts CRDT deltas from a remote node and merges them.
   /// Body: {"node": "<node-id>", "deltas": [{"type": "...", "id": "...", "fields": {...}}]}
+  ///
+  /// Rejects bodies over [avoMaxPushDeltaBodyBytes] (5 MB) before parsing
+  /// JSON to prevent denial-of-service via oversized payloads.
   Future<void> _handlePushDeltas(HttpRequest request) async {
+    final contentLength = request.headers.contentLength;
+
+    if (contentLength >= 0 && contentLength > avoMaxPushDeltaBodyBytes) {
+      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
+        'error':
+            'Body too large: ${contentLength}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
+      });
+      return;
+    }
+
     // Read raw bytes first, then decode with allowMalformed to handle
     // any non-UTF-8 data in CRDT field values from the phone.
     final bytes = await request.fold<List<int>>([], (a, b) => a..addAll(b));
+
+    if (bytes.length > avoMaxPushDeltaBodyBytes) {
+      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
+        'error':
+            'Body too large: ${bytes.length}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
+      });
+      return;
+    }
+
     final body = utf8.decode(bytes, allowMalformed: true);
     final json = jsonDecode(body) as Map<String, dynamic>;
 
@@ -748,15 +773,27 @@ class SyncApiService {
         _isPhoneNode(_remoteNodeId)) {
       if (remoteStartedAt != null &&
           _isWithinReconciliationWindow(doc.startedAtMs, remoteStartedAt)) {
-        stderr.writeln(
-            'Sync: reconciling timer — phone stop wins over desktop timer '
-            '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
-        doc.isRunning = false;
-        doc.startedAtMs = null;
-        doc.pausedAtMs = null;
-        doc.accumulatedMs = 0;
-        _didReconcile = true;
-        _reconciledStoppedAtMs = remoteStartedAt;
+        // Defensive check: confirm remote accumulatedMs is consistent with
+        // a stopped timer before zeroing local accumulatedMs.
+        final remoteAccumulatedMs =
+            _extractIntField(state, TimerFields.accumulatedMs);
+        if (remoteAccumulatedMs != null && remoteAccumulatedMs > 0) {
+          stderr.writeln(
+              'Sync: skipping timer reconciliation — remote accumulatedMs=$remoteAccumulatedMs '
+              'is non-zero, possibly stale');
+        } else {
+          stderr.writeln(
+              'Sync: reconciling timer — phone stop wins over desktop timer '
+              '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
+          doc.isRunning = false;
+          doc.startedAtMs = null;
+          doc.pausedAtMs = null;
+          // Only zero accumulatedMs when the remote confirms the timer was
+          // stopped and has no accumulated time to carry forward.
+          doc.accumulatedMs = 0;
+          _didReconcile = true;
+          _reconciledStoppedAtMs = remoteStartedAt;
+        }
       } else if (remoteStartedAt != null) {
         stderr.writeln(
             'Sync: skipping timer reconciliation — startedAt outside window '
@@ -1094,21 +1131,21 @@ class SyncApiService {
         DateTime.now().millisecondsSinceEpoch - lastPhoneSync;
     if (timeSinceLastSync < staleThresholdMs) return null;
 
-    final timers = await db.select(db.timerEntries).get();
-    for (final row in timers) {
-      final doc = TimerDocument.fromDrift(timer: row, clock: clock);
-      if (doc.isRunning) {
-        final minutes = timeSinceLastSync ~/ 60000;
-        final startedAt = doc.startedAtMs != null
-            ? DateTime.fromMillisecondsSinceEpoch(doc.startedAtMs!)
-            : null;
-        final warning = 'WARNING: Stale timer detected — started at '
-            '${startedAt?.toIso8601String() ?? "unknown timestamp"} '
-            '($minutes minutes ago). '
-            'Run `avo sync diff` for details.';
-        stdout.writeln(warning);
-        return warning;
-      }
+    // Reuse desktopTimer already computed by syncDiagnostics
+    final desktopTimer =
+        diagnostics['desktopTimer'] as Map<String, dynamic>?;
+    if (desktopTimer != null && desktopTimer['isRunning'] == true) {
+      final minutes = timeSinceLastSync ~/ 60000;
+      final startedAtMs = desktopTimer['startedAtMs'] as int?;
+      final startedAt = startedAtMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(startedAtMs)
+          : null;
+      final warning = 'WARNING: Stale timer detected \u2014 started at '
+          '${startedAt?.toIso8601String() ?? "unknown timestamp"} '
+          '($minutes minutes ago). '
+          'Run `avo sync diff` for details.';
+      stdout.writeln(warning);
+      return warning;
     }
 
     return null;
