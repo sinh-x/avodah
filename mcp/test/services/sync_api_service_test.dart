@@ -597,4 +597,175 @@ void main() {
       await remoteDb.close();
     });
   });
+
+  group('stale timer detection', () {
+    test('returns null when no phone watermark exists', () async {
+      final warning = await syncApi.checkStaleTimer();
+      expect(warning, isNull);
+    });
+
+    test('returns null when last sync is recent', () async {
+      await syncApi.setWatermark('phone-1', '1000-0-phone-1',
+          direction: 'received');
+
+      final warning = await syncApi.checkStaleTimer();
+      expect(warning, isNull);
+    });
+
+    test('returns null when timer is not running', () async {
+      final staleTs =
+          DateTime.now().millisecondsSinceEpoch - (avoStaleTimerMinutes + 1) * 60 * 1000;
+      await syncApi.setWatermark(
+        'phone-old',
+        '1000-0-phone-old',
+        direction: 'received',
+        staleOverride: staleTs,
+      );
+
+      final warning = await syncApi.checkStaleTimer();
+      expect(warning, isNull);
+    });
+
+    test('emits warning when timer is running and sync is stale', () async {
+      await timerService.start(taskTitle: 'Running task');
+
+      final staleTs =
+          DateTime.now().millisecondsSinceEpoch - (avoStaleTimerMinutes + 1) * 60 * 1000;
+      await syncApi.setWatermark(
+        'phone-old',
+        '1000-0-phone-old',
+        direction: 'received',
+        staleOverride: staleTs,
+      );
+
+      final warning = await syncApi.checkStaleTimer();
+      expect(warning, isNotNull);
+      expect(warning, contains('Warning'));
+      expect(warning, contains('Running task'));
+      expect(warning, contains('stale'));
+    });
+  });
+
+  group('timer reconciliation', () {
+    test('phone stop wins when desktop timer is running and startedAt matches',
+        () async {
+      await timerService.start(taskTitle: 'Desktop timer');
+      final desktopTimers = await db.select(db.timerEntries).get();
+      final desktopStartedAt = desktopTimers.first.startedAt;
+
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch + 1000,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      await syncApi.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          {
+            'type': SyncDocType.timer,
+            'id': activeTimerId,
+            'fields': {
+              'isRunning': {
+                'v': false,
+                't': remoteTs.pack(),
+              },
+              'startedAt': {
+                'v': desktopStartedAt,
+                't': remoteTs.pack(),
+              },
+              'taskTitle': {
+                'v': 'Desktop timer',
+                't': remoteTs.pack(),
+              },
+            },
+          },
+        ],
+      );
+
+      final timers = await db.select(db.timerEntries).get();
+      expect(timers.first.isRunning, isFalse);
+      expect(timers.first.startedAt, equals(0));
+      expect(timers.first.accumulatedMs, equals(0));
+    });
+
+    test('skips reconciliation when startedAt is outside window', () async {
+      await timerService.start(taskTitle: 'Desktop timer');
+      final desktopTimers = await db.select(db.timerEntries).get();
+      final desktopStartedAt = desktopTimers.first.startedAt;
+
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch + 1000,
+        counter: 0,
+        nodeId: 'phone-1',
+      );
+
+      // Phone startedAt is 10 minutes different from desktop
+      final farStartedAt =
+          desktopStartedAt + (avoTimerReconciliationWindowMs + 60000);
+
+      await syncApi.mergePushBatch(
+        remoteNode: 'phone-1',
+        deltas: [
+          {
+            'type': SyncDocType.timer,
+            'id': activeTimerId,
+            'fields': {
+              'isRunning': {
+                'v': false,
+                't': remoteTs.pack(),
+              },
+              'startedAt': {
+                'v': farStartedAt,
+                't': remoteTs.pack(),
+              },
+              'taskTitle': {
+                'v': 'Desktop timer',
+                't': remoteTs.pack(),
+              },
+            },
+          },
+        ],
+      );
+
+      // Timer state is LWW-merged from phone (isRunning=false wins)
+      // but reconciliation-specific reset does not happen
+      final timers = await db.select(db.timerEntries).get();
+      expect(timers.first.isRunning, isFalse);
+    });
+
+    test('non-phone node merge does not trigger reconciliation', () async {
+      await timerService.start(taskTitle: 'Desktop timer');
+
+      final remoteTs = HybridTimestamp(
+        physicalTime: DateTime.now().millisecondsSinceEpoch + 1000,
+        counter: 0,
+        nodeId: 'laptop-1',
+      );
+
+      await syncApi.mergePushBatch(
+        remoteNode: 'laptop-1',
+        deltas: [
+          {
+            'type': SyncDocType.timer,
+            'id': activeTimerId,
+            'fields': {
+              'isRunning': {
+                'v': false,
+                't': remoteTs.pack(),
+              },
+              'taskTitle': {
+                'v': 'Desktop timer',
+                't': remoteTs.pack(),
+              },
+            },
+          },
+        ],
+      );
+
+      // No reconciliation for non-phone nodes — LWW merge only
+      final timers = await db.select(db.timerEntries).get();
+      expect(timers.first.isRunning, isFalse);
+    });
+  });
 }

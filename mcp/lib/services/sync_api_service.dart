@@ -23,6 +23,12 @@ import '../config/paths.dart';
 import 'jira_service.dart';
 import 'pairing_service.dart';
 
+/// Stale timer threshold in minutes.
+const int avoStaleTimerMinutes = 10;
+
+/// Reconciliation window for timer startedAtMs matching (5 minutes in ms).
+const int avoTimerReconciliationWindowMs = 5 * 60 * 1000;
+
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
   SyncDocType._();
@@ -69,6 +75,10 @@ class SyncApiService {
     this.paths,
     this.pairingService,
   });
+
+  /// Tracks the current remote node ID during mergePushBatch for
+  /// reconciliation logic.
+  String? _remoteNodeId;
 
   /// Pulls CRDT deltas from all paired phone devices on startup.
   ///
@@ -534,6 +544,7 @@ class SyncApiService {
   }) async {
     var merged = 0;
     final errors = <String>[];
+    _remoteNodeId = remoteNode;
 
     for (final delta in deltas) {
       try {
@@ -715,6 +726,29 @@ class SyncApiService {
       doc = TimerDocument.fromState(id: id, clock: clock, state: {});
     }
 
+    // Reconciliation: phone stop wins over desktop running timer
+    final remoteIsRunning = _extractBoolField(state, TimerFields.isRunning);
+    final remoteStartedAt = _extractIntField(state, TimerFields.startedAt);
+
+    if (remoteIsRunning == false &&
+        doc.isRunning &&
+        _isPhoneNode(_remoteNodeId)) {
+      if (remoteStartedAt != null &&
+          _isWithinReconciliationWindow(doc.startedAtMs, remoteStartedAt)) {
+        stderr.writeln(
+            'Sync: reconciling timer — phone stop wins over desktop timer '
+            '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
+        doc.isRunning = false;
+        doc.startedAtMs = null;
+        doc.pausedAtMs = null;
+        doc.accumulatedMs = 0;
+      } else if (remoteStartedAt != null) {
+        stderr.writeln(
+            'Sync: skipping timer reconciliation — startedAt outside window '
+            '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
+      }
+    }
+
     _applyState(doc, state);
     await db
         .into(db.timerEntries)
@@ -797,6 +831,37 @@ class SyncApiService {
   // Helpers
   // ============================================================
 
+  /// Returns true if [nodeId] is a phone node.
+  bool _isPhoneNode(String? nodeId) {
+    return nodeId != null && nodeId.startsWith('phone');
+  }
+
+  /// Returns true if [desktopMs] and [phoneMs] are within the
+  /// reconciliation window ([avoTimerReconciliationWindowMs]).
+  bool _isWithinReconciliationWindow(int? desktopMs, int phoneMs) {
+    if (desktopMs == null) return false;
+    return (desktopMs - phoneMs).abs() <= avoTimerReconciliationWindowMs;
+  }
+
+  /// Extracts the boolean value from a field in [state].
+  bool? _extractBoolField(
+      Map<String, CrdtFieldState> state, String fieldName) {
+    final field = state[fieldName];
+    if (field == null) return null;
+    final v = field.value;
+    if (v is bool) return v;
+    return null;
+  }
+
+  /// Extracts the integer value from a field in [state].
+  int? _extractIntField(Map<String, CrdtFieldState> state, String fieldName) {
+    final field = state[fieldName];
+    if (field == null) return null;
+    final v = field.value;
+    if (v is int) return v;
+    return null;
+  }
+
   /// Applies CRDT field state to a document using per-field merge.
   void _applyState(CrdtDocument doc, Map<String, CrdtFieldState> state) {
     for (final entry in state.entries) {
@@ -858,14 +923,19 @@ class SyncApiService {
   }
 
   /// Stores or updates the HLC watermark for [nodeId] in the given [direction].
+  ///
+  /// If [staleOverride] is provided, it overrides `updatedAt` (for testing
+  /// stale timer detection). Not part of the public API — exposed for test
+  /// injection only.
   Future<void> setWatermark(String nodeId, String hlcPacked,
-      {String direction = 'received'}) async {
+      {String direction = 'received', int? staleOverride}) async {
     await db.into(db.syncWatermarks).insertOnConflictUpdate(
           SyncWatermarksCompanion.insert(
             nodeId: nodeId,
             lastHlc: Value(hlcPacked),
             direction: Value(direction),
-            updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+            updatedAt:
+                Value(staleOverride ?? DateTime.now().millisecondsSinceEpoch),
           ),
         );
   }
@@ -958,6 +1028,38 @@ class SyncApiService {
       'lastPhoneSync': lastPhoneSync,
       'deltaCounts': counts,
     };
+  }
+
+  /// Checks for a stale timer: the active timer has isRunning=true but
+  /// the last phone sync is older than [avoStaleTimerMinutes] minutes.
+  ///
+  /// Returns a warning string if a stale timer is detected, null otherwise.
+  Future<String?> checkStaleTimer() async {
+    final diagnostics = await syncDiagnostics();
+    final lastPhoneSync = diagnostics['lastPhoneSync'] as int?;
+
+    if (lastPhoneSync == null) return null;
+
+    final staleThresholdMs = avoStaleTimerMinutes * 60 * 1000;
+    final timeSinceLastSync =
+        DateTime.now().millisecondsSinceEpoch - lastPhoneSync;
+    if (timeSinceLastSync < staleThresholdMs) return null;
+
+    final timers = await db.select(db.timerEntries).get();
+    for (final row in timers) {
+      final doc = TimerDocument.fromDrift(timer: row, clock: clock);
+      if (doc.isRunning) {
+        final minutes = timeSinceLastSync ~/ 60000;
+        final warning =
+            'Warning: active timer "${doc.taskTitle}" running but last phone '
+            'sync was $minutes min ago (threshold: $avoStaleTimerMinutes min). '
+            'Timer may be stale.';
+        stderr.writeln('Sync: $warning');
+        return warning;
+      }
+    }
+
+    return null;
   }
 
   /// Sends a JSON response.
