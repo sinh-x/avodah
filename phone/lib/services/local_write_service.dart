@@ -9,9 +9,13 @@
 /// that will merge correctly when pushed to the desktop in Phase 7.
 library;
 
+import 'dart:convert';
+
 import 'package:avodah_core/avodah_core.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+
+import '../storage/phone_database.dart';
 
 /// Result of stopping a timer (includes the generated worklog if any).
 class StopTimerResult {
@@ -25,8 +29,13 @@ class StopTimerResult {
 class LocalWriteService {
   final AppDatabase db;
   final HybridLogicalClock clock;
+  final PhoneDatabase? phoneDb;
 
-  LocalWriteService({required this.db, required this.clock});
+  LocalWriteService({
+    required this.db,
+    required this.clock,
+    this.phoneDb,
+  });
 
   // ============================================================
   // Timer operations
@@ -461,6 +470,106 @@ class LocalWriteService {
       debugPrint('[LocalWrite] Backfilled category on $updated worklogs');
     }
     return updated;
+  }
+
+  // ============================================================
+  // Pending delta persistence (Phase 4.2 — AVO-115 phone pending deltas)
+  // ============================================================
+
+  static const _maxPendingDeltas = 1000;
+  static const _deltaPruneDays = 7;
+
+  /// Persists [deltas] to the phone-local pending_sync_deltas table.
+  ///
+  /// Each delta is json-encoded into its own row. On insert, rows older than
+  /// [_deltaPruneDays] days are purged, and if total rows exceed
+  /// [_maxPendingDeltas], the oldest rows are pruned (NFR2).
+  Future<void> persistDeltas(List<Map<String, dynamic>> deltas) async {
+    final pdb = phoneDb;
+    if (pdb == null) {
+      debugPrint('[LocalWrite] No phoneDb, skipping delta persist');
+      return;
+    }
+
+    if (deltas.isEmpty) return;
+
+    final now = DateTime.now();
+    final pruneCutoff = now.subtract(Duration(days: _deltaPruneDays));
+
+    await pdb.transaction(() async {
+      await (pdb.delete(pdb.pendingSyncDeltas)
+            ..where((t) => t.createdAt.isSmallerThanValue(pruneCutoff)))
+          .go();
+
+      for (final delta in deltas) {
+        final json = jsonEncode(delta);
+        await pdb.into(pdb.pendingSyncDeltas).insert(
+          PendingSyncDeltasCompanion.insert(deltaJson: json),
+        );
+      }
+
+      final count = await pdb.pendingSyncDeltas.count().getSingle();
+      if (count > _maxPendingDeltas) {
+        final toDelete = count - _maxPendingDeltas;
+        final oldest = await (pdb.select(pdb.pendingSyncDeltas)
+              ..orderBy([(t) => OrderingTerm.asc(t.id)])
+              ..limit(toDelete))
+            .get();
+        for (final row in oldest) {
+          await (pdb.delete(pdb.pendingSyncDeltas)
+                ..where((t) => t.id.equals(row.id)))
+              .go();
+        }
+        debugPrint(
+          '[LocalWrite] Pruned $toDelete oldest pending delta(s) '
+          '(over limit of $_maxPendingDeltas)',
+        );
+      }
+    });
+
+    debugPrint('[LocalWrite] Persisted ${deltas.length} pending delta(s)');
+  }
+
+  /// Loads all pending deltas from the phone-local table.
+  ///
+  /// Returns a list of decoded delta maps, ordered oldest-first.
+  Future<List<Map<String, dynamic>>> loadPendingDeltas() async {
+    final pdb = phoneDb;
+    if (pdb == null) return [];
+
+    final rows = await (pdb.select(pdb.pendingSyncDeltas)
+          ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+        .get();
+
+    final result = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      try {
+        final decoded = jsonDecode(row.deltaJson) as Map<String, dynamic>;
+        result.add(decoded);
+      } catch (e) {
+        debugPrint('[LocalWrite] Failed to decode pending delta row ${row.id}: $e');
+      }
+    }
+    return result;
+  }
+
+  /// Deletes pending delta rows that were successfully flushed to desktop.
+  ///
+  /// [deltaJsons] are the JSON-encoded deltas that were pushed successfully.
+  Future<void> deletePendingDeltas(List<String> deltaJsons) async {
+    final pdb = phoneDb;
+    if (pdb == null) return;
+    if (deltaJsons.isEmpty) return;
+
+    await pdb.transaction(() async {
+      for (final json in deltaJsons) {
+        await (pdb.delete(pdb.pendingSyncDeltas)
+              ..where((t) => t.deltaJson.equals(json)))
+            .go();
+      }
+    });
+
+    debugPrint('[LocalWrite] Deleted ${deltaJsons.length} flushed pending delta(s)');
   }
 
   // ============================================================
