@@ -537,7 +537,7 @@ class LocalWriteService {
   Future<({List<Map<String, dynamic>> deltas, List<int> ids})>
       loadPendingDeltas() async {
     final pdb = phoneDb;
-    if (pdb == null) return (deltas: [], ids: []);
+    if (pdb == null) return (deltas: <Map<String, dynamic>>[], ids: <int>[]);
 
     final rows = await (pdb.select(pdb.pendingSyncDeltas)
           ..orderBy([(t) => OrderingTerm.asc(t.id)]))
