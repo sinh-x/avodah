@@ -3,6 +3,261 @@
 part of 'phone_database.dart';
 
 // ignore_for_file: type=lint
+class $PendingSyncDeltasTable extends PendingSyncDeltas
+    with TableInfo<$PendingSyncDeltasTable, PendingSyncDelta> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingSyncDeltasTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _deltaJsonMeta = const VerificationMeta(
+    'deltaJson',
+  );
+  @override
+  late final GeneratedColumn<String> deltaJson = GeneratedColumn<String>(
+    'delta_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: const CustomExpression<DateTime>(
+      'CURRENT_TIMESTAMP',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, deltaJson, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_sync_deltas';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingSyncDelta> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('delta_json')) {
+      context.handle(
+        _deltaJsonMeta,
+        deltaJson.isAcceptableOrUnknown(data['delta_json']!, _deltaJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deltaJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PendingSyncDelta map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingSyncDelta(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      deltaJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delta_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingSyncDeltasTable createAlias(String alias) {
+    return $PendingSyncDeltasTable(attachedDatabase, alias);
+  }
+}
+
+class PendingSyncDelta extends DataClass
+    implements Insertable<PendingSyncDelta> {
+  final int id;
+  final String deltaJson;
+  final DateTime createdAt;
+  const PendingSyncDelta({
+    required this.id,
+    required this.deltaJson,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['delta_json'] = Variable<String>(deltaJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingSyncDeltasCompanion toCompanion(bool nullToAbsent) {
+    return PendingSyncDeltasCompanion(
+      id: Value(id),
+      deltaJson: Value(deltaJson),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PendingSyncDelta.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingSyncDelta(
+      id: serializer.fromJson<int>(json['id']),
+      deltaJson: serializer.fromJson<String>(json['deltaJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'deltaJson': serializer.toJson<String>(deltaJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PendingSyncDelta copyWith({
+    int? id,
+    String? deltaJson,
+    DateTime? createdAt,
+  }) => PendingSyncDelta(
+    id: id ?? this.id,
+    deltaJson: deltaJson ?? this.deltaJson,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PendingSyncDelta copyWithCompanion(PendingSyncDeltasCompanion data) {
+    return PendingSyncDelta(
+      id: data.id.present ? data.id.value : this.id,
+      deltaJson: data.deltaJson.present ? data.deltaJson.value : this.deltaJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSyncDelta(')
+          ..write('id: $id, ')
+          ..write('deltaJson: $deltaJson, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, deltaJson, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingSyncDelta &&
+          other.id == this.id &&
+          other.deltaJson == this.deltaJson &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingSyncDeltasCompanion extends UpdateCompanion<PendingSyncDelta> {
+  final Value<int> id;
+  final Value<String> deltaJson;
+  final Value<DateTime> createdAt;
+  const PendingSyncDeltasCompanion({
+    this.id = const Value.absent(),
+    this.deltaJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PendingSyncDeltasCompanion.insert({
+    this.id = const Value.absent(),
+    required String deltaJson,
+    this.createdAt = const Value.absent(),
+  }) : deltaJson = Value(deltaJson);
+  static Insertable<PendingSyncDelta> custom({
+    Expression<int>? id,
+    Expression<String>? deltaJson,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (deltaJson != null) 'delta_json': deltaJson,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PendingSyncDeltasCompanion copyWith({
+    Value<int>? id,
+    Value<String>? deltaJson,
+    Value<DateTime>? createdAt,
+  }) {
+    return PendingSyncDeltasCompanion(
+      id: id ?? this.id,
+      deltaJson: deltaJson ?? this.deltaJson,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (deltaJson.present) {
+      map['delta_json'] = Variable<String>(deltaJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSyncDeltasCompanion(')
+          ..write('id: $id, ')
+          ..write('deltaJson: $deltaJson, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingCapturesTable extends PendingCaptures
     with TableInfo<$PendingCapturesTable, PendingCapture> {
   @override
@@ -551,11 +806,16 @@ abstract class _$PhoneDatabase extends GeneratedDatabase {
   late final $PendingCapturesTable pendingCaptures = $PendingCapturesTable(
     this,
   );
+  late final $PendingSyncDeltasTable pendingSyncDeltas =
+      $PendingSyncDeltasTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [pendingCaptures];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    pendingCaptures,
+    pendingSyncDeltas,
+  ];
 }
 
 typedef $$PendingCapturesTableCreateCompanionBuilder =
@@ -837,9 +1097,178 @@ typedef $$PendingCapturesTableProcessedTableManager =
       PrefetchHooks Function()
     >;
 
+typedef $$PendingSyncDeltasTableCreateCompanionBuilder =
+    PendingSyncDeltasCompanion Function({
+      Value<int> id,
+      required String deltaJson,
+      Value<DateTime> createdAt,
+    });
+typedef $$PendingSyncDeltasTableUpdateCompanionBuilder =
+    PendingSyncDeltasCompanion Function({
+      Value<int> id,
+      Value<String> deltaJson,
+      Value<DateTime> createdAt,
+    });
+
+class $$PendingSyncDeltasTableFilterComposer
+    extends Composer<_$PhoneDatabase, $PendingSyncDeltasTable> {
+  $$PendingSyncDeltasTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deltaJson => $composableBuilder(
+    column: $table.deltaJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingSyncDeltasTableOrderingComposer
+    extends Composer<_$PhoneDatabase, $PendingSyncDeltasTable> {
+  $$PendingSyncDeltasTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deltaJson => $composableBuilder(
+    column: $table.deltaJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingSyncDeltasTableAnnotationComposer
+    extends Composer<_$PhoneDatabase, $PendingSyncDeltasTable> {
+  $$PendingSyncDeltasTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get deltaJson =>
+      $composableBuilder(column: $table.deltaJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PendingSyncDeltasTableTableManager
+    extends
+        RootTableManager<
+          _$PhoneDatabase,
+          $PendingSyncDeltasTable,
+          PendingSyncDelta,
+          $$PendingSyncDeltasTableFilterComposer,
+          $$PendingSyncDeltasTableOrderingComposer,
+          $$PendingSyncDeltasTableAnnotationComposer,
+          $$PendingSyncDeltasTableCreateCompanionBuilder,
+          $$PendingSyncDeltasTableUpdateCompanionBuilder,
+          (
+            PendingSyncDelta,
+            BaseReferences<
+              _$PhoneDatabase,
+              $PendingSyncDeltasTable,
+              PendingSyncDelta
+            >,
+          ),
+          PendingSyncDelta,
+          PrefetchHooks Function()
+        > {
+  $$PendingSyncDeltasTableTableManager(
+    _$PhoneDatabase db,
+    $PendingSyncDeltasTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingSyncDeltasTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingSyncDeltasTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PendingSyncDeltasTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> deltaJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PendingSyncDeltasCompanion(
+                id: id,
+                deltaJson: deltaJson,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String deltaJson,
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PendingSyncDeltasCompanion.insert(
+                id: id,
+                deltaJson: deltaJson,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingSyncDeltasTableProcessedTableManager =
+    ProcessedTableManager<
+      _$PhoneDatabase,
+      $PendingSyncDeltasTable,
+      PendingSyncDelta,
+      $$PendingSyncDeltasTableFilterComposer,
+      $$PendingSyncDeltasTableOrderingComposer,
+      $$PendingSyncDeltasTableAnnotationComposer,
+      $$PendingSyncDeltasTableCreateCompanionBuilder,
+      $$PendingSyncDeltasTableUpdateCompanionBuilder,
+      (
+        PendingSyncDelta,
+        BaseReferences<
+          _$PhoneDatabase,
+          $PendingSyncDeltasTable,
+          PendingSyncDelta
+        >,
+      ),
+      PendingSyncDelta,
+      PrefetchHooks Function()
+    >;
+
 class $PhoneDatabaseManager {
   final _$PhoneDatabase _db;
   $PhoneDatabaseManager(this._db);
   $$PendingCapturesTableTableManager get pendingCaptures =>
       $$PendingCapturesTableTableManager(_db, _db.pendingCaptures);
+  $$PendingSyncDeltasTableTableManager get pendingSyncDeltas =>
+      $$PendingSyncDeltasTableTableManager(_db, _db.pendingSyncDeltas);
 }

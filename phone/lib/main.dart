@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -64,7 +65,6 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   bool _pairingInProgress = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  final List<Map<String, dynamic>> _pendingSyncDeltas = [];
 
   // Share intent handling
   StreamSubscription<List<SharedMediaFile>>? _shareIntentSubscription;
@@ -108,7 +108,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final dashboardProvider = LocalDashboardProvider(db: db, clock: clock);
 
     // Write service for local CRDT mutations (timer, task, worklog)
-    final writeService = LocalWriteService(db: db, clock: clock);
+    final writeService = LocalWriteService(
+      db: db,
+      clock: clock,
+      phoneDb: phoneDb,
+    );
 
     // One-time backfill: set category on worklogs from task-level timers.
     // This is opportunistic and should not block share-intent startup if the
@@ -287,18 +291,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     try {
       await sync.pullFromDesktop();
       syncOk = true;
-      // Flush queued local deltas after successful pull.
-      if (_pendingSyncDeltas.isNotEmpty) {
-        final queued = List<Map<String, dynamic>>.from(_pendingSyncDeltas);
-        _pendingSyncDeltas.clear();
-        try {
-          await sync.pushToDesktop(queued);
-          debugPrint('[Sync] Flushed ${queued.length} queued local delta(s)');
-        } catch (e) {
-          debugPrint('[Sync] Queued local push failed: $e — re-queueing');
-          _pendingSyncDeltas.addAll(queued);
-        }
-      }
+      // Flush persisted pending deltas after successful pull.
+      await _flushPersistedDeltas();
     } catch (e) {
       final category = classifySyncError(e);
       debugPrint('[Sync] Pull failed: $e [category=${category.name}]');
@@ -327,6 +321,56 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
         dashboard.connectionState.value = SyncConnectionState.disconnected;
       }
       _syncInProgress = false;
+    }
+  }
+
+  /// Flushes DB-backed pending deltas to desktop.
+  Future<void> _flushPersistedDeltas() async {
+    final write = _writeService;
+    final sync = _crdtSyncService;
+    if (write == null || sync == null) return;
+
+    final pending = await write.loadPendingDeltas();
+    final deltas = pending.deltas;
+    if (deltas.isEmpty) return;
+
+    try {
+      await sync.pushToDesktop(deltas);
+      await write.deletePendingDeltas(pending.ids);
+      debugPrint('[Sync] Flushed ${deltas.length} persisted pending delta(s)');
+      // Notify user of successful sync retry
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                deltas.length == 1
+                    ? 'Synced 1 pending item'
+                    : 'Synced ${deltas.length} pending items',
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('[Sync] Persisted delta flush failed: $e — will retry');
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (messenger != null) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Sync retry failed: ${deltas.length} item(s) pending — will retry',
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        });
+      }
     }
   }
 
@@ -387,28 +431,21 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   }
 
   /// Push CRDT deltas from phone to desktop (non-fatal on failure).
-  /// Local deltas that fail to push are queued and retried on the next sync cycle.
+  /// Local deltas that fail to push are persisted to the phone-local
+  /// pending_sync_deltas table for retry on next successful pull cycle.
   Future<void> _pushDeltas(List<Map<String, dynamic>> deltas) async {
     if (deltas.isEmpty) return;
 
     try {
-      // Always try to push all deltas together
       await _crdtSyncService?.pushToDesktop(deltas);
-      // On success, flush any queued deltas too
-      if (_pendingSyncDeltas.isNotEmpty) {
-        final queued = List<Map<String, dynamic>>.from(_pendingSyncDeltas);
-        _pendingSyncDeltas.clear();
-        try {
-          await _crdtSyncService?.pushToDesktop(queued);
-        } catch (e) {
-          debugPrint('[Sync] Queued local push failed: $e');
-          _pendingSyncDeltas.addAll(queued);
-        }
-      }
+      // On success, flush any persisted deltas too
+      await _flushPersistedDeltas();
     } catch (e) {
       debugPrint('[Sync] Push failed: $e');
-      _pendingSyncDeltas.addAll(deltas);
-      debugPrint('[Sync] Queued ${deltas.length} local delta(s) for retry');
+      await _writeService?.persistDeltas(deltas);
+      debugPrint('[Sync] Persisted ${deltas.length} local delta(s) for retry');
+      final pendingData = await _writeService?.loadPendingDeltas();
+      final pendingCount = pendingData?.deltas.length ?? 0;
       // Surface failure to user via snackbar (not spam — ScaffoldMessenger
       // only shows one snackbar at a time)
       final messenger = _scaffoldMessengerKey.currentState;
@@ -418,7 +455,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
           messenger.showSnackBar(
             SnackBar(
               content: Text(
-                'Sync failed — ${_pendingSyncDeltas.length} local change(s) will retry',
+                'Sync failed — $pendingCount local change(s) will retry',
               ),
               duration: const Duration(seconds: 4),
             ),

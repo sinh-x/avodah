@@ -11,14 +11,26 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:drift/drift.dart' show Value;
+
+import 'package:http/http.dart' as http;
 
 import '../config/avo_config.dart';
 import '../config/paths.dart';
 import 'jira_service.dart';
 import 'pairing_service.dart';
+
+/// Stale timer threshold in minutes.
+const int avoStaleTimerMinutes = 10;
+
+/// Reconciliation window for timer startedAtMs matching (5 minutes in ms).
+const int avoTimerReconciliationWindowMs = 5 * 60 * 1000;
+
+/// Maximum body size for POST /api/sync/deltas (5 MB).
+const int avoMaxPushDeltaBodyBytes = 5 * 1024 * 1024;
 
 /// Document type identifiers used in sync delta payloads.
 class SyncDocType {
@@ -66,6 +78,107 @@ class SyncApiService {
     this.paths,
     this.pairingService,
   });
+
+  /// Tracks the current remote node ID during mergePushBatch for
+  /// reconciliation logic.
+  String? _remoteNodeId;
+
+  /// Tracks reconciliation details for user notification on completion.
+  bool _didReconcile = false;
+  int? _reconciledStoppedAtMs;
+  String? _reconciledWorklogId;
+
+  /// Pulls CRDT deltas from all paired phone devices on startup.
+  ///
+  /// For each paired device with a `phone`-prefixed node ID, this method:
+  /// 1. Looks up the stored watermark (last received HLC from that device).
+  /// 2. Constructs a sync auth token from the pairing key.
+  /// 3. Calls `GET /api/sync/deltas?since=<watermark>` on the phone with a
+  ///    5-second timeout.
+  /// 4. Merges returned deltas into the local DB via [mergePushBatch].
+  ///
+  /// If a phone is unreachable, a warning is logged and the loop continues.
+  Future<void> pullFromPhone() async {
+    if (pairingService == null) return;
+
+    final devices = await pairingService!.listPairedDevices();
+
+    for (final device in devices) {
+      if (!device.id.startsWith('phone')) continue;
+
+      final pairingKey = device.privateKey;
+      if (pairingKey == null) {
+        stderr.writeln(
+            'Sync: skipping phone ${device.id} — no pairing key stored');
+        continue;
+      }
+
+      final origin = device.origin;
+      if (origin == null || origin.isEmpty) {
+        stderr.writeln(
+            'Sync: skipping phone ${device.id} — no origin stored');
+        continue;
+      }
+
+      final token =
+          await generateSyncVerifyCode(Uint8List.fromList(pairingKey));
+
+      // Determine the phone API URL from the stored origin
+      final phoneUrl = '$origin/api/sync/deltas';
+
+      // Get stored watermark for this phone node (what we've received so far)
+      final since = await getWatermark(device.id);
+
+      try {
+        final uri = Uri.parse(phoneUrl).replace(
+          queryParameters: {'since': since},
+        );
+
+        final client = http.Client();
+        try {
+          final response = await client
+              .get(
+                uri,
+                headers: {
+                  'X-Av-Node-Id': clock.nodeId,
+                  'X-Av-Pair-Token': token,
+                  'Content-Type': 'application/json',
+                },
+              )
+              .timeout(const Duration(seconds: 5));
+
+          if (response.statusCode == 200) {
+            final body =
+                jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true))
+                    as Map<String, dynamic>;
+            final deltasJson = (body['deltas'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>();
+
+            if (deltasJson.isNotEmpty) {
+              final result = await mergePushBatch(
+                remoteNode: device.id,
+                deltas: deltasJson,
+              );
+              stderr.writeln(
+                  'Sync: pulled ${deltasJson.length} deltas from ${device.id} '
+                  '(merged ${result.merged}, errors ${result.errors.length})');
+            } else {
+              stderr.writeln(
+                  'Sync: pulled 0 deltas from ${device.id} (up to date)');
+            }
+          } else {
+            stderr.writeln(
+                'Sync: phone ${device.id} returned ${response.statusCode}');
+          }
+        } finally {
+          client.close();
+        }
+      } catch (e) {
+        stderr.writeln(
+            'Sync: WARNING — could not reach phone ${device.id} at $origin ($e). Continuing.');
+      }
+    }
+  }
 
   /// Routes a sync API request. Returns true if handled.
   Future<bool> handleRequest(HttpRequest request) async {
@@ -177,10 +290,32 @@ class SyncApiService {
   ///
   /// Accepts CRDT deltas from a remote node and merges them.
   /// Body: {"node": "<node-id>", "deltas": [{"type": "...", "id": "...", "fields": {...}}]}
+  ///
+  /// Rejects bodies over [avoMaxPushDeltaBodyBytes] (5 MB) before parsing
+  /// JSON to prevent denial-of-service via oversized payloads.
   Future<void> _handlePushDeltas(HttpRequest request) async {
+    final contentLength = request.headers.contentLength;
+
+    if (contentLength >= 0 && contentLength > avoMaxPushDeltaBodyBytes) {
+      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
+        'error':
+            'Body too large: ${contentLength}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
+      });
+      return;
+    }
+
     // Read raw bytes first, then decode with allowMalformed to handle
     // any non-UTF-8 data in CRDT field values from the phone.
     final bytes = await request.fold<List<int>>([], (a, b) => a..addAll(b));
+
+    if (bytes.length > avoMaxPushDeltaBodyBytes) {
+      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
+        'error':
+            'Body too large: ${bytes.length}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
+      });
+      return;
+    }
+
     final body = utf8.decode(bytes, allowMalformed: true);
     final json = jsonDecode(body) as Map<String, dynamic>;
 
@@ -439,6 +574,7 @@ class SyncApiService {
   }) async {
     var merged = 0;
     final errors = <String>[];
+    _remoteNodeId = remoteNode;
 
     for (final delta in deltas) {
       try {
@@ -597,7 +733,8 @@ class SyncApiService {
         .get();
 
     final WorklogDocument doc;
-    if (rows.isNotEmpty) {
+    final existingDocExists = rows.isNotEmpty;
+    if (existingDocExists) {
       doc = WorklogDocument.fromDrift(worklog: rows.first, clock: clock);
     } else {
       doc = WorklogDocument.fromState(id: id, clock: clock, state: {});
@@ -607,6 +744,13 @@ class SyncApiService {
     await db
         .into(db.worklogEntries)
         .insertOnConflictUpdate(doc.toDriftCompanion());
+
+    // Capture worklog ID from reconciliation batch for notification
+    if (_didReconcile &&
+        _reconciledWorklogId == null &&
+        id.startsWith('worklog-')) {
+      _reconciledWorklogId = id;
+    }
   }
 
   Future<void> _mergeTimer(String id, Map<String, CrdtFieldState> state) async {
@@ -618,6 +762,43 @@ class SyncApiService {
       doc = TimerDocument.fromDrift(timer: rows.first, clock: clock);
     } else {
       doc = TimerDocument.fromState(id: id, clock: clock, state: {});
+    }
+
+    // Reconciliation: phone stop wins over desktop running timer
+    final remoteIsRunning = _extractBoolField(state, TimerFields.isRunning);
+    final remoteStartedAt = _extractIntField(state, TimerFields.startedAt);
+
+    if (remoteIsRunning == false &&
+        doc.isRunning &&
+        _isPhoneNode(_remoteNodeId)) {
+      if (remoteStartedAt != null &&
+          _isWithinReconciliationWindow(doc.startedAtMs, remoteStartedAt)) {
+        // Defensive check: confirm remote accumulatedMs is consistent with
+        // a stopped timer before zeroing local accumulatedMs.
+        final remoteAccumulatedMs =
+            _extractIntField(state, TimerFields.accumulatedMs);
+        if (remoteAccumulatedMs != null && remoteAccumulatedMs > 0) {
+          stderr.writeln(
+              'Sync: skipping timer reconciliation — remote accumulatedMs=$remoteAccumulatedMs '
+              'is non-zero, possibly stale');
+        } else {
+          stderr.writeln(
+              'Sync: reconciling timer — phone stop wins over desktop timer '
+              '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
+          doc.isRunning = false;
+          doc.startedAtMs = null;
+          doc.pausedAtMs = null;
+          // Only zero accumulatedMs when the remote confirms the timer was
+          // stopped and has no accumulated time to carry forward.
+          doc.accumulatedMs = 0;
+          _didReconcile = true;
+          _reconciledStoppedAtMs = remoteStartedAt;
+        }
+      } else if (remoteStartedAt != null) {
+        stderr.writeln(
+            'Sync: skipping timer reconciliation — startedAt outside window '
+            '(desktop startedAt=${doc.startedAtMs}, phone startedAt=$remoteStartedAt)');
+      }
     }
 
     _applyState(doc, state);
@@ -702,6 +883,37 @@ class SyncApiService {
   // Helpers
   // ============================================================
 
+  /// Returns true if [nodeId] is a phone node.
+  bool _isPhoneNode(String? nodeId) {
+    return nodeId != null && nodeId.startsWith('phone');
+  }
+
+  /// Returns true if [desktopMs] and [phoneMs] are within the
+  /// reconciliation window ([avoTimerReconciliationWindowMs]).
+  bool _isWithinReconciliationWindow(int? desktopMs, int phoneMs) {
+    if (desktopMs == null) return false;
+    return (desktopMs - phoneMs).abs() <= avoTimerReconciliationWindowMs;
+  }
+
+  /// Extracts the boolean value from a field in [state].
+  bool? _extractBoolField(
+      Map<String, CrdtFieldState> state, String fieldName) {
+    final field = state[fieldName];
+    if (field == null) return null;
+    final v = field.value;
+    if (v is bool) return v;
+    return null;
+  }
+
+  /// Extracts the integer value from a field in [state].
+  int? _extractIntField(Map<String, CrdtFieldState> state, String fieldName) {
+    final field = state[fieldName];
+    if (field == null) return null;
+    final v = field.value;
+    if (v is int) return v;
+    return null;
+  }
+
   /// Applies CRDT field state to a document using per-field merge.
   void _applyState(CrdtDocument doc, Map<String, CrdtFieldState> state) {
     for (final entry in state.entries) {
@@ -763,14 +975,19 @@ class SyncApiService {
   }
 
   /// Stores or updates the HLC watermark for [nodeId] in the given [direction].
+  ///
+  /// If [staleOverride] is provided, it overrides `updatedAt` (for testing
+  /// stale timer detection). Not part of the public API — exposed for test
+  /// injection only.
   Future<void> setWatermark(String nodeId, String hlcPacked,
-      {String direction = 'received'}) async {
+      {String direction = 'received', int? staleOverride}) async {
     await db.into(db.syncWatermarks).insertOnConflictUpdate(
           SyncWatermarksCompanion.insert(
             nodeId: nodeId,
             lastHlc: Value(hlcPacked),
             direction: Value(direction),
-            updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+            updatedAt:
+                Value(staleOverride ?? DateTime.now().millisecondsSinceEpoch),
           ),
         );
   }
@@ -788,13 +1005,18 @@ class SyncApiService {
         .toList();
   }
 
-  /// Returns comprehensive sync diagnostics for CLI status display.
+  /// Returns comprehensive sync diagnostics for CLI display.
   ///
   /// Returns:
+  /// - desktopWatermark: current desktop HLC clock
   /// - phoneWatermark: the last HLC watermark received from any phone node
   /// - lastPhoneSync: epoch millis of last phone sync
-  /// - deltaCounts: per-document-type local document counts, not pending deltas
+  /// - desktopTimer: desktop's active timer state (isRunning, startedAtMs) or null
+  /// - deltaCounts: per-document-type local document counts
+  /// - pendingDeltas: per-document-type count of docs with crdtClock after phone watermark
   Future<Map<String, dynamic>> syncDiagnostics() async {
+    final desktopWatermark = clock.now().pack();
+
     final allWatermarks = await getAllWatermarks();
     int? lastPhoneSync;
     String phoneWatermark = '0';
@@ -809,60 +1031,139 @@ class SyncApiService {
       }
     }
 
-    // Count local documents per type. This is a diagnostic inventory, not a
-    // pending-sync count; phone pull watermarks are stored on the phone.
+    final phoneSince = _parseWatermark(phoneWatermark);
+
+    // Desktop timer state
+    Map<String, dynamic>? desktopTimer;
+    final timers = await db.select(db.timerEntries).get();
+    for (final row in timers) {
+      final doc = TimerDocument.fromDrift(timer: row, clock: clock);
+      if (doc.isRunning) {
+        desktopTimer = {
+          'isRunning': true,
+          'startedAtMs': doc.startedAtMs,
+          'taskTitle': doc.taskTitle,
+        };
+        break;
+      }
+    }
+
+    // Local document counts (inventory + pending deltas vs phone watermark)
     final zeroWatermark =
         HybridTimestamp(physicalTime: 0, counter: 0, nodeId: '');
-    final counts = <String, int>{
-      'dailyPlan': 0,
-      'dayPlanTask': 0,
-      'task': 0,
-      'worklog': 0,
-      'timer': 0,
-      'project': 0,
-    };
+    final counts = <String, int>{};
+    final pendingDeltas = <String, int>{};
+
+    int _countAfter(String crdtClock, HybridTimestamp since) =>
+        _isAfterWatermark(crdtClock, since) ? 1 : 0;
 
     // Tasks
     final tasks = await db.select(db.tasks).get();
-    counts['task'] = tasks
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Worklogs
     final worklogs = await db.select(db.worklogEntries).get();
-    counts['worklog'] = worklogs
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Timers
-    final timers = await db.select(db.timerEntries).get();
-    counts['timer'] = timers
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Projects
     final projects = await db.select(db.projects).get();
-    counts['project'] = projects
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Daily plans
     final dailyPlans = await db.select(db.dailyPlanEntries).get();
-    counts['dailyPlan'] = dailyPlans
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     // Day plan tasks
     final dayPlanTasks = await db.select(db.dayPlanTasks).get();
-    counts['dayPlanTask'] = dayPlanTasks
-        .where((r) => _isAfterWatermark(r.crdtClock, zeroWatermark))
-        .length;
+    counts['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
+
+    // Category chips
+    final categoryChips = await db.select(db.categoryChips).get();
+    counts['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    if (phoneWatermark != '0') {
+      pendingDeltas['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+    }
 
     return {
+      'desktopWatermark': desktopWatermark,
       'phoneWatermark': phoneWatermark,
       'lastPhoneSync': lastPhoneSync,
+      'desktopTimer': desktopTimer,
       'deltaCounts': counts,
+      'pendingDeltas': pendingDeltas,
     };
+  }
+
+  /// Checks for a stale timer: the active timer has isRunning=true but
+  /// the last phone sync is older than [avoStaleTimerMinutes] minutes.
+  ///
+  /// Returns a warning string if a stale timer is detected, null otherwise.
+  /// Prints a user-facing warning to stdout.
+  Future<String?> checkStaleTimer() async {
+    final diagnostics = await syncDiagnostics();
+    final lastPhoneSync = diagnostics['lastPhoneSync'] as int?;
+
+    if (lastPhoneSync == null) return null;
+
+    final staleThresholdMs = avoStaleTimerMinutes * 60 * 1000;
+    final timeSinceLastSync =
+        DateTime.now().millisecondsSinceEpoch - lastPhoneSync;
+    if (timeSinceLastSync < staleThresholdMs) return null;
+
+    // Reuse desktopTimer already computed by syncDiagnostics
+    final desktopTimer =
+        diagnostics['desktopTimer'] as Map<String, dynamic>?;
+    if (desktopTimer != null && desktopTimer['isRunning'] == true) {
+      final minutes = timeSinceLastSync ~/ 60000;
+      final startedAtMs = desktopTimer['startedAtMs'] as int?;
+      final startedAt = startedAtMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(startedAtMs)
+          : null;
+      final warning = 'WARNING: Stale timer detected \u2014 started at '
+          '${startedAt?.toIso8601String() ?? "unknown timestamp"} '
+          '($minutes minutes ago). '
+          'Run `avo sync diff` for details.';
+      stdout.writeln(warning);
+      return warning;
+    }
+
+    return null;
+  }
+
+  /// Returns reconciliation result for user notification after merge.
+  ///
+  /// After [mergePushBatch], call this to check if a timer was reconciled
+  /// and get the details for desktop stdout notification.
+  ({int stoppedAtMs, String? worklogId})? consumeReconciliationNotification() {
+    if (!_didReconcile) return null;
+    _didReconcile = false;
+    final stoppedAtMs = _reconciledStoppedAtMs;
+    final worklogId = _reconciledWorklogId;
+    _reconciledStoppedAtMs = null;
+    _reconciledWorklogId = null;
+    if (stoppedAtMs == null) return null;
+    return (stoppedAtMs: stoppedAtMs, worklogId: worklogId);
   }
 
   /// Sends a JSON response.
