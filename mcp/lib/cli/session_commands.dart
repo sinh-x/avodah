@@ -1,11 +1,14 @@
 /// `avo session` subcommands for managing opencode sessions.
 ///
-/// Phase 2 deliverable for AVO-116 (opencode session integration).
+/// Phase 2 + Phase 3 deliverables for AVO-116 (opencode session integration).
 /// Implements:
 /// - `SessionListCommand` — renders all deployments from the registry as a
 ///   formatted table (deployment id, team, mode, status, start time).
 /// - `SessionHistoryCommand` — opens a session's conversation log file in a
 ///   scrollable read-only pager.
+/// - `SessionStartCommand` — spawns `opa deploy <team> --mode <mode>` as a
+///   subprocess and captures the deployment ID from opa's stdout.
+/// - `SessionStopCommand` — sends SIGTERM to a running session's subprocess.
 ///
 /// Command registration in `avo.dart` is handled by Phase 5; this file only
 /// defines the command classes so they can be wired up later.
@@ -228,6 +231,156 @@ class SessionHistoryCommand extends Command<void> {
 
     // Interactive pager.
     _Pager(lines, logFile.path, deploymentId).run();
+  }
+
+  void printUsageError(String message) {
+    print(message);
+    print('');
+    print('Usage: $invocation');
+  }
+}
+
+// ============================================================
+// Session Start
+// ============================================================
+
+/// `avo session start <team> --mode <mode>` — spawn a new opencode session.
+///
+/// Spawns `opa deploy <team> --mode <mode>` as a subprocess via
+/// [SessionService.startSession] (which mirrors the `Process.start` pattern
+/// from `agent_api_service.dart`). The deployment ID is extracted from opa's
+/// first stdout line using the regex `Deployment: (d-[a-f0-9]+)` and printed
+/// on success.
+///
+/// Attach mode (streaming the subprocess stdout live) is a Phase 4
+/// deliverable; this command only captures the deployment ID and leaves the
+/// subprocess running in the background. The process handle is drained and
+/// detached so it survives this command's exit.
+class SessionStartCommand extends Command<void> {
+  final SessionService sessionService;
+
+  SessionStartCommand(this.sessionService) {
+    argParser.addOption(
+      'mode',
+      abbr: 'm',
+      help: 'Deployment mode (e.g. implement, analyze)',
+    );
+  }
+
+  @override
+  String get name => 'start';
+
+  @override
+  String get description =>
+      'Start a new opencode session via `opa deploy` and print its '
+      'deployment ID';
+
+  @override
+  String get invocation => 'avo session start <team> [--mode <mode>]';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.isEmpty) {
+      printUsageError('Missing <team> argument.');
+      return;
+    }
+    final team = args.first;
+    final mode = argResults?['mode'] as String? ?? '';
+
+    print(sectionHeader('START SESSION'));
+    print('');
+    print(kvRow('Team:', team));
+    print(kvRow('Mode:', mode.isEmpty ? '(default)' : mode));
+    print('');
+    print('Spawning `opa deploy $team${mode.isEmpty ? '' : ' --mode $mode'}`…');
+    print('');
+
+    final result = await sessionService.startSession(team, mode);
+    if (!result.succeeded) {
+      print('Failed to start session.');
+      print('');
+      print(hintPlain(result.error ?? 'Unknown error.'));
+      if (result.pid != null) {
+        print(hintPlain('Spawned pid ${result.pid} but could not capture the '
+            'deployment ID; it may need to be stopped manually.'));
+      }
+      return;
+    }
+
+    print('Session started.');
+    print('');
+    print(kvRow('Deployment:', result.deploymentId));
+    print(kvRow('PID:', '${result.pid}'));
+    print('');
+
+    // Drain and detach the subprocess so it survives this command's exit.
+    // Phase 4 will replace this with live attach mode.
+    result.process?.stdout.listen((_) {});
+    result.process?.stderr.listen((_) {});
+
+    print(hintPlain('The session is running in the background. Use '
+        '`avo session stop ${result.deploymentId}` to terminate it.'));
+  }
+
+  void printUsageError(String message) {
+    print(message);
+    print('');
+    print('Usage: $invocation');
+  }
+}
+
+// ============================================================
+// Session Stop
+// ============================================================
+
+/// `avo session stop <deployment-id>` — terminate a running session.
+///
+/// Calls [SessionService.stopSession] with the deployment ID, which looks up
+/// the recorded pid from the registry and sends SIGTERM. Prints a
+/// confirmation message on success and an error when the session is not
+/// running or has no recorded pid.
+class SessionStopCommand extends Command<void> {
+  final SessionService sessionService;
+
+  SessionStopCommand(this.sessionService);
+
+  @override
+  String get name => 'stop';
+
+  @override
+  String get description =>
+      'Stop a running opencode session by sending SIGTERM to its subprocess';
+
+  @override
+  String get invocation => 'avo session stop <deployment-id>';
+
+  @override
+  Future<void> run() async {
+    final args = argResults?.rest ?? [];
+    if (args.isEmpty) {
+      printUsageError('Missing <deployment-id> argument.');
+      return;
+    }
+    final deploymentId = args.first;
+
+    print(sectionHeader('STOP SESSION'));
+    print('');
+    print(kvRow('Deployment:', deploymentId));
+    print('');
+
+    final result = await sessionService.stopSession(deploymentId);
+    if (result.signalSent) {
+      print('SIGTERM sent to the session subprocess.');
+      print('');
+      print(hintPlain('The session will terminate and its registry entry '
+          'will be updated as it exits.'));
+    } else {
+      print('Could not stop session.');
+      print('');
+      print(hintPlain(result.error ??
+          'No signal sent. The session may not be running.'));
+    }
   }
 
   void printUsageError(String message) {
