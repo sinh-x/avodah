@@ -28,12 +28,14 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart' show HybridLogicalClock, avodahVersion, avodahBuildNumber;
 import 'package:avodah_mcp/cli/commands.dart';
+import 'package:avodah_mcp/cli/session_commands.dart';
 import 'package:avodah_mcp/cli/sync_commands.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/plan_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';
+import 'package:avodah_mcp/services/session_service.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/timer_service.dart';
 import 'package:avodah_mcp/services/worklog_service.dart';
@@ -111,6 +113,21 @@ Future<void> main(List<String> args) async {
       ..addCommand(ConfigCommand(avoConfig, paths))
       ..addCommand(SyncCommand(db: db, clock: clock));
 
+    // Session command group — wire all subcommands with a shared SessionService.
+    // Subcommands are added lazily here (not in SessionCommand's constructor)
+    // so the SessionService is constructed once and injected into each
+    // subcommand, matching the existing SyncCommand pattern.
+    final sessionService = SessionService();
+    final liveProcesses = <String, Process>{};
+    final sessionCommand = SessionCommand()
+      ..addSubcommand(SessionListCommand(sessionService))
+      ..addSubcommand(SessionHistoryCommand(sessionService))
+      ..addSubcommand(SessionStartCommand(sessionService))
+      ..addSubcommand(SessionStopCommand(sessionService))
+      ..addSubcommand(SessionAttachCommand(sessionService,
+          liveProcesses: liveProcesses));
+    runner.addCommand(sessionCommand);
+
     // No args → run status + hint
     if (args.isEmpty) {
       await runner.run(['status']);
@@ -132,6 +149,12 @@ Future<void> main(List<String> args) async {
       await runner.run(['db', 'stats']);
       print('');
       print('  -> avo db --help           for all subcommands');
+    }
+    // `avo session` with no subcommand → run session list + hint
+    else if (args.length == 1 && args.first == 'session') {
+      await runner.run(['session', 'list']);
+      print('');
+      print('  -> avo session --help      for all subcommands');
     } else {
       await runner.run(args);
     }
