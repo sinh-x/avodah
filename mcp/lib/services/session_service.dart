@@ -76,6 +76,23 @@ class StartSessionResult {
   bool get succeeded => deploymentId.isNotEmpty && pid != null;
 }
 
+/// Handle to a deployment's runtime state, used by the attach command.
+class SessionHandle {
+  final String deploymentId;
+  final int? pid;
+  final String status;
+  final String deployDir;
+  final String activityLogPath;
+
+  const SessionHandle({
+    required this.deploymentId,
+    required this.pid,
+    required this.status,
+    required this.deployDir,
+    required this.activityLogPath,
+  });
+}
+
 /// Outcome of `stopSession`.
 class StopSessionResult {
   final String deploymentId;
@@ -297,6 +314,26 @@ class SessionService {
         error: 'Failed to signal pid $pid: $e',
       );
     }
+  }
+
+  /// Resolve the deploy directory and recorded pid for [deploymentId].
+  ///
+  /// Used by the attach command to locate the live `activity.jsonl` event
+  /// stream and to poll the subprocess for exit detection. Returns null when
+  /// the deployment id is unknown to the registry.
+  SessionHandle? findSession(String deploymentId) {
+    final summaries = listSessions();
+    final match =
+        summaries.where((s) => s.deploymentId == deploymentId).firstOrNull;
+    if (match == null) return null;
+    final deployDir = p.join(aiUsagePath, 'deployments', deploymentId);
+    return SessionHandle(
+      deploymentId: deploymentId,
+      pid: match.pid,
+      status: match.status,
+      deployDir: deployDir,
+      activityLogPath: p.join(deployDir, 'activity.jsonl'),
+    );
   }
 
   /// Locate the session conversation log file for [deploymentId].
