@@ -60,8 +60,20 @@ class StartSessionResult {
   ///
   /// Phase 1 returns the process so a future attach command can wire
   /// stdin/stdout. The service does not retain ownership — the caller is
-  /// responsible for draining or terminating it.
+  /// responsible for draining or terminating it. Note: prefer subscribing to
+  /// [stdoutStream]/[stderrStream] over `process.stdout`/`process.stderr` —
+  /// the service wraps stdout in a broadcast stream so multiple listeners
+  /// (the first-line extractor and the long-running drain) can coexist.
   final Process? process;
+
+  /// Broadcast view of the subprocess stdout. Use this (not
+  /// `process.stdout`) when forwarding bytes in attach mode; the service keeps
+  /// a drain listener on it to avoid back-pressure (OPS-2). Null when no
+  /// process was spawned.
+  final Stream<List<int>>? stdoutStream;
+
+  /// Broadcast view of the subprocess stderr. See [stdoutStream].
+  final Stream<List<int>>? stderrStream;
 
   /// Human-readable error message when [deploymentId] is empty.
   final String? error;
@@ -70,10 +82,29 @@ class StartSessionResult {
     required this.deploymentId,
     this.pid,
     this.process,
+    this.stdoutStream,
+    this.stderrStream,
     this.error,
   });
 
   bool get succeeded => deploymentId.isNotEmpty && pid != null;
+}
+
+/// Live handle to a started session's subprocess, stored in the in-process
+/// `liveProcesses` map shared between `SessionStartCommand` and
+/// `SessionAttachCommand`. Wraps the [Process] together with broadcast
+/// stdout/stderr streams so the attach runner can subscribe without
+/// conflicting with the service's drain listeners (OPS-2).
+class LiveProcess {
+  final Process process;
+  final Stream<List<int>> stdoutStream;
+  final Stream<List<int>> stderrStream;
+
+  const LiveProcess({
+    required this.process,
+    required this.stdoutStream,
+    required this.stderrStream,
+  });
 }
 
 /// Handle to a deployment's runtime state, used by the attach command.
@@ -218,12 +249,21 @@ class SessionService {
       );
     }
 
-    // Drain stderr to avoid back-pressure.
-    process.stderr.listen((_) {});
+    // Drain stderr to avoid back-pressure. Wrap in a broadcast stream so the
+    // caller (attach mode) can also subscribe without conflicting with this
+    // drain (OPS-2).
+    final stderrBroadcast = process.stderr.asBroadcastStream();
+    stderrBroadcast.listen((_) {});
+
+    // Convert stdout to a broadcast stream so the first-line listener (used to
+    // extract the deployment id) and the long-running drain listener (kept
+    // alive by the caller, e.g. `SessionStartCommand`) can both subscribe
+    // without "Stream has already been listened to" errors.
+    final stdoutBroadcast = process.stdout.asBroadcastStream();
 
     final completer = Completer<String>();
     var partial = '';
-    final sub = process.stdout.transform(utf8.decoder).listen(
+    final sub = stdoutBroadcast.transform(utf8.decoder).listen(
       (chunk) {
         if (completer.isCompleted) return;
         final nl = chunk.indexOf('\n');
@@ -249,6 +289,11 @@ class SessionService {
     } finally {
       await sub.cancel();
     }
+    // Long-running drain so the subprocess stdout buffer doesn't fill up
+    // (OPS-2). Attach mode subscribes to [StartSessionResult.stdoutStream]
+    // to forward bytes; this drain is a no-op sink that prevents
+    // back-pressure when no one is attached.
+    stdoutBroadcast.listen((_) {});
 
     final match = RegExp(r'\b(d-[a-f0-9]{6})\b').firstMatch(firstLine);
     final deploymentId = match?.group(1) ?? '';
@@ -269,6 +314,8 @@ class SessionService {
       deploymentId: deploymentId,
       pid: process.pid,
       process: process,
+      stdoutStream: stdoutBroadcast,
+      stderrStream: stderrBroadcast,
     );
   }
 

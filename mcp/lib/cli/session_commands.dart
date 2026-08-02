@@ -13,18 +13,21 @@
 ///   with ANSI passthrough, stdin forwarding (when a live process handle is
 ///   available), and Ctrl+C/Esc detach.
 ///
-/// Command registration in `avo.dart` is handled by Phase 5; this file only
-/// defines the command classes so they can be wired up later.
+/// The pager and attach runner live in their own files (`session_pager.dart`
+/// and `session_attach_runner.dart`) to keep this file under the ~400 line
+/// guideline (CQ-3 review finding). Command registration in `avo.dart` is
+/// handled by Phase 5.
 library;
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:dart_console/dart_console.dart';
 
 import '../services/session_service.dart';
 import 'format.dart';
+import 'session_attach_runner.dart';
+import 'session_pager.dart';
 
 // ============================================================
 // Session Command Group
@@ -234,7 +237,7 @@ class SessionHistoryCommand extends Command<void> {
     }
 
     // Interactive pager.
-    _Pager(lines, logFile.path, deploymentId).run();
+    SessionPager(lines, logFile.path, deploymentId).run();
   }
 
   void printUsageError(String message) {
@@ -256,14 +259,19 @@ class SessionHistoryCommand extends Command<void> {
 /// first stdout line using the regex `Deployment: (d-[a-f0-9]+)` and printed
 /// on success.
 ///
-/// Attach mode (streaming the subprocess stdout live) is a Phase 4
-/// deliverable; this command only captures the deployment ID and leaves the
-/// subprocess running in the background. The process handle is drained and
-/// detached so it survives this command's exit.
+/// On success the spawned [Process] handle is recorded in [liveProcesses]
+/// (keyed by deployment id) so `SessionAttachCommand` can forward stdin to
+/// it (CQ-1 review finding). The subprocess stdout/stderr are drained and
+/// detached so the process survives this command's exit; the drains are
+/// properly cancelled when a live process is registered.
 class SessionStartCommand extends Command<void> {
   final SessionService sessionService;
 
-  SessionStartCommand(this.sessionService) {
+  /// In-process registry of live subprocess handles, shared with
+  /// [SessionAttachCommand]. Populated here after a successful start.
+  final Map<String, LiveProcess> liveProcesses;
+
+  SessionStartCommand(this.sessionService, {required this.liveProcesses}) {
     argParser.addOption(
       'mode',
       abbr: 'm',
@@ -318,13 +326,24 @@ class SessionStartCommand extends Command<void> {
     print(kvRow('PID:', '${result.pid}'));
     print('');
 
-    // Drain and detach the subprocess so it survives this command's exit.
-    // Phase 4 will replace this with live attach mode.
-    result.process?.stdout.listen((_) {});
-    result.process?.stderr.listen((_) {});
+    // Register the live process so `avo session attach` can forward stdin
+    // (CQ-1: live stdin forwarding was previously unreachable because this
+    // command never populated the shared map). Wrap stdout/stderr in the
+    // broadcast streams exposed by the service so attach can subscribe
+    // alongside the service's drain listener (OPS-2).
+    final process = result.process;
+    if (process != null && result.stdoutStream != null) {
+      liveProcesses[result.deploymentId] = LiveProcess(
+        process: process,
+        stdoutStream: result.stdoutStream!,
+        stderrStream: result.stderrStream ?? process.stderr,
+      );
+    }
 
     print(hintPlain('The session is running in the background. Use '
-        '`avo session stop ${result.deploymentId}` to terminate it.'));
+        '`avo session stop ${result.deploymentId}` to terminate it or '
+        '`avo session attach ${result.deploymentId}` to view its live '
+        'output.'));
   }
 
   void printUsageError(String message) {
@@ -418,7 +437,7 @@ class SessionAttachCommand extends Command<void> {
   /// Optional in-process registry of live subprocess handles, keyed by
   /// deployment id. Populated by [SessionStartCommand] when it keeps the
   /// [Process] from `startSession`; used here to forward stdin.
-  final Map<String, Process> liveProcesses;
+  final Map<String, LiveProcess> liveProcesses;
 
   SessionAttachCommand(this.sessionService, {this.liveProcesses = const {}});
 
@@ -478,11 +497,13 @@ class SessionAttachCommand extends Command<void> {
         '(session keeps running).'));
     print('');
 
-    await _AttachRunner(
+    await SessionAttachRunner(
       deploymentId: deploymentId,
       activityFile: activityFile,
       pid: handle.pid,
-      liveProcess: liveProcess,
+      liveProcess: liveProcess?.process,
+      stdoutStream: liveProcess?.stdoutStream,
+      stderrStream: liveProcess?.stderrStream,
       registryPath: sessionService.registryPath,
     ).run();
   }
@@ -491,339 +512,5 @@ class SessionAttachCommand extends Command<void> {
     print(message);
     print('');
     print('Usage: $invocation');
-  }
-}
-
-/// Drives the live attach loop: tails `activity.jsonl`, renders events, polls
-/// the subprocess for exit, and detaches on Ctrl+C / Escape.
-class _AttachRunner {
-  final String deploymentId;
-  final File activityFile;
-  final int? pid;
-  final Process? liveProcess;
-  final String registryPath;
-
-  _AttachRunner({
-    required this.deploymentId,
-    required this.activityFile,
-    required this.pid,
-    required this.liveProcess,
-    required this.registryPath,
-  });
-
-  Future<void> run() async {
-    final console = Console();
-    final hasTty = stdin.hasTerminal;
-
-    // Enter raw mode so we can intercept Ctrl+C / Escape without waiting for
-    // a full line. When there is no TTY (pipes, CI) we skip the keyboard watch
-    // and just stream until the subprocess exits.
-    var rawMode = false;
-    if (hasTty) {
-      stdin.echoMode = false;
-      stdin.lineMode = false;
-      rawMode = true;
-    }
-
-    var detached = false;
-    var exited = false;
-
-    final stdoutSub = liveProcess?.stdout.listen((bytes) {
-      // Raw byte-level passthrough — ANSI escape codes flow unmodified.
-      stdout.add(bytes);
-    });
-    final stderrSub = liveProcess?.stderr.listen((bytes) {
-      stderr.add(bytes);
-    });
-
-    final exitCompleter = Completer<int>();
-    Future<void> exitWatcher() async {
-      final p = liveProcess;
-      if (p != null) {
-        final code = await p.exitCode;
-        if (!exitCompleter.isCompleted) exitCompleter.complete(code);
-        return;
-      }
-      // No live handle — poll the pid and registry for exit.
-      while (true) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        if (pid != null) {
-          final alive = _pidAlive(pid!);
-          if (!alive) {
-            if (!exitCompleter.isCompleted) exitCompleter.complete(0);
-            return;
-          }
-        }
-        if (_registryHasTerminalEvent(deploymentId, registryPath)) {
-          if (!exitCompleter.isCompleted) exitCompleter.complete(0);
-          return;
-        }
-      }
-    }
-
-    Future<void> keyboardWatcher() async {
-      if (!hasTty) return;
-      while (true) {
-        final key = console.readKey();
-        if (key.controlChar == ControlCharacter.ctrlC ||
-            key.controlChar == ControlCharacter.escape) {
-          detached = true;
-          return;
-        } else if (liveProcess != null &&
-            key.controlChar == ControlCharacter.enter) {
-          liveProcess!.stdin.add('\n'.codeUnits);
-        } else if (liveProcess != null &&
-            key.controlChar == ControlCharacter.none &&
-            key.char.isNotEmpty) {
-          liveProcess!.stdin.add(key.char.codeUnits);
-        }
-      }
-    }
-
-    final tailSub = _tailActivity(activityFile, (line) {
-      stdout.writeln(line);
-    });
-
-    unawaited(exitWatcher());
-
-    // Run the keyboard watcher and exit watcher concurrently; whichever
-    // completes first (detach or subprocess exit) ends the loop.
-    final keyboardFuture = keyboardWatcher();
-
-    await Future.any<Object?>([
-      keyboardFuture.then((_) => 'detach'),
-      exitCompleter.future.then((code) {
-        exited = true;
-        return 'exit:$code';
-      }),
-    ]);
-
-    // Cleanup.
-    detached = detached || exited;
-    keyboardFuture.ignore();
-    await tailSub.cancel();
-    await stdoutSub?.cancel();
-    await stderrSub?.cancel();
-
-    if (rawMode) {
-      stdin.echoMode = true;
-      stdin.lineMode = true;
-    }
-
-    stdout.writeln('');
-    if (exited) {
-      print(sectionHeader('SESSION EXIT'));
-      print('');
-      print('Session $deploymentId has exited.');
-    } else {
-      print(sectionHeader('DETACHED'));
-      print('');
-      print('Detached from $deploymentId. The session is still running.');
-      print(hintPlain('Use `avo session list` to check its status or '
-          '`avo session stop $deploymentId` to terminate it.'));
-    }
-  }
-
-  /// Tails [file] from the current end, invoking [onLine] for each new line
-  /// as it appears. Returns a subscription that can be cancelled to stop
-  /// tailing.
-  StreamSubscription<List<int>> _tailActivity(
-      File file, void Function(String) onLine) {
-    final controller = StreamController<List<int>>();
-    late StreamSubscription<void> timerSub;
-    var offset = file.existsSync() ? file.lengthSync() : 0;
-    final buffer = <int>[];
-
-    timerSub = Stream<void>.periodic(const Duration(milliseconds: 100))
-        .listen((_) async {
-      if (!file.existsSync()) return;
-      final len = file.lengthSync();
-      if (len <= offset) return;
-      final raf = file.openSync(mode: FileMode.read);
-      try {
-        raf.setPositionSync(offset);
-        final chunk = raf.readSync(len - offset);
-        offset = len;
-        controller.add(chunk);
-      } finally {
-        raf.closeSync();
-      }
-    });
-
-    final dataSub = controller.stream.listen((chunk) {
-      buffer.addAll(chunk);
-      while (true) {
-        final nl = buffer.indexOf(0x0a);
-        if (nl < 0) break;
-        final line = String.fromCharCodes(buffer.sublist(0, nl));
-        buffer.removeRange(0, nl + 1);
-        onLine(line);
-      }
-    });
-    dataSub.onDone(timerSub.cancel);
-    return dataSub;
-  }
-
-  /// Returns true when [pid] is still alive. Sends signal 0 (no-op) via the
-  /// `kill` shell command — exit code 0 means alive, non-zero means gone.
-  static bool _pidAlive(int pid) {
-    try {
-      final r = Process.runSync('kill', ['-0', pid.toString()]);
-      return r.exitCode == 0;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Returns true when the registry has a terminal event (completed/crashed)
-  /// for [deploymentId].
-  static bool _registryHasTerminalEvent(
-      String deploymentId, String registryPath) {
-    final file = File(registryPath);
-    if (!file.existsSync()) return false;
-    for (final line in file.readAsLinesSync()) {
-      if (line.isEmpty) continue;
-      if (!line.contains(deploymentId)) continue;
-      if (line.contains('"event":"completed"') ||
-          line.contains('"event":"crashed"')) {
-        return true;
-      }
-    }
-    return false;
-  }
-}
-
-// ============================================================
-// Simple read-only pager
-// ============================================================
-
-/// Minimal read-only pager built on `dart_console`.
-///
-/// Renders a window of lines from [lines] and responds to:
-/// - ↑ / ↓ — scroll one line
-/// - Page Up / Page Down — scroll one page
-/// - Home / End — jump to top / bottom
-/// - `q`, `Esc`, `Ctrl+C` — quit
-///
-/// The pager is intentionally simple: it redraws the whole visible window on
-/// each keypress rather than diffing, which keeps the code small and avoids
-/// ANSI scroll-region tricks that don't survive all terminals.
-class _Pager {
-  final List<String> lines;
-  final String filePath;
-  final String deploymentId;
-
-  _Pager(this.lines, this.filePath, this.deploymentId);
-
-  void run() {
-    final console = Console();
-    final height = console.windowHeight;
-    // Reserve 2 lines for the status bar (top) and the help line (bottom).
-    final visibleRows = height > 4 ? height - 3 : 1;
-    final maxWidth = console.windowWidth;
-
-    var topLine = 0;
-    var needsRedraw = true;
-
-    stdin.echoMode = false;
-    stdin.lineMode = false;
-    console.hideCursor();
-    try {
-      while (true) {
-        if (needsRedraw) {
-          _render(console, topLine, visibleRows, maxWidth);
-          needsRedraw = false;
-        }
-
-        final key = console.readKey();
-
-        if (key.controlChar == ControlCharacter.ctrlC ||
-            key.controlChar == ControlCharacter.escape ||
-            (key.controlChar == ControlCharacter.none &&
-                key.char.toLowerCase() == 'q')) {
-          // Clear the pager area before returning so the shell prompt isn't
-          // left covered by stale log output.
-          console.showCursor();
-          stdout.write('\r\x1B[J');
-          return;
-        } else if (key.controlChar == ControlCharacter.arrowDown) {
-          final maxTop = _maxTop(visibleRows);
-          if (topLine < maxTop) {
-            topLine++;
-            needsRedraw = true;
-          }
-        } else if (key.controlChar == ControlCharacter.arrowUp) {
-          if (topLine > 0) {
-            topLine--;
-            needsRedraw = true;
-          }
-        } else if (key.controlChar == ControlCharacter.pageDown) {
-          final maxTop = _maxTop(visibleRows);
-          final next = topLine + visibleRows;
-          topLine = next > maxTop ? maxTop : next;
-          needsRedraw = true;
-        } else if (key.controlChar == ControlCharacter.pageUp) {
-          final prev = topLine - visibleRows;
-          topLine = prev < 0 ? 0 : prev;
-          needsRedraw = true;
-        } else if (key.controlChar == ControlCharacter.home) {
-          topLine = 0;
-          needsRedraw = true;
-        } else if (key.controlChar == ControlCharacter.end) {
-          topLine = _maxTop(visibleRows);
-          needsRedraw = true;
-        }
-      }
-    } finally {
-      console.showCursor();
-      stdin.echoMode = true;
-      stdin.lineMode = true;
-    }
-  }
-
-  int _maxTop(int visibleRows) {
-    if (lines.length <= visibleRows) return 0;
-    return lines.length - visibleRows;
-  }
-
-  void _render(Console console, int topLine, int visibleRows, int maxWidth) {
-    stdout.write('\r\x1B[J');
-
-    // Status bar (line 1).
-    final bottom = topLine + visibleRows > lines.length
-        ? lines.length
-        : topLine + visibleRows;
-    final status = ' $deploymentId  ${bottom}/${lines.length}  $filePath';
-    console.setForegroundColor(ConsoleColor.blue);
-    stdout.writeln(_truncateForDisplay(status, maxWidth));
-    console.resetColorAttributes();
-
-    // Visible log lines.
-    final end = topLine + visibleRows;
-    for (var i = topLine; i < end && i < lines.length; i++) {
-      stdout.writeln(_truncateForDisplay(lines[i], maxWidth));
-    }
-
-    // Pad the window to visibleRows so the help line stays at the bottom.
-    final rendered = (end > lines.length ? lines.length : end) - topLine;
-    for (var i = rendered; i < visibleRows; i++) {
-      stdout.writeln('');
-    }
-
-    // Help line.
-    console.setForegroundColor(ConsoleColor.brightBlack);
-    stdout.write(
-        '↑/↓ scroll · PgUp/PgDn · Home/End · q/Esc quit');
-    console.resetColorAttributes();
-  }
-
-  /// Truncates [text] to [maxWidth] display columns, appending an ellipsis
-  /// when truncated. Treats each code unit as one column, which is correct
-  /// for the ASCII-heavy session logs and simple enough for the pager.
-  static String _truncateForDisplay(String text, int maxWidth) {
-    if (maxWidth <= 0) return '';
-    if (text.length <= maxWidth) return text;
-    if (maxWidth <= 1) return '\u2026';
-    return '${text.substring(0, maxWidth - 1)}\u2026';
   }
 }

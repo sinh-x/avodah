@@ -118,11 +118,12 @@ Future<void> main(List<String> args) async {
     // so the SessionService is constructed once and injected into each
     // subcommand, matching the existing SyncCommand pattern.
     final sessionService = SessionService();
-    final liveProcesses = <String, Process>{};
+    final liveProcesses = <String, LiveProcess>{};
     final sessionCommand = SessionCommand()
       ..addSubcommand(SessionListCommand(sessionService))
       ..addSubcommand(SessionHistoryCommand(sessionService))
-      ..addSubcommand(SessionStartCommand(sessionService))
+      ..addSubcommand(SessionStartCommand(sessionService,
+          liveProcesses: liveProcesses))
       ..addSubcommand(SessionStopCommand(sessionService))
       ..addSubcommand(SessionAttachCommand(sessionService,
           liveProcesses: liveProcesses));
