@@ -391,15 +391,15 @@ class SessionStopCommand extends Command<void> {
 /// `avo session attach <deployment-id>` — live view of a running opencode
 /// session.
 ///
-/// Tails the deployment's `activity.jsonl` event stream (written in real time
-/// by the opencode PA plugin) and renders each event with ANSI escape codes
-/// passed through unmodified. Stdin forwarding is not available because the
-/// session is spawned on the pa-platform server, not locally.
+/// Connects to the pa-platform SSE stream (`GET /api/sessions/:id/stream`)
+/// for real-time session events. File-based `activity.jsonl` reading is
+/// dropped — WebSocket sessions are the primary interactive path. Deploy
+/// sessions (started via `avo session start`) do not support streaming and
+/// will produce a clear error message from the SSE endpoint.
 ///
-/// Detach with Ctrl+C or Escape — the session keeps running. Subprocess
-/// exit is detected by polling the registry for a terminal event
-/// (completed/crashed); on exit the command prints a notification and returns
-/// to the CLI.
+/// Detach with Ctrl+C or Escape — the session keeps running. When the
+/// session emits an `end` event (child closed or stopped), the command
+/// prints a notification and returns to the CLI.
 class SessionAttachCommand extends Command<void> {
   final SessionService sessionService;
 
@@ -439,20 +439,21 @@ class SessionAttachCommand extends Command<void> {
       return;
     }
 
-    final activityFile = File(handle.activityLogPath);
-    if (!activityFile.existsSync()) {
-      print('No activity log found for $deploymentId at '
-          '${handle.activityLogPath}.');
+    final sessionId = handle.sessionId ?? '';
+    if (sessionId.isEmpty) {
+      print('Session $deploymentId has no session id — cannot stream.');
       print('');
-      print(hintPlain('The deployment directory may have been removed.'));
+      print(hintPlain('Deploy sessions started via `avo session start` do not '
+          'support live streaming. WebSocket sessions from the phone app are '
+          'the primary interactive path.'));
       return;
     }
 
     print(sectionHeader('ATTACH SESSION'));
     print('');
     print(kvRow('Deployment:', deploymentId));
-    print(kvRow('Session:', handle.sessionId ?? '-'));
-    print(kvRow('Mode:', 'tail-only'));
+    print(kvRow('Session:', sessionId));
+    print(kvRow('Mode:', 'SSE stream'));
     print('');
     print(hintPlain('Streaming live output. Ctrl+C or Esc to detach '
         '(session keeps running).'));
@@ -460,10 +461,8 @@ class SessionAttachCommand extends Command<void> {
 
     await SessionAttachRunner(
       deploymentId: deploymentId,
-      activityFile: activityFile,
-      pid: null,
-      liveProcess: null,
-      registryPath: sessionService.registryPath,
+      sessionId: sessionId,
+      apiBaseUrl: sessionService.apiBaseUrl,
     ).run();
   }
 

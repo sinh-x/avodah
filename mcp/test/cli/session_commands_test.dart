@@ -206,20 +206,28 @@ void main() {
       await runner.run(['session', 'attach', 'd-aaaaaa']);
     });
 
-    test('reports missing activity log for running session', () async {
+    test('reports deploy session unsupported streaming on 404', () async {
       final client = MockClient((request) async {
-        return http.Response(jsonEncode([
-          {
-            'id': 's1-abc',
-            'deploymentId': 'd-aaaaaa',
-            'model': 'm',
-            'status': 'running',
-            'startedAt': '2026-08-13T04:00:00Z',
-          }
-        ]), 200);
+        if (request.method == 'GET' && request.url.path == '/api/sessions') {
+          return http.Response(jsonEncode([
+            {
+              'id': 's1-abc',
+              'deploymentId': 'd-aaaaaa',
+              'model': 'm',
+              'status': 'running',
+              'startedAt': '2026-08-13T04:00:00Z',
+            }
+          ]), 200);
+        }
+        // SSE endpoint returns 404 for deploy sessions.
+        return http.Response(
+            jsonEncode({
+              'error': 'Deploy sessions do not support streaming',
+              'code': 'NOT_FOUND',
+            }),
+            404);
       });
       final runner = buildRunner(httpClient: client);
-      // No activity.jsonl created on purpose.
       await runner.run(['session', 'attach', 'd-aaaaaa']);
     });
   });
