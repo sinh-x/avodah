@@ -231,14 +231,17 @@ class SessionService {
         .toList(growable: false);
   }
 
-  /// Extract the deployment id from a pa-platform deploy response,
-  /// accepting both the canonical camelCase key `deploymentId` and the
-  /// snake_case variant `deployment_id`.
+  /// Extract the deployment id from a pa-platform response, accepting both
+  /// the camelCase key `deploymentId` and the snake_case variant
+  /// `deployment_id`.
   ///
-  /// The pa-platform `POST /api/deploy` route normalises the key to
-  /// `deploymentId` (camelCase), but some intermediate proxies or older
-  /// clients may emit `deployment_id`. This helper reads the canonical key
-  /// first and falls back to the snake_case variant so callers do not need to
+  /// This helper serves two endpoints that use different key conventions:
+  ///   - `GET /api/sessions` emits camelCase `deploymentId`.
+  ///   - `POST /api/deploy` emits snake_case `deployment_id` (per the
+  ///     pa-platform `deploy-control.ts` route handler).
+  ///
+  /// The camelCase-first-then-snake_case fallback order is required so that
+  /// callers consuming responses from either endpoint do not need to
   /// duplicate the fallback logic.
   ///
   /// Cross-check: this precedence MUST stay aligned with
