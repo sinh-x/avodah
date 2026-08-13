@@ -3,8 +3,7 @@
 /// Provides read-only listing of deployments from the registry, subprocess
 /// lifecycle (start/stop), and session log discovery. Reuses
 /// [parseRegistryFile] and [computeDeploymentStatuses] from
-/// `registry_parser.dart` and the `Process.start` pattern from
-/// `agent_api_service.dart`.
+/// `registry_parser.dart`.
 ///
 /// Phase 1 deliverable for AVO-116 (opencode session integration). Only the
 /// service layer lives here — CLI command wiring arrives in later phases.
@@ -213,8 +212,7 @@ class SessionService {
 
   /// Spawn `opa deploy <team> --mode <mode>` and capture the deployment ID.
   ///
-  /// Mirrors the pattern in `agent_api_service.dart:_handleStartDeployment`:
-  /// read stdout until the first newline, extract `d-<hex6>` via regex. The
+  /// Read stdout until the first newline, extract `d-<hex6>` via regex. The
   /// returned [StartSessionResult.process] is the live subprocess — callers
   /// that want to attach must drain its stdout/stderr.
   ///

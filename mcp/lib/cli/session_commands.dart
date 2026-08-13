@@ -254,8 +254,7 @@ class SessionHistoryCommand extends Command<void> {
 /// `avo session start <team> --mode <mode>` — spawn a new opencode session.
 ///
 /// Spawns `opa deploy <team> --mode <mode>` as a subprocess via
-/// [SessionService.startSession] (which mirrors the `Process.start` pattern
-/// from `agent_api_service.dart`). The deployment ID is extracted from opa's
+/// [SessionService.startSession]. The deployment ID is extracted from opa's
 /// first stdout line using the regex `Deployment: (d-[a-f0-9]+)` and printed
 /// on success.
 ///
