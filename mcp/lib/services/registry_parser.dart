@@ -88,6 +88,7 @@ class DeploymentStatus {
   final String? error;
   final int? exitCode;
   final String? logFile;
+  final int? pid; // subprocess PID from the "pid" event
 
   DeploymentStatus({
     required this.deploymentId,
@@ -101,6 +102,7 @@ class DeploymentStatus {
     this.error,
     this.exitCode,
     this.logFile,
+    this.pid,
   });
 
   Map<String, dynamic> toJson() => {
@@ -115,6 +117,7 @@ class DeploymentStatus {
         if (error != null) 'error': error,
         if (exitCode != null) 'exit_code': exitCode,
         if (logFile != null) 'log_file': logFile,
+        if (pid != null) 'pid': pid,
       };
 }
 
@@ -157,6 +160,8 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
         deployEvents.where((e) => e.event == 'completed').firstOrNull;
     final crashed =
         deployEvents.where((e) => e.event == 'crashed').firstOrNull;
+    final pidEvent =
+        deployEvents.where((e) => e.event == 'pid').firstOrNull;
 
     String status;
     String? completedAt;
@@ -195,6 +200,7 @@ List<DeploymentStatus> computeDeploymentStatuses(List<RegistryEvent> events) {
       error: error,
       exitCode: exitCode,
       logFile: logFile,
+      pid: pidEvent?.pid,
     ));
   }
 
