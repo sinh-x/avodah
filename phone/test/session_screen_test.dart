@@ -375,4 +375,81 @@ void main() {
     // Should transition to view-only (Mn6: consistent state on disconnect)
     expect(find.text('Session ended — view-only'), findsOneWidget);
   });
+
+  testWidgets(
+      'live flow: follow-up reconnect failure transitions to view-only (N2)',
+      (tester) async {
+    final fakeChannel = _FakeWsChannel();
+    var connectCallCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 600,
+            child: SessionScreen(
+              apiClient: _FakeApiClient(),
+              wsClientFactory: () {
+                connectCallCount++;
+                if (connectCallCount == 1) {
+                  return WsSessionClient.forTesting(fakeChannel);
+                }
+                throw WsSessionConnectException('reconnect failed');
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Setup: select team, mode, enter prompt, start
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('builder').last);
+    await tester.pumpAndSettle();
+    final implementChip = find.ancestor(
+        of: find.text('Implement'), matching: find.byType(FilterChip));
+    await tester.tap(implementChip);
+    await tester.pumpAndSettle();
+    final promptFinder = find.byType(TextField).at(0);
+    await tester.ensureVisible(promptFinder);
+    await tester.enterText(promptFinder, 'Test prompt');
+    await tester.pumpAndSettle();
+    final startBtn = find.ancestor(
+        of: find.byIcon(Icons.play_arrow),
+        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
+    await tester.ensureVisible(startBtn);
+    await tester.tap(startBtn);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Server sends session-id
+    fakeChannel.serverSend(jsonEncode({
+      'type': 'session-id',
+      'sessionId': 's-follow-1',
+      'timestamp': '2026-08-13T04:00:00Z',
+    }));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Should be in live mode
+    expect(find.textContaining('s-follow-1'), findsWidgets);
+
+    // Type a follow-up prompt in the chat input
+    final chatFinder = find.widgetWithText(TextField, 'Type a follow-up prompt…');
+    await tester.ensureVisible(chatFinder);
+    await tester.enterText(chatFinder, 'Follow up');
+    await tester.pumpAndSettle();
+
+    // Tap send button to trigger follow-up reconnect (which will fail)
+    final sendBtn = find.byIcon(Icons.send);
+    await tester.ensureVisible(sendBtn);
+    await tester.tap(sendBtn);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Should transition to view-only mode (N2: consistent state on
+    // follow-up reconnect failure, not stale live screen with chat enabled)
+    expect(find.text('Session ended — view-only'), findsOneWidget);
+    // The error message should be visible in the event list.
+    expect(find.textContaining('reconnect failed'), findsWidgets);
+  });
 }

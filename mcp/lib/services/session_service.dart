@@ -232,21 +232,27 @@ class SessionService {
   }
 
   /// Extract the deployment id from a pa-platform deploy response,
-  /// accepting both the canonical snake_case key `deployment_id` and the
-  /// camelCase variant `deploymentId`.
+  /// accepting both the canonical camelCase key `deploymentId` and the
+  /// snake_case variant `deployment_id`.
   ///
   /// The pa-platform `POST /api/deploy` route normalises the key to
-  /// `deployment_id` (snake_case), but some intermediate proxies or older
-  /// clients may emit `deploymentId`. This helper reads the canonical key
-  /// first and falls back to the camelCase variant so callers do not need to
+  /// `deploymentId` (camelCase), but some intermediate proxies or older
+  /// clients may emit `deployment_id`. This helper reads the canonical key
+  /// first and falls back to the snake_case variant so callers do not need to
   /// duplicate the fallback logic.
+  ///
+  /// Cross-check: this precedence MUST stay aligned with
+  /// `SessionRecord._extractDeploymentId` in
+  /// `phone/lib/models/session_record.dart`, which also reads camelCase
+  /// first and falls back to snake_case. When changing the precedence here,
+  /// update both helpers and their tests together.
   ///
   /// Returns the deployment id string, or an empty string when neither key is
   /// present or the value is not a string.
   static String extractDeploymentId(Map<String, dynamic> json) {
-    final v = json['deployment_id'];
+    final v = json['deploymentId'];
     if (v is String && v.isNotEmpty) return v;
-    final alt = json['deploymentId'];
+    final alt = json['deployment_id'];
     if (alt is String && alt.isNotEmpty) return alt;
     return '';
   }

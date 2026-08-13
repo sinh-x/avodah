@@ -258,14 +258,25 @@ class _SessionScreenState extends State<SessionScreen> {
     try {
       client = await _connectWs();
     } on WsSessionConnectException catch (e) {
+      // Route through _handlePostConnectFailure so a failed follow-up
+      // reconnect transitions to a consistent view-only state (clear
+      // _activeSessionId, null _wsClient, set _mode = viewOnly) instead
+      // of leaving a stale live screen with chat enabled (N2).
+      // _handlePostConnectFailure expects a WsSessionClient; since the
+      // connection itself failed there is no client to close, so we
+      // perform the equivalent reset inline here.
+      _eventSub?.cancel();
       if (!mounted) return;
       setState(() {
+        _wsClient = null;
+        _activeSessionId = null;
+        _mode = _SessionMode.viewOnly;
+        _sending = false;
         _eventLines.add(_EventLine(
           kind: _LineKind.error,
           text: 'Connection error: ${e.message}',
           timestamp: DateTime.now().toIso8601String(),
         ));
-        _sending = false;
       });
       return;
     }

@@ -311,15 +311,15 @@ void main() {
   });
 
   group('extractDeploymentId (key normalization helper — Mn2/AC15)', () {
-    test('reads snake_case deployment_id (canonical key)', () {
+    test('reads camelCase deploymentId (canonical key)', () {
       expect(SessionService.extractDeploymentId(
-          {'deployment_id': 'd-abcdef', 'status': 'pending'}),
+          {'deploymentId': 'd-abcdef', 'status': 'pending'}),
           'd-abcdef');
     });
 
-    test('falls back to camelCase deploymentId', () {
+    test('falls back to snake_case deployment_id', () {
       expect(SessionService.extractDeploymentId(
-          {'deploymentId': 'd-abcdef', 'status': 'pending'}),
+          {'deployment_id': 'd-abcdef', 'status': 'pending'}),
           'd-abcdef');
     });
 
@@ -329,19 +329,19 @@ void main() {
     });
 
     test('returns empty string when value is not a string', () {
-      expect(SessionService.extractDeploymentId({'deployment_id': 123}),
+      expect(SessionService.extractDeploymentId({'deploymentId': 123}),
           '');
     });
 
     test('returns empty string when value is empty', () {
-      expect(SessionService.extractDeploymentId({'deployment_id': ''}),
+      expect(SessionService.extractDeploymentId({'deploymentId': ''}),
           '');
     });
 
-    test('prefers snake_case over camelCase', () {
+    test('prefers camelCase over snake_case', () {
       expect(SessionService.extractDeploymentId(
           {'deployment_id': 'd-snake', 'deploymentId': 'd-camel'}),
-          'd-snake');
+          'd-camel');
     });
 
     test('startSession succeeds with camelCase deploymentId key', () async {
@@ -385,7 +385,7 @@ void main() {
       expect(s.deploymentId, 'd-snake123');
     });
 
-    test('prefers snake_case over camelCase (matches extractDeploymentId)', () {
+    test('prefers camelCase over snake_case (matches extractDeploymentId)', () {
       final s = SessionSummary.fromJson({
         'id': 's1',
         'deployment_id': 'd-snake',
@@ -394,7 +394,7 @@ void main() {
         'status': 'running',
         'startedAt': '2026-08-13T04:00:00Z',
       });
-      expect(s.deploymentId, 'd-snake');
+      expect(s.deploymentId, 'd-camel');
     });
 
     test('returns empty string when neither key present', () {
