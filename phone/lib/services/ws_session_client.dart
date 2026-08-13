@@ -90,21 +90,33 @@ class WsSessionClient {
   ///
   /// Listen to [events] for the `session-id` confirmation and the
   /// subsequent `event` stream.
-  void start(String prompt, {String? model}) {
+  ///
+  /// [team] and [mode] are optional PA team/mode selections. The current
+  /// WS session protocol ignores these fields (only `prompt` and `model`
+  /// are read), but they are sent for forward compatibility if pa-platform
+  /// later adds session-level team/mode support. See primer guidance note.
+  void start(String prompt, {String? model, String? team, String? mode}) {
     _send({
       'type': 'start',
       'prompt': prompt,
       if (model != null) 'model': model,
+      if (team != null) 'team': team,
+      if (mode != null) 'mode': mode,
     });
   }
 
   /// Send a `resume` message with an existing opencode session id.
-  void resume(String sessionId, String prompt, {String? model}) {
+  ///
+  /// [team] and [mode] are optional, forwarded the same as [start].
+  void resume(String sessionId, String prompt,
+      {String? model, String? team, String? mode}) {
     _send({
       'type': 'resume',
       'sessionId': sessionId,
       'prompt': prompt,
       if (model != null) 'model': model,
+      if (team != null) 'team': team,
+      if (mode != null) 'mode': mode,
     });
   }
 
