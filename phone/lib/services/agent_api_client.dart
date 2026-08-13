@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show HttpStatus;
 
 import 'package:flutter/foundation.dart';
 
@@ -890,9 +889,14 @@ class AgentApiClient {
     );
 
     // Send and stream response
-    final streamed = await _client.send(request).timeout(
-      const Duration(minutes: 5),
-    );
+    http.StreamedResponse streamed;
+    try {
+      streamed = await _client.send(request).timeout(
+        const Duration(minutes: 5),
+      );
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -927,9 +931,14 @@ class AgentApiClient {
   Future<List<int>> getImageBytes(String path) async {
     final encoded = Uri.encodeComponent(path);
     final uri = Uri.parse('$baseUrl/api/images?path=$encoded');
-    final response = await _client
-        .get(uri, headers: _authHeaders)
-        .timeout(const Duration(seconds: 15));
+    http.Response response;
+    try {
+      response = await _client
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -972,9 +981,14 @@ class AgentApiClient {
   /// GET /api/sessions → SessionRecord[]
   Future<List<SessionRecord>> listSessions() async {
     final uri = Uri.parse('$baseUrl/api/sessions');
-    final response = await _client
-        .get(uri, headers: _authHeaders)
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -1301,9 +1315,14 @@ class AgentApiClient {
   // --- HTTP helpers ---
 
   Future<Map<String, dynamic>> _get(String path) async {
-    final response = await _client
-        .get(Uri.parse('$baseUrl$path'), headers: _authHeaders)
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .get(Uri.parse('$baseUrl$path'), headers: _authHeaders)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -1312,13 +1331,18 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _post(String path,
       {Map<String, dynamic>? body}) async {
-    final response = await _client
-        .post(
-          Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json', ..._authHeaders},
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$baseUrl$path'),
+            headers: {'Content-Type': 'application/json', ..._authHeaders},
+            body: jsonEncode(body ?? {}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -1327,13 +1351,18 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _patch(String path,
       {Map<String, dynamic>? body}) async {
-    final response = await _client
-        .patch(
-          Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json', ..._authHeaders},
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .patch(
+            Uri.parse('$baseUrl$path'),
+            headers: {'Content-Type': 'application/json', ..._authHeaders},
+            body: jsonEncode(body ?? {}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -1346,7 +1375,13 @@ class AgentApiClient {
     request.headers['Content-Type'] = 'application/json';
     request.headers.addAll(_authHeaders);
     if (body != null) request.body = jsonEncode(body);
-    final streamed = await _client.send(request).timeout(const Duration(seconds: 10));
+    http.StreamedResponse streamed;
+    try {
+      streamed =
+          await _client.send(request).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
@@ -1368,6 +1403,25 @@ class AgentApiClient {
     } catch (_) {
       throw AgentApiException(statusCode, rawBody);
     }
+  }
+
+  /// Build a user-facing error message for network failures (connection
+  /// refused, timeout, DNS). The caller wraps this in an [AgentApiException]
+  /// with status code 0 so the UI can distinguish network errors from HTTP
+  /// errors.
+  String _networkErrorMessage(Object error) {
+    final detail = error.toString();
+    if (detail.contains('Connection refused') ||
+        detail.contains('Failed host lookup') ||
+        detail.contains('Connection terminated') ||
+        detail.contains('Connection closed') ||
+        detail.contains('TimeoutException') ||
+        detail.contains('SocketException') ||
+        detail.contains('HandshakeException')) {
+      return 'pa-platform is not running at $baseUrl. '
+          'Start it with `pa-core serve`.';
+    }
+    return 'Could not reach pa-platform at $baseUrl: $detail';
   }
 
   void dispose() {

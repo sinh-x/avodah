@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:avodah_core/avodah_core.dart';
-import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/services/task_service.dart';
 import 'package:avodah_mcp/services/worklog_service.dart';
 import 'package:avodah_mcp/services/project_service.dart';

@@ -5,7 +5,6 @@ import '../models/repo_diff.dart';
 import '../models/repo_git_info.dart';
 import '../services/agent_api_client.dart';
 import '../utils/date_helpers.dart';
-import '../widgets/diff_widgets.dart';
 import '../widgets/expandable_commit_tile.dart';
 
 /// Screen showing details of a single feature branch with embedded commit history.
@@ -35,7 +34,6 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
   bool _loadingMore = false;
   int _offset = 0;
   static const int _limit = 20;
-  int _total = 0;
   final ScrollController _scrollController = ScrollController();
   final Map<String, RepoDiff?> _diffCache = {};
   final Set<String> _failedDiffs = {};
@@ -86,7 +84,6 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
         }
         setState(() {
           _commits = result.commits;
-          _total = result.commits.length;
           _loadingCommits = false;
           _headerCommit = headerCommit;
         });
@@ -134,7 +131,6 @@ class _BranchDetailScreenState extends State<BranchDetailScreen> {
         setState(() {
           _commits = [..._commits, ...result.commits];
           _offset += result.commits.length;
-          _total = _commits.length;
           _loadingMore = false;
           if (headerCommit != null) _headerCommit = headerCommit;
         });

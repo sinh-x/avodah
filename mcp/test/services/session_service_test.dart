@@ -103,6 +103,44 @@ void main() {
       final service = buildService(httpClient: client);
       expect(() async => await service.listSessions(), throwsException);
     });
+
+    test('throws PaPlatformUnavailableException on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      expect(
+        () async => await service.listSessions(),
+        throwsA(isA<PaPlatformUnavailableException>()),
+      );
+    });
+  });
+
+  group('checkHealth', () {
+    test('returns true when API reports ok', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/health');
+        return http.Response('{"status":"ok"}', 200);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isTrue);
+    });
+
+    test('returns false on non-200 response', () async {
+      final client = MockClient((request) async {
+        return http.Response('{"error":"down"}', 503);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isFalse);
+    });
+
+    test('returns false on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isFalse);
+    });
   });
 
   group('startSession', () {
@@ -166,7 +204,7 @@ void main() {
       final service = buildService(httpClient: client);
       final r = await service.startSession('builder', 'implement');
       expect(r.succeeded, isFalse);
-      expect(r.error, contains('Failed to reach pa-platform'));
+      expect(r.error, contains('pa-platform is not running'));
     });
 
     test('forwards extraArgs --ticket and --objective into body', () async {
@@ -278,7 +316,7 @@ void main() {
       final service = buildService(httpClient: client);
       final r = await service.stopSession('d-zzzzzz');
       expect(r.stopped, isFalse);
-      expect(r.error, contains('Failed to reach pa-platform'));
+      expect(r.error, contains('pa-platform is not running'));
     });
   });
 

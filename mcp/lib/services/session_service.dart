@@ -100,6 +100,18 @@ class SessionHandle {
   });
 }
 
+/// Thrown when the pa-platform Agent API is unreachable (not running, wrong
+/// port, or connection refused). Carries a user-facing message so the CLI
+/// can surface a clear error instead of a raw stack trace.
+class PaPlatformUnavailableException implements Exception {
+  final String message;
+
+  PaPlatformUnavailableException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Outcome of `stopSession`.
 class StopSessionResult {
   /// The session id (or deployment id) the caller requested to stop.
@@ -168,13 +180,37 @@ class SessionService {
                 'ai-usage', 'deployments', 'registry.jsonl'),
         httpClient = httpClient ?? http.Client();
 
+  /// Probe the pa-platform Agent API health endpoint.
+  ///
+  /// Returns `true` when pa-platform is reachable and reports
+  /// `{"status":"ok"}`, `false` on any network error or non-200 response.
+  /// Use this before long-running operations to fail fast with a clear
+  /// message instead of letting the first API call hang or crash.
+  Future<bool> checkHealth() async {
+    try {
+      final response =
+          await httpClient.get(Uri.parse('$apiBaseUrl/api/health'));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// List all active sessions via `GET /api/sessions`.
   ///
   /// Returns an empty list when pa-platform returns no sessions. Throws an
   /// [Exception] on network errors or non-200 responses so the CLI command
   /// can surface a clear error message.
   Future<List<SessionSummary>> listSessions() async {
-    final response = await httpClient.get(Uri.parse('$apiBaseUrl/api/sessions'));
+    http.Response response;
+    try {
+      response =
+          await httpClient.get(Uri.parse('$apiBaseUrl/api/sessions'));
+    } catch (e) {
+      throw PaPlatformUnavailableException(
+          'pa-platform is not running at $apiBaseUrl. '
+          'Start it with `pa-core serve`. ($e)');
+    }
     if (response.statusCode != 200) {
       throw Exception(
           'GET /api/sessions returned ${response.statusCode}: ${response.body}');
@@ -221,7 +257,8 @@ class SessionService {
       return StartSessionResult(
         deploymentId: '',
         status: 'failed',
-        error: 'Failed to reach pa-platform at $apiBaseUrl: $e',
+        error: 'pa-platform is not running at $apiBaseUrl. '
+            'Start it with `pa-core serve`. ($e)',
       );
     }
 
@@ -281,7 +318,8 @@ class SessionService {
       return StopSessionResult(
         id: sessionId,
         stopped: false,
-        error: 'Failed to reach pa-platform at $apiBaseUrl: $e',
+        error: 'pa-platform is not running at $apiBaseUrl. '
+            'Start it with `pa-core serve`. ($e)',
       );
     }
     if (response.statusCode == 200) {

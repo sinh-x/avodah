@@ -59,13 +59,24 @@ class WsSessionClient {
   /// `ws://192.168.1.10:9847`). The `/ws/session` path is appended
   /// automatically. Auth headers (`X-Av-Pair-Token`, `X-Av-Node-Id`) are
   /// passed via [headers] when going through the sync server proxy.
+  ///
+  /// Throws an [WsSessionConnectException] with a user-facing message when
+  /// pa-platform is not running (connection refused, timeout, DNS failure).
   static WsSessionClient connect(
     String wsBaseUrl, {
     Map<String, dynamic>? headers,
   }) {
     final base = wsBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/ws/session');
-    final channel = IOWebSocketChannel.connect(uri, headers: headers);
+    WebSocketChannel channel;
+    try {
+      channel = IOWebSocketChannel.connect(uri, headers: headers);
+    } catch (e) {
+      throw WsSessionConnectException(
+        'pa-platform is not running at $wsBaseUrl. '
+        'Start it with `pa-core serve`. ($e)',
+      );
+    }
     return WsSessionClient._(channel);
   }
 
@@ -126,4 +137,15 @@ class WsSessionClient {
 
   /// Whether the underlying WebSocket is still open.
   bool get isOpen => !_closed && !_controller.isClosed;
+}
+
+/// Thrown when the WebSocket connection to `/ws/session` cannot be
+/// established (pa-platform not running, wrong host/port, TLS failure).
+class WsSessionConnectException implements Exception {
+  final String message;
+
+  WsSessionConnectException(this.message);
+
+  @override
+  String toString() => message;
 }
