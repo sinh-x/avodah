@@ -231,6 +231,26 @@ class SessionService {
         .toList(growable: false);
   }
 
+  /// Extract the deployment id from a pa-platform deploy response,
+  /// accepting both the canonical snake_case key `deployment_id` and the
+  /// camelCase variant `deploymentId`.
+  ///
+  /// The pa-platform `POST /api/deploy` route normalises the key to
+  /// `deployment_id` (snake_case), but some intermediate proxies or older
+  /// clients may emit `deploymentId`. This helper reads the canonical key
+  /// first and falls back to the camelCase variant so callers do not need to
+  /// duplicate the fallback logic.
+  ///
+  /// Returns the deployment id string, or an empty string when neither key is
+  /// present or the value is not a string.
+  static String extractDeploymentId(Map<String, dynamic> json) {
+    final v = json['deployment_id'];
+    if (v is String && v.isNotEmpty) return v;
+    final alt = json['deploymentId'];
+    if (alt is String && alt.isNotEmpty) return alt;
+    return '';
+  }
+
   /// Trigger a deployment via `POST /api/deploy`.
   ///
   /// The pa-platform spawns the `opa deploy` subprocess server-side and
@@ -295,10 +315,7 @@ class SessionService {
       );
     }
     final status = result['status'] as String? ?? 'failed';
-    // The deploy-control route normalises the key to `deployment_id`.
-    final deploymentId = (result['deployment_id'] as String?) ??
-        result['deploymentId'] as String? ??
-        '';
+    final deploymentId = extractDeploymentId(result);
     if (status == 'failed' || deploymentId.isEmpty) {
       return StartSessionResult(
         deploymentId: '',

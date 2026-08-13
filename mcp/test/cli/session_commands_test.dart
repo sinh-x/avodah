@@ -50,6 +50,9 @@ void main() {
   group('session list', () {
     test('prints empty message when no active sessions', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         return http.Response('[]', 200);
       });
       final runner = buildRunner(httpClient: client);
@@ -58,6 +61,9 @@ void main() {
 
     test('renders session rows', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         return http.Response(jsonEncode([
           {
             'id': 's1-abc',
@@ -74,7 +80,19 @@ void main() {
 
     test('reports error on API failure', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         return http.Response('{"error":"down"}', 500);
+      });
+      final runner = buildRunner(httpClient: client);
+      await runner.run(['session', 'list']);
+    });
+
+    test('fails fast with clear message when pa-platform is down (AC14)',
+        () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
       });
       final runner = buildRunner(httpClient: client);
       await runner.run(['session', 'list']);
@@ -138,6 +156,9 @@ void main() {
   group('session start', () {
     test('reports success on deployment_id returned', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         expect(request.url.path, '/api/deploy');
         return http.Response(
             jsonEncode({
@@ -154,6 +175,9 @@ void main() {
 
     test('reports failure when status is failed', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         return http.Response(
             jsonEncode({
               'status': 'failed',
@@ -169,6 +193,9 @@ void main() {
 
     test('reports failure on network error', () async {
       final client = MockClient((request) async {
+        if (request.url.path == '/api/health') {
+          return http.Response('{"status":"ok"}', 200);
+        }
         throw const SocketException('connection refused');
       });
       final runner = buildRunner(httpClient: client);
@@ -178,6 +205,15 @@ void main() {
     test('missing team arg prints usage', () async {
       final runner = buildRunner();
       await runner.run(['session', 'start']);
+    });
+
+    test('fails fast with clear message when pa-platform is down (AC14)',
+        () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final runner = buildRunner(httpClient: client);
+      await runner.run(['session', 'start', 'builder']);
     });
   });
 

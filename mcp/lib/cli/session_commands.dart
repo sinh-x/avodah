@@ -80,6 +80,17 @@ class SessionListCommand extends Command<void> {
 
   @override
   Future<void> run() async {
+    final healthy = await sessionService.checkHealth();
+    if (!healthy) {
+      print(sectionHeader('SESSIONS'));
+      print('');
+      print('  pa-platform is not running.');
+      print('');
+      print(hintPlain(
+          'Start it with `pa-core serve` before listing sessions.'));
+      return;
+    }
+
     List<SessionSummary> sessions;
     try {
       sessions = await sessionService.listSessions();
@@ -289,6 +300,17 @@ class SessionStartCommand extends Command<void> {
     }
     final team = args.first;
     final mode = argResults?['mode'] as String? ?? '';
+
+    final healthy = await sessionService.checkHealth();
+    if (!healthy) {
+      print(sectionHeader('START SESSION'));
+      print('');
+      print('  pa-platform is not running.');
+      print('');
+      print(hintPlain(
+          'Start it with `pa-core serve` before starting a session.'));
+      return;
+    }
 
     print(sectionHeader('START SESSION'));
     print('');

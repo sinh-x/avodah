@@ -60,18 +60,36 @@ class WsSessionClient {
   /// automatically. Auth headers (`X-Av-Pair-Token`, `X-Av-Node-Id`) are
   /// passed via [headers] when going through the sync server proxy.
   ///
-  /// Throws an [WsSessionConnectException] with a user-facing message when
-  /// pa-platform is not running (connection refused, timeout, DNS failure).
-  static WsSessionClient connect(
+  /// Awaits the WebSocket handshake (with a 10s timeout) so connection
+  /// failures surface as [WsSessionConnectException] instead of raw stream
+  /// errors. Throws [WsSessionConnectException] with a user-facing message
+  /// when pa-platform is not running (connection refused, timeout, DNS
+  /// failure).
+  static Future<WsSessionClient> connect(
     String wsBaseUrl, {
     Map<String, dynamic>? headers,
-  }) {
+  }) async {
     final base = wsBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/ws/session');
-    WebSocketChannel channel;
+    final channel = IOWebSocketChannel.connect(uri, headers: headers);
     try {
-      channel = IOWebSocketChannel.connect(uri, headers: headers);
+      await channel.ready.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException(
+              'WebSocket handshake to $uri timed out after 10s');
+        },
+      );
+    } on WsSessionConnectException {
+      rethrow;
     } catch (e) {
+      if (e is TimeoutException) {
+        throw WsSessionConnectException(
+          'pa-platform is not running at $wsBaseUrl. '
+          'WebSocket handshake timed out after 10s. '
+          'Start it with `pa-core serve`.',
+        );
+      }
       throw WsSessionConnectException(
         'pa-platform is not running at $wsBaseUrl. '
         'Start it with `pa-core serve`. ($e)',

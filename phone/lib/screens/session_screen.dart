@@ -117,7 +117,10 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Connect to `/ws/session` using the sync server proxy (which forwards to
   /// pa-platform on 9848). Auth headers (pairing token, node id) are passed
   /// so the proxy authenticates the request like all other API calls.
-  WsSessionClient _connectWs() {
+  ///
+  /// Returns a [Future] because [WsSessionClient.connect] awaits the WebSocket
+  /// handshake. Throws [WsSessionConnectException] on connection failure.
+  Future<WsSessionClient> _connectWs() async {
     final wsBase = _deriveWsBaseUrl();
     return WsSessionClient.connect(
       wsBase,
@@ -130,12 +133,22 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  void _startSession() {
+  void _startSession() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
     if (_selectedTeam == null || _selectedMode == null) return;
 
-    final client = _connectWs();
+    WsSessionClient client;
+    try {
+      client = await _connectWs();
+    } on WsSessionConnectException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _setupError = e.message;
+      });
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _wsClient = client;
       _mode = _SessionMode.live;
@@ -153,11 +166,21 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  void _resumeSession(String sessionId) {
+  void _resumeSession(String sessionId) async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
 
-    final client = _connectWs();
+    WsSessionClient client;
+    try {
+      client = await _connectWs();
+    } on WsSessionConnectException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _setupError = e.message;
+      });
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _wsClient = client;
       _mode = _SessionMode.live;
@@ -187,18 +210,32 @@ class _SessionScreenState extends State<SessionScreen> {
   /// `stop`. To send a follow-up, we close the current connection and open a
   /// new one that resumes the active session id with the new prompt. This
   /// matches the opencode `--session` resume semantics.
-  void _sendFollowUp() {
+  void _sendFollowUp() async {
     final text = _chatController.text.trim();
     if (text.isEmpty || _activeSessionId == null) return;
 
     setState(() => _sending = true);
     _chatController.clear();
 
-    // Close current connection and resume with the new prompt.
     _eventSub?.cancel();
     _wsClient?.close();
 
-    final client = _connectWs();
+    WsSessionClient client;
+    try {
+      client = await _connectWs();
+    } on WsSessionConnectException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _eventLines.add(_EventLine(
+          kind: _LineKind.error,
+          text: 'Connection error: ${e.message}',
+          timestamp: DateTime.now().toIso8601String(),
+        ));
+        _sending = false;
+      });
+      return;
+    }
+    if (!mounted) return;
     _wsClient = client;
     _eventSub = client.events.listen(_onEvent, onError: _onWsError,
         onDone: _onWsDone);

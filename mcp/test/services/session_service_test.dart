@@ -310,6 +310,58 @@ void main() {
     });
   });
 
+  group('extractDeploymentId (key normalization helper — Mn2/AC15)', () {
+    test('reads snake_case deployment_id (canonical key)', () {
+      expect(SessionService.extractDeploymentId(
+          {'deployment_id': 'd-abcdef', 'status': 'pending'}),
+          'd-abcdef');
+    });
+
+    test('falls back to camelCase deploymentId', () {
+      expect(SessionService.extractDeploymentId(
+          {'deploymentId': 'd-abcdef', 'status': 'pending'}),
+          'd-abcdef');
+    });
+
+    test('returns empty string when neither key present', () {
+      expect(SessionService.extractDeploymentId({'status': 'pending'}),
+          '');
+    });
+
+    test('returns empty string when value is not a string', () {
+      expect(SessionService.extractDeploymentId({'deployment_id': 123}),
+          '');
+    });
+
+    test('returns empty string when value is empty', () {
+      expect(SessionService.extractDeploymentId({'deployment_id': ''}),
+          '');
+    });
+
+    test('prefers snake_case over camelCase', () {
+      expect(SessionService.extractDeploymentId(
+          {'deployment_id': 'd-snake', 'deploymentId': 'd-camel'}),
+          'd-snake');
+    });
+
+    test('startSession succeeds with camelCase deploymentId key', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({
+              'status': 'pending',
+              'deploymentId': 'd-camel123',
+              'team': 'builder',
+              'mode': 'implement',
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isTrue);
+      expect(r.deploymentId, 'd-camel123');
+    });
+  });
+
   group('stopSession', () {
     test('stops directly when id is a session id', () async {
       final client = MockClient((request) async {
