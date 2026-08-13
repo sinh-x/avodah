@@ -1287,20 +1287,6 @@ class AgentApiClient {
     return DashboardOpencodeIntegration.fromJson(response);
   }
 
-  // --- Health ---
-
-  /// Health probe — returns true when pa-platform is reachable.
-  ///
-  /// GET /api/health → {status: "ok"}
-  Future<bool> checkHealth() async {
-    try {
-      await _get('/api/health');
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   // --- Ticket Review ---
 
   /// Fetch a ticket together with enriched doc_refs for review.

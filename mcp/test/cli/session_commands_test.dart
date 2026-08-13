@@ -266,5 +266,14 @@ void main() {
       final runner = buildRunner(httpClient: client);
       await runner.run(['session', 'attach', 'd-aaaaaa']);
     });
+
+    test('fails fast with clear message when pa-platform is down (Mn1/AC14)',
+        () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final runner = buildRunner(httpClient: client);
+      await runner.run(['session', 'attach', 'd-aaaaaa']);
+    });
   });
 }

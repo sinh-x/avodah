@@ -48,7 +48,7 @@ class SessionSummary {
   factory SessionSummary.fromJson(Map<String, dynamic> json) {
     return SessionSummary(
       sessionId: json['id'] as String? ?? '',
-      deploymentId: json['deploymentId'] as String? ?? '',
+      deploymentId: SessionService.extractDeploymentId(json),
       model: json['model'] as String? ?? '',
       status: json['status'] as String? ?? '',
       startedAt: json['startedAt'] as String? ?? '',

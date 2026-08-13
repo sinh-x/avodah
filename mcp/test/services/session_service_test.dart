@@ -362,6 +362,52 @@ void main() {
     });
   });
 
+  group('SessionSummary.fromJson key normalization (Mn3/AC15)', () {
+    test('reads camelCase deploymentId (canonical key)', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deploymentId': 'd-abcdef',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-abcdef');
+    });
+
+    test('falls back to snake_case deployment_id', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deployment_id': 'd-snake123',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-snake123');
+    });
+
+    test('prefers snake_case over camelCase (matches extractDeploymentId)', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deployment_id': 'd-snake',
+        'deploymentId': 'd-camel',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-snake');
+    });
+
+    test('returns empty string when neither key present', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '',
+      });
+      expect(s.deploymentId, '');
+    });
+  });
+
   group('stopSession', () {
     test('stops directly when id is a session id', () async {
       final client = MockClient((request) async {

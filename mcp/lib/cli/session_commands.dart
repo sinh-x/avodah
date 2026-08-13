@@ -446,6 +446,17 @@ class SessionAttachCommand extends Command<void> {
     }
     final deploymentId = args.first;
 
+    final healthy = await sessionService.checkHealth();
+    if (!healthy) {
+      print(sectionHeader('ATTACH SESSION'));
+      print('');
+      print('  pa-platform is not running.');
+      print('');
+      print(hintPlain(
+          'Start it with `pa-core serve` before attaching to a session.'));
+      return;
+    }
+
     final handle = await sessionService.findSession(deploymentId);
     if (handle == null) {
       print('No active session found for $deploymentId.');

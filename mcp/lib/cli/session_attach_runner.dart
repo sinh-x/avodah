@@ -268,8 +268,8 @@ class SessionAttachRunner {
   ///
   /// Kept as a static method so unit tests can verify line-parsing semantics
   /// without spinning up the full stream pipeline. The live stream uses
-  /// [_SseEventTransformer] which internally delegates to this method once a
-  /// complete event block (terminated by a blank line) has been accumulated.
+  /// [_SseEventTransformer] which accumulates lines until a blank line marks
+  /// the event boundary and then delegates the final parse to this method.
   static void parseSseChunk(
       String chunk, void Function(String eventType, String data) onEvent) {
     final lines = chunk.split('\n');
@@ -302,9 +302,11 @@ class SessionAttachRunner {
 ///
 /// Decodes bytes via [utf8.decoder] (which correctly handles multi-byte UTF-8
 /// characters split across chunks) and splits on line boundaries via
-/// [LineSplitter] (which handles `\n`, `\r\n`, and `\r`). Event `data:` lines
-/// are accumulated until a blank line marks the event boundary, so partial
-/// SSE lines arriving in separate chunks are joined before parsing.
+/// [LineSplitter] (which handles `\n`, `\r\n`, and `\r`). Lines are
+/// accumulated until a blank line marks the event boundary, so partial SSE
+/// lines arriving in separate chunks are joined before parsing. The final
+/// event-block parse delegates to [SessionAttachRunner.parseSseChunk] to
+/// avoid duplicating the line-parsing logic (Mn7).
 class _SseEventTransformer
     implements StreamTransformer<List<int>, SseEvent> {
   const _SseEventTransformer();
@@ -312,8 +314,19 @@ class _SseEventTransformer
   @override
   Stream<SseEvent> bind(Stream<List<int>> stream) {
     final controller = StreamController<SseEvent>();
-    String? currentEventType;
-    final dataLines = <String>[];
+    final blockLines = <String>[];
+
+    void flushBlock() {
+      if (blockLines.isEmpty) return;
+      // Reconstruct the event block as a single string (with the trailing
+      // blank line that parseSseChunk expects as a delimiter) and delegate
+      // the event:/data: parsing to the shared helper.
+      final block = '${blockLines.join('\n')}\n\n';
+      blockLines.clear();
+      SessionAttachRunner.parseSseChunk(block, (eventType, data) {
+        controller.add(SseEvent(eventType, data));
+      });
+    }
 
     stream
         .transform(utf8.decoder)
@@ -321,23 +334,14 @@ class _SseEventTransformer
         .listen(
       (String line) {
         if (line.isEmpty) {
-          if (currentEventType != null && dataLines.isNotEmpty) {
-            controller.add(SseEvent(currentEventType!, dataLines.join('\n')));
-          }
-          currentEventType = null;
-          dataLines.clear();
+          flushBlock();
           return;
         }
-        if (line.startsWith('event:')) {
-          currentEventType = line.substring(6).trim();
-        } else if (line.startsWith('data:')) {
-          dataLines.add(line.substring(5).trim());
-        }
+        blockLines.add(line);
       },
       onDone: () {
-        if (currentEventType != null && dataLines.isNotEmpty) {
-          controller.add(SseEvent(currentEventType!, dataLines.join('\n')));
-        }
+        // Flush any trailing event without a blank-line terminator.
+        flushBlock();
         controller.close();
       },
       onError: (Object e, StackTrace st) {

@@ -21,10 +21,24 @@ import '../services/ws_session_client.dart';
 ///
 /// Follows the screen pattern of [DeploymentScreen] (StatefulWidget receiving
 /// [AgentApiClient]). All network calls are async — no UI blocking.
+///
+/// [wsClientFactory] is an optional injection point for tests: when provided,
+/// it replaces the default [_connectWs] path so the live flow (start →
+/// session-id → event → end → view-only) can be exercised without a real
+/// WebSocket server (Mn4).
 class SessionScreen extends StatefulWidget {
   final AgentApiClient apiClient;
 
-  const SessionScreen({super.key, required this.apiClient});
+  /// Factory that returns a connected [WsSessionClient]. In production this
+  /// is null and the state creates the connection via [_connectWs]. In tests,
+  /// a fake factory injects a controllable client.
+  final WsSessionClient Function()? wsClientFactory;
+
+  const SessionScreen({
+    super.key,
+    required this.apiClient,
+    this.wsClientFactory,
+  });
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -57,16 +71,24 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void initState() {
     super.initState();
+    _promptController.addListener(_onPromptChanged);
     _loadSetupData();
   }
 
   @override
   void dispose() {
+    _promptController.removeListener(_onPromptChanged);
     _promptController.dispose();
     _chatController.dispose();
     _eventSub?.cancel();
     _wsClient?.close();
     super.dispose();
+  }
+
+  /// Rebuild when the prompt text changes so [_canStart] is re-evaluated
+  /// and the Start button enabled/disabled state stays in sync.
+  void _onPromptChanged() {
+    if (mounted) setState(() {});
   }
 
   // --------------------------------------------------------------------------
@@ -120,7 +142,13 @@ class _SessionScreenState extends State<SessionScreen> {
   ///
   /// Returns a [Future] because [WsSessionClient.connect] awaits the WebSocket
   /// handshake. Throws [WsSessionConnectException] on connection failure.
+  ///
+  /// When [SessionScreen.wsClientFactory] is set (tests), it bypasses the
+  /// network and returns the injected client directly.
   Future<WsSessionClient> _connectWs() async {
+    if (widget.wsClientFactory != null) {
+      return widget.wsClientFactory!();
+    }
     final wsBase = _deriveWsBaseUrl();
     return WsSessionClient.connect(
       wsBase,
@@ -133,7 +161,7 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  void _startSession() async {
+  Future<void> _startSession() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
     if (_selectedTeam == null || _selectedMode == null) return;
@@ -156,17 +184,20 @@ class _SessionScreenState extends State<SessionScreen> {
       _sending = true;
     });
 
-    _eventSub = client.events.listen(_onEvent, onError: _onWsError,
-        onDone: _onWsDone);
-
-    client.start(
-      prompt,
-      team: _selectedTeam,
-      mode: _selectedMode,
-    );
+    try {
+      _eventSub = client.events.listen(_onEvent, onError: _onWsError,
+          onDone: _onWsDone);
+      client.start(
+        prompt,
+        team: _selectedTeam,
+        mode: _selectedMode,
+      );
+    } catch (e) {
+      _handlePostConnectFailure(client, e);
+    }
   }
 
-  void _resumeSession(String sessionId) async {
+  Future<void> _resumeSession(String sessionId) async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
 
@@ -188,15 +219,18 @@ class _SessionScreenState extends State<SessionScreen> {
       _sending = true;
     });
 
-    _eventSub = client.events.listen(_onEvent, onError: _onWsError,
-        onDone: _onWsDone);
-
-    client.resume(
-      sessionId,
-      prompt,
-      team: _selectedTeam,
-      mode: _selectedMode,
-    );
+    try {
+      _eventSub = client.events.listen(_onEvent, onError: _onWsError,
+          onDone: _onWsDone);
+      client.resume(
+        sessionId,
+        prompt,
+        team: _selectedTeam,
+        mode: _selectedMode,
+      );
+    } catch (e) {
+      _handlePostConnectFailure(client, e);
+    }
   }
 
   void _stopSession() {
@@ -237,10 +271,34 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     if (!mounted) return;
     _wsClient = client;
-    _eventSub = client.events.listen(_onEvent, onError: _onWsError,
-        onDone: _onWsDone);
+    try {
+      _eventSub = client.events.listen(_onEvent, onError: _onWsError,
+          onDone: _onWsDone);
+      client.resume(_activeSessionId!, text);
+    } catch (e) {
+      _handlePostConnectFailure(client, e);
+    }
+  }
 
-    client.resume(_activeSessionId!, text);
+  /// Handle a failure in the post-connect calls (events.listen / start /
+  /// resume) by closing the client, clearing the active session id, and
+  /// transitioning to a visible "disconnected" state instead of leaving
+  /// an inconsistent live state (Mn6).
+  void _handlePostConnectFailure(WsSessionClient client, Object error) {
+    _eventSub?.cancel();
+    client.close();
+    if (!mounted) return;
+    setState(() {
+      _wsClient = null;
+      _activeSessionId = null;
+      _mode = _SessionMode.viewOnly;
+      _sending = false;
+      _eventLines.add(_EventLine(
+        kind: _LineKind.error,
+        text: 'Connection failed: $error',
+        timestamp: DateTime.now().toIso8601String(),
+      ));
+    });
   }
 
   // --------------------------------------------------------------------------

@@ -53,6 +53,23 @@ class WsSessionClient {
     );
   }
 
+  /// Testing-only constructor that wraps a pre-existing [WebSocketChannel]
+  /// (e.g. a fake channel) so message serialization, event parsing, and
+  /// connect-failure mapping can be tested without a real server (Mn4).
+  WsSessionClient.forTesting(this._channel) {
+    _channel.stream.listen(
+      _onData,
+      onError: (Object e) {
+        if (!_controller.isClosed) {
+          _controller.addError(e);
+        }
+      },
+      onDone: () {
+        if (!_controller.isClosed) _controller.close();
+      },
+    );
+  }
+
   /// Connect to `/ws/session` at the given base URL.
   ///
   /// [wsBaseUrl] must be a `ws://` or `wss://` URL (e.g.
@@ -80,9 +97,14 @@ class WsSessionClient {
               'WebSocket handshake to $uri timed out after 10s');
         },
       );
-    } on WsSessionConnectException {
-      rethrow;
     } catch (e) {
+      // Close the socket before rethrowing so we don't leak a half-open
+      // channel on failure paths (Mn5).
+      try {
+        await channel.sink.close();
+      } catch (_) {
+        // Best-effort — ignore errors during cleanup.
+      }
       if (e is TimeoutException) {
         throw WsSessionConnectException(
           'pa-platform is not running at $wsBaseUrl. '
