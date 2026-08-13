@@ -262,8 +262,38 @@ class SessionService {
       );
     }
 
-    // POST /api/deploy always returns 202 (per the phone contract).
-    final result = jsonDecode(response.body) as Map<String, dynamic>;
+    // POST /api/deploy should return 202 on success (per the phone contract).
+    // Guard against non-2xx responses and malformed JSON bodies so the CLI
+    // never crashes on an unexpected server response (NFR5/AC9). Mirrors the
+    // try/catch + status-code pattern already used in [_stopById].
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String? message;
+      try {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        message = body['error'] as String? ?? body['reason'] as String?;
+      } catch (_) {}
+      final snippet = response.body.length > 200
+          ? response.body.substring(0, 200)
+          : response.body;
+      return StartSessionResult(
+        deploymentId: '',
+        status: 'failed',
+        error: message ??
+            'Deploy failed (HTTP ${response.statusCode}): $snippet',
+      );
+    }
+
+    Map<String, dynamic> result;
+    try {
+      result = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      return StartSessionResult(
+        deploymentId: '',
+        status: 'failed',
+        error: 'Deploy returned non-JSON response (HTTP '
+            '${response.statusCode}): $e',
+      );
+    }
     final status = result['status'] as String? ?? 'failed';
     // The deploy-control route normalises the key to `deployment_id`.
     final deploymentId = (result['deployment_id'] as String?) ??

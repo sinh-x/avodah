@@ -207,6 +207,65 @@ void main() {
       expect(r.error, contains('pa-platform is not running'));
     });
 
+    test('returns failed on non-JSON 500 response body (AC9)', () async {
+      final client = MockClient((request) async {
+        return http.Response('<html>500 Internal Server Error</html>', 500);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.deploymentId, isEmpty);
+      // Error should mention HTTP status; no stack trace surfaced.
+      expect(r.error, contains('HTTP 500'));
+    });
+
+    test('returns failed on non-JSON 500 body with JSON error', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({'error': 'deploy service crashed'}), 500);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, 'deploy service crashed');
+    });
+
+    test('returns failed on empty 200 body (non-JSON)', () async {
+      final client = MockClient((request) async {
+        return http.Response('', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.deploymentId, isEmpty);
+      expect(r.error, contains('non-JSON'));
+    });
+
+    test('returns failed on non-JSON 200 body', () async {
+      final client = MockClient((request) async {
+        return http.Response('not json at all', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, contains('non-JSON'));
+    });
+
+    test('returns failed on JSON array 200 body (wrong shape)', () async {
+      final client = MockClient((request) async {
+        return http.Response('[1, 2, 3]', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, contains('non-JSON'));
+    });
+
     test('forwards extraArgs --ticket and --objective into body', () async {
       Map<String, dynamic>? capturedBody;
       final client = MockClient((request) async {
