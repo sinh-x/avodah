@@ -1,61 +1,16 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:avodah_mcp/services/session_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Fake `opa` subprocess used to exercise [SessionService.startSession] without
-/// spawning a real process. Emits a deployment id line on stdout, then keeps
-/// running until the test kills it.
-class _FakeProcess implements Process {
-  final int _pid;
-  final String _firstLine;
-  final StreamController<List<int>> _stdout =
-      StreamController<List<int>>();
-  final StreamController<List<int>> _stderr =
-      StreamController<List<int>>();
-  final Completer<int> _exit = Completer<int>();
-
-  _FakeProcess(this._pid, this._firstLine) {
-    // Emit the deployment id on stdout, then leave the stream open so the
-    // service's first-line listener can complete.
-    _stdout.add(utf8.encode('$_firstLine\n'));
-  }
-
-  @override
-  int get pid => _pid;
-
-  @override
-  Stream<List<int>> get stdout => _stdout.stream;
-
-  @override
-  Stream<List<int>> get stderr => _stderr.stream;
-
-  @override
-  IOSink get stdin => throw UnimplementedError();
-
-  @override
-  Future<int> get exitCode => _exit.future;
-
-  @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    if (!_exit.isCompleted) _exit.complete(0);
-    return true;
-  }
-
-  void close() {
-    if (!_stdout.isClosed) _stdout.close();
-    if (!_stderr.isClosed) _stderr.close();
-    if (!_exit.isCompleted) _exit.complete(0);
-  }
-}
-
 void main() {
   late Directory tmpDir;
-  late String registryPath;
   late String aiUsagePath;
+  late String registryPath;
 
   setUp(() {
     tmpDir = Directory.systemTemp.createTempSync('session_service_test_');
@@ -70,227 +25,495 @@ void main() {
     if (tmpDir.existsSync()) tmpDir.deleteSync(recursive: true);
   });
 
-  /// Append a registry event line.
-  void emit(String deploymentId, String team, String event,
-      {int? pid, String ts = '2026-08-02T04:00:00Z'}) {
-    final obj = <String, dynamic>{
-      'deployment_id': deploymentId,
-      'team': team,
-      'event': event,
-      'timestamp': ts,
-    };
-    if (pid != null) obj['pid'] = pid;
-    File(registryPath).writeAsStringSync(
-        '${jsonEncode(obj)}\n',
-        mode: FileMode.append);
+  SessionService buildService({
+    http.Client? httpClient,
+  }) {
+    return SessionService(
+      apiBaseUrl: 'http://localhost:9848',
+      aiUsagePath: aiUsagePath,
+      registryPath: registryPath,
+      httpClient: httpClient,
+    );
   }
 
   group('listSessions', () {
-    test('returns empty when registry missing', () {
-      final service = SessionService(
-        registryPath: p.join(tmpDir.path, 'nope.jsonl'),
-        aiUsagePath: aiUsagePath,
-      );
-      expect(service.listSessions(), isEmpty);
+    test('returns empty when API returns empty array', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/sessions');
+        return http.Response('[]', 200);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.listSessions(), isEmpty);
     });
 
-    test('returns empty when registry empty', () {
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      expect(service.listSessions(), isEmpty);
+    test('parses SessionRecord array from API', () async {
+      final client = MockClient((request) async {
+        return http.Response(jsonEncode([
+          {
+            'id': 's1-abc',
+            'deploymentId': 'd-aaaaaa',
+            'model': 'ollama-cloud/deepseek-v4-pro',
+            'status': 'running',
+            'startedAt': '2026-08-13T04:00:00Z',
+          },
+          {
+            'id': 's2-def',
+            'deploymentId': 'd-bbbbbb',
+            'model': 'minimax/abacus',
+            'status': 'stopping',
+            'startedAt': '2026-08-13T03:00:00Z',
+          },
+        ]), 200);
+      });
+      final service = buildService(httpClient: client);
+      final sessions = await service.listSessions();
+      expect(sessions, hasLength(2));
+      expect(sessions[0].sessionId, 's1-abc');
+      expect(sessions[0].deploymentId, 'd-aaaaaa');
+      expect(sessions[0].model, 'ollama-cloud/deepseek-v4-pro');
+      expect(sessions[0].status, 'running');
+      expect(sessions[1].sessionId, 's2-def');
+      expect(sessions[1].status, 'stopping');
     });
 
-    test('lists running deployment with pid', () {
-      emit('d-aaaaaa', 'builder', 'started');
-      emit('d-aaaaaa', 'builder', 'pid', pid: 12345);
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final sessions = service.listSessions();
+    test('handles {"sessions": [...]} wrapped response', () async {
+      final client = MockClient((request) async {
+        return http.Response(jsonEncode({
+          'sessions': [
+            {
+              'id': 's1',
+              'deploymentId': 'd-aaaaaa',
+              'model': 'm',
+              'status': 'running',
+              'startedAt': '2026-08-13T04:00:00Z',
+            }
+          ]
+        }), 200);
+      });
+      final service = buildService(httpClient: client);
+      final sessions = await service.listSessions();
       expect(sessions, hasLength(1));
-      final s = sessions.single;
-      expect(s.deploymentId, 'd-aaaaaa');
-      expect(s.team, 'builder');
-      expect(s.status, 'running');
-      expect(s.pid, 12345);
+      expect(sessions.single.sessionId, 's1');
     });
 
-    test('completed status reflects completion event', () {
-      emit('d-bbbbbb', 'builder', 'started');
-      emit('d-bbbbbb', 'builder', 'pid', pid: 99);
-      emit('d-bbbbbb', 'builder', 'completed', ts: '2026-08-02T05:00:00Z');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final s = service.listSessions().single;
-      expect(s.status, 'success');
+    test('throws on non-200 response', () async {
+      final client = MockClient((request) async {
+        return http.Response('{"error":"down"}', 500);
+      });
+      final service = buildService(httpClient: client);
+      expect(() async => await service.listSessions(), throwsException);
     });
 
-    test('crashed status reflects crashed event', () {
-      emit('d-cccccc', 'builder', 'started');
-      emit('d-cccccc', 'builder', 'pid', pid: 1);
-      emit('d-cccccc', 'builder', 'crashed');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      expect(service.listSessions().single.status, 'crashed');
+    test('throws PaPlatformUnavailableException on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      expect(
+        () async => await service.listSessions(),
+        throwsA(isA<PaPlatformUnavailableException>()),
+      );
+    });
+  });
+
+  group('checkHealth', () {
+    test('returns true when API reports ok', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/health');
+        return http.Response('{"status":"ok"}', 200);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isTrue);
     });
 
-    test('sorts newest first', () {
-      emit('d-oldold', 'builder', 'started', ts: '2026-08-01T00:00:00Z');
-      emit('d-newnew', 'builder', 'started', ts: '2026-08-02T00:00:00Z');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final ids = service.listSessions().map((s) => s.deploymentId).toList();
-      expect(ids, ['d-newnew', 'd-oldold']);
+    test('returns false on non-200 response', () async {
+      final client = MockClient((request) async {
+        return http.Response('{"error":"down"}', 503);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isFalse);
+    });
+
+    test('returns false on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.checkHealth(), isFalse);
+    });
+  });
+
+  group('startSession', () {
+    test('returns deployment id on success', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/api/deploy');
+        expect(request.method, 'POST');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['team'], 'builder');
+        expect(body['mode'], 'implement');
+        return http.Response(
+            jsonEncode({
+              'team': 'builder',
+              'mode': 'implement',
+              'status': 'pending',
+              'deployment_id': 'd-abcdef',
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isTrue);
+      expect(r.deploymentId, 'd-abcdef');
+      expect(r.status, 'pending');
+    });
+
+    test('returns failure when status is failed', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({
+              'status': 'failed',
+              'reason': 'bad team',
+              'team': 'nope',
+              'mode': null,
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('nope', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.deploymentId, isEmpty);
+      expect(r.error, 'bad team');
+    });
+
+    test('returns failure when deployment_id missing', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({'status': 'pending', 'team': 'builder'}),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.error, isNotNull);
+    });
+
+    test('returns failure on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.error, contains('pa-platform is not running'));
+    });
+
+    test('returns failed on non-JSON 500 response body (AC9)', () async {
+      final client = MockClient((request) async {
+        return http.Response('<html>500 Internal Server Error</html>', 500);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.deploymentId, isEmpty);
+      // Error should mention HTTP status; no stack trace surfaced.
+      expect(r.error, contains('HTTP 500'));
+    });
+
+    test('returns failed on non-JSON 500 body with JSON error', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({'error': 'deploy service crashed'}), 500);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, 'deploy service crashed');
+    });
+
+    test('returns failed on empty 200 body (non-JSON)', () async {
+      final client = MockClient((request) async {
+        return http.Response('', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.deploymentId, isEmpty);
+      expect(r.error, contains('non-JSON'));
+    });
+
+    test('returns failed on non-JSON 200 body', () async {
+      final client = MockClient((request) async {
+        return http.Response('not json at all', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, contains('non-JSON'));
+    });
+
+    test('returns failed on JSON array 200 body (wrong shape)', () async {
+      final client = MockClient((request) async {
+        return http.Response('[1, 2, 3]', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isFalse);
+      expect(r.status, 'failed');
+      expect(r.error, contains('non-JSON'));
+    });
+
+    test('forwards extraArgs --ticket and --objective into body', () async {
+      Map<String, dynamic>? capturedBody;
+      final client = MockClient((request) async {
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+            jsonEncode({
+              'status': 'pending',
+              'deployment_id': 'd-feedfa',
+              'team': 'builder',
+              'mode': 'analyze',
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      await service.startSession('builder', 'analyze',
+          extraArgs: ['--ticket', 'AVO-1', '--objective', 'do thing']);
+      expect(capturedBody, isNotNull);
+      expect(capturedBody!['team'], 'builder');
+      expect(capturedBody!['mode'], 'analyze');
+      expect(capturedBody!['ticket'], 'AVO-1');
+      expect(capturedBody!['objective'], 'do thing');
+    });
+
+    test('forwards --repo and --provider into body', () async {
+      Map<String, dynamic>? capturedBody;
+      final client = MockClient((request) async {
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+            jsonEncode({
+              'status': 'pending',
+              'deployment_id': 'd-feedfa',
+              'team': 'builder',
+              'mode': 'analyze',
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      await service.startSession('builder', 'analyze',
+          extraArgs: ['--repo', 'avodah', '--provider', 'minimax']);
+      expect(capturedBody!['repo'], 'avodah');
+      expect(capturedBody!['provider'], 'minimax');
+    });
+  });
+
+  group('extractDeploymentId (key normalization helper — Mn2/AC15)', () {
+    test('reads camelCase deploymentId (canonical key)', () {
+      expect(SessionService.extractDeploymentId(
+          {'deploymentId': 'd-abcdef', 'status': 'pending'}),
+          'd-abcdef');
+    });
+
+    test('falls back to snake_case deployment_id', () {
+      expect(SessionService.extractDeploymentId(
+          {'deployment_id': 'd-abcdef', 'status': 'pending'}),
+          'd-abcdef');
+    });
+
+    test('returns empty string when neither key present', () {
+      expect(SessionService.extractDeploymentId({'status': 'pending'}),
+          '');
+    });
+
+    test('returns empty string when value is not a string', () {
+      expect(SessionService.extractDeploymentId({'deploymentId': 123}),
+          '');
+    });
+
+    test('returns empty string when value is empty', () {
+      expect(SessionService.extractDeploymentId({'deploymentId': ''}),
+          '');
+    });
+
+    test('prefers camelCase over snake_case', () {
+      expect(SessionService.extractDeploymentId(
+          {'deployment_id': 'd-snake', 'deploymentId': 'd-camel'}),
+          'd-camel');
+    });
+
+    test('startSession succeeds with camelCase deploymentId key', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+            jsonEncode({
+              'status': 'pending',
+              'deploymentId': 'd-camel123',
+              'team': 'builder',
+              'mode': 'implement',
+            }),
+            202);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.startSession('builder', 'implement');
+      expect(r.succeeded, isTrue);
+      expect(r.deploymentId, 'd-camel123');
+    });
+  });
+
+  group('SessionSummary.fromJson key normalization (Mn3/AC15)', () {
+    test('reads camelCase deploymentId (canonical key)', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deploymentId': 'd-abcdef',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-abcdef');
+    });
+
+    test('falls back to snake_case deployment_id', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deployment_id': 'd-snake123',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-snake123');
+    });
+
+    test('prefers camelCase over snake_case (matches extractDeploymentId)', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'deployment_id': 'd-snake',
+        'deploymentId': 'd-camel',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '2026-08-13T04:00:00Z',
+      });
+      expect(s.deploymentId, 'd-camel');
+    });
+
+    test('returns empty string when neither key present', () {
+      final s = SessionSummary.fromJson({
+        'id': 's1',
+        'model': 'm',
+        'status': 'running',
+        'startedAt': '',
+      });
+      expect(s.deploymentId, '');
+    });
+  });
+
+  group('stopSession', () {
+    test('stops directly when id is a session id', () async {
+      final client = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/api/sessions') {
+          return http.Response('[]', 200);
+        }
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/sessions/s1-abc/stop');
+        return http.Response('{"status":"stopped"}', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.stopSession('s1-abc');
+      expect(r.stopped, isTrue);
+    });
+
+    test('resolves deployment id to session id via listSessions', () async {
+      var stopCalled = false;
+      final client = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/api/sessions') {
+          return http.Response(jsonEncode([
+            {
+              'id': 's1-abc',
+              'deploymentId': 'd-aaaaaa',
+              'model': 'm',
+              'status': 'running',
+              'startedAt': '2026-08-13T04:00:00Z',
+            }
+          ]), 200);
+        }
+        // First stop attempt (direct by deployment id) returns 404.
+        if (request.url.path == '/api/sessions/d-aaaaaa/stop') {
+          return http.Response('{"error":"Session not found"}', 404);
+        }
+        // Second stop attempt (by resolved session id) succeeds.
+        expect(request.url.path, '/api/sessions/s1-abc/stop');
+        stopCalled = true;
+        return http.Response('{"status":"stopped"}', 200);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.stopSession('d-aaaaaa');
+      expect(r.stopped, isTrue);
+      expect(stopCalled, isTrue);
+    });
+
+    test('returns false when session not found', () async {
+      final client = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/api/sessions') {
+          return http.Response('[]', 200);
+        }
+        // Direct stop attempt returns 404.
+        return http.Response('{"error":"Session not found"}', 404);
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.stopSession('d-zzzzzz');
+      expect(r.stopped, isFalse);
+      expect(r.error, isNotNull);
+    });
+
+    test('returns false on network error', () async {
+      final client = MockClient((request) async {
+        throw const SocketException('connection refused');
+      });
+      final service = buildService(httpClient: client);
+      final r = await service.stopSession('d-zzzzzz');
+      expect(r.stopped, isFalse);
+      expect(r.error, contains('pa-platform is not running'));
     });
   });
 
   group('findSession', () {
-    test('returns null for unknown deployment id', () {
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      expect(service.findSession('d-zzzzzz'), isNull);
+    test('returns null for unknown deployment id', () async {
+      final client = MockClient((request) async {
+        return http.Response('[]', 200);
+      });
+      final service = buildService(httpClient: client);
+      expect(await service.findSession('d-zzzzzz'), isNull);
     });
 
-    test('returns handle with activity log path under deployments dir', () {
-      emit('d-aaaaaa', 'builder', 'started');
-      emit('d-aaaaaa', 'builder', 'pid', pid: 55);
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final handle = service.findSession('d-aaaaaa');
+    test('returns handle with activity log path under deployments dir',
+        () async {
+      final client = MockClient((request) async {
+        return http.Response(jsonEncode([
+          {
+            'id': 's1-abc',
+            'deploymentId': 'd-aaaaaa',
+            'model': 'm',
+            'status': 'running',
+            'startedAt': '2026-08-13T04:00:00Z',
+          }
+        ]), 200);
+      });
+      final service = buildService(httpClient: client);
+      final handle = await service.findSession('d-aaaaaa');
       expect(handle, isNotNull);
-      expect(handle!.pid, 55);
+      expect(handle!.sessionId, 's1-abc');
       expect(handle.status, 'running');
       expect(handle.activityLogPath,
           p.join(aiUsagePath, 'deployments', 'd-aaaaaa', 'activity.jsonl'));
     });
   });
 
-  group('stopSession', () {
-    test('returns false when deployment unknown', () async {
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final r = await service.stopSession('d-zzzzzz');
-      expect(r.signalSent, isFalse);
-      expect(r.error, isNotNull);
-    });
-
-    test('returns false when no pid recorded', () async {
-      emit('d-aaaaaa', 'builder', 'started');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      final r = await service.stopSession('d-aaaaaa');
-      expect(r.signalSent, isFalse);
-      expect(r.error, contains('no recorded pid'));
-    });
-
-    test('sends SIGTERM via kill override', () async {
-      emit('d-aaaaaa', 'builder', 'started');
-      emit('d-aaaaaa', 'builder', 'pid', pid: 1234);
-      var signaledPid = -1;
-      var signalCount = 0;
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processKillOverride: (pid, sig) async {
-            signaledPid = pid;
-            signalCount++;
-            return true;
-          });
-      final r = await service.stopSession('d-aaaaaa');
-      expect(r.signalSent, isTrue);
-      expect(signaledPid, 1234);
-      expect(signalCount, 1);
-    });
-
-    test('returns false when kill override throws', () async {
-      emit('d-aaaaaa', 'builder', 'started');
-      emit('d-aaaaaa', 'builder', 'pid', pid: 1234);
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processKillOverride: (pid, sig) async {
-            throw StateError('boom');
-          });
-      final r = await service.stopSession('d-aaaaaa');
-      expect(r.signalSent, isFalse);
-      expect(r.error, contains('boom'));
-    });
-  });
-
-  group('startSession', () {
-    test('returns deployment id and pid on success', () async {
-      final fake = _FakeProcess(4242, 'Deployment: d-abcdef');
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processStartOverride: (exe, args) async => fake);
-      final r = await service.startSession('builder', 'implement');
-      expect(r.succeeded, isTrue);
-      expect(r.deploymentId, 'd-abcdef');
-      expect(r.pid, 4242);
-      expect(r.process, same(fake));
-      // Broadcast streams must be exposed so attach mode can subscribe
-      // alongside the service's drain listener (OPS-2).
-      expect(r.stdoutStream, isNotNull);
-      expect(r.stderrStream, isNotNull);
-      fake.close();
-    });
-
-    test('returns failure when no deployment id in output', () async {
-      final fake = _FakeProcess(99, 'totally unrelated output');
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processStartOverride: (exe, args) async => fake);
-      final r = await service.startSession('builder', 'implement');
-      expect(r.succeeded, isFalse);
-      expect(r.deploymentId, isEmpty);
-      expect(r.pid, 99);
-      expect(r.error, isNotNull);
-      fake.close();
-    });
-
-    test('returns failure when start override throws', () async {
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processStartOverride: (exe, args) async {
-            throw StateError('no opa binary');
-          });
-      final r = await service.startSession('builder', 'implement');
-      expect(r.succeeded, isFalse);
-      expect(r.error, contains('Failed to start opa deploy'));
-    });
-
-    test('forwards extraArgs and mode into process args', () async {
-      String? capturedExe;
-      List<String>? capturedArgs;
-      final fake = _FakeProcess(7, 'Deployment: d-feedfa');
-      final service = SessionService(
-          registryPath: registryPath,
-          aiUsagePath: aiUsagePath,
-          processStartOverride: (exe, args) async {
-            capturedExe = exe;
-            capturedArgs = args;
-            return fake;
-          });
-      await service.startSession('builder', 'analyze',
-          extraArgs: ['--ticket', 'AVO-1']);
-      expect(capturedExe, isNotNull);
-      expect(capturedArgs, contains('deploy'));
-      expect(capturedArgs, contains('builder'));
-      expect(capturedArgs, contains('--mode'));
-      expect(capturedArgs, contains('analyze'));
-      expect(capturedArgs, contains('--ticket'));
-      expect(capturedArgs, contains('AVO-1'));
-      fake.close();
-    });
-  });
-
   group('getSessionLog', () {
     test('returns null when no log exists for deployment id', () {
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
-      expect(service.getSessionLog('d-zzzzzz', atReference: DateTime(2026, 8, 2)),
+      final service = buildService();
+      expect(
+          service.getSessionLog('d-zzzzzz', atReference: DateTime(2026, 8, 2)),
           isNull);
     });
 
@@ -302,8 +525,7 @@ void main() {
       final logPath = p.join(
           sessionsDir, '2026-08-02-d-feedfa-builder.md');
       File(logPath).writeAsStringSync('# log');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
+      final service = buildService();
       final found = service.getSessionLog('d-feedfa', atReference: anchor);
       expect(found, isNotNull);
       expect(found!.path, logPath);
@@ -318,8 +540,7 @@ void main() {
       final logPath = p.join(
           sessionsDir, '2026-08-02-d-feedfa-builder.md');
       File(logPath).writeAsStringSync('# log');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
+      final service = buildService();
       final found = service.getSessionLog('d-feedfa', atReference: anchor);
       expect(found, isNotNull);
       expect(found!.path, logPath);
@@ -333,8 +554,7 @@ void main() {
       final logPath = p.join(
           sessionsDir, '2025-12-31-d-feedfa-builder.md');
       File(logPath).writeAsStringSync('# log');
-      final service = SessionService(
-          registryPath: registryPath, aiUsagePath: aiUsagePath);
+      final service = buildService();
       final found = service.getSessionLog('d-feedfa', atReference: anchor);
       expect(found, isNotNull);
     });

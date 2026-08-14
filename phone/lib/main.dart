@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,6 +12,7 @@ import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/quick_capture_screen.dart';
 import 'screens/review_queue_screen.dart';
+import 'screens/session_screen.dart';
 import 'screens/team_browser_screen.dart';
 import 'screens/timers_screen.dart';
 import 'services/agent_api_client.dart';
@@ -867,6 +867,34 @@ class _HomeShellState extends State<_HomeShell> {
           ),
           Scaffold(
             appBar: AppBar(
+              title: const Text('Session'),
+              actions: [
+                ValueListenableBuilder<SyncConnectionState>(
+                  valueListenable: widget.dashboardProvider.connectionState,
+                  builder: (context, state, child) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: ConnectionIndicator(state: state),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(
+                        apiClient: widget.apiClient,
+                        crdtSyncService: widget.crdtSyncService,
+                        displaySettings: widget.displaySettings,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            body: SessionScreen(apiClient: widget.apiClient),
+          ),
+          Scaffold(
+            appBar: AppBar(
               title: const Text('Teams'),
               actions: [
                 ValueListenableBuilder<SyncConnectionState>(
@@ -962,6 +990,11 @@ class _HomeShellState extends State<_HomeShell> {
             icon: Icon(Icons.rocket_launch_outlined),
             selectedIcon: Icon(Icons.rocket_launch),
             label: 'Deployments',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.terminal_outlined),
+            selectedIcon: Icon(Icons.terminal),
+            label: 'Session',
           ),
           const NavigationDestination(
             icon: Icon(Icons.group_work_outlined),

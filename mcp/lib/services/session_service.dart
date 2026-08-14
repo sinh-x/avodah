@@ -1,382 +1,413 @@
 /// Session service for managing opencode sessions from the Avodah CLI.
 ///
-/// Provides read-only listing of deployments from the registry, subprocess
-/// lifecycle (start/stop), and session log discovery. Reuses
-/// [parseRegistryFile] and [computeDeploymentStatuses] from
-/// `registry_parser.dart` and the `Process.start` pattern from
-/// `agent_api_service.dart`.
+/// Calls the pa-platform Agent API (`POST /api/deploy`, `GET /api/sessions`,
+/// `POST /api/sessions/:id/stop`) instead of spawning `opa deploy`
+/// subprocesses and parsing `registry.jsonl` directly.
 ///
-/// Phase 1 deliverable for AVO-116 (opencode session integration). Only the
-/// service layer lives here — CLI command wiring arrives in later phases.
+/// Phase 3 deliverable for AVO-117 (pa-platform API integration). The
+/// service layer owns all HTTP communication; CLI commands consume the
+/// typed results without touching [Process] or the registry file.
 library;
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
-import 'registry_parser.dart';
-
-/// Summary of a single deployment, intended for `avo session list`.
+/// Summary of a single session returned by `GET /api/sessions`.
 ///
-/// Thin projection over [DeploymentStatus] with the fields the session
-/// command surfaces. Kept as an immutable value type so callers (including
-/// tests) can construct expected values without touching the registry.
+/// Thin projection over the pa-platform `SessionRecord` shape with the
+/// fields the `avo session list` command surfaces. Kept as an immutable
+/// value type so callers (including tests) can construct expected values
+/// without touching the API.
 class SessionSummary {
+  /// Session id assigned by the `SessionManager` (e.g. `s<base36>-<n>`).
+  final String sessionId;
+
+  /// Deployment id linked to this session (e.g. `d-<hex6>`).
   final String deploymentId;
-  final String team;
-  final String mode;
+
+  /// Model used by the session (e.g. `ollama-cloud/deepseek-v4-pro`).
+  final String model;
+
+  /// Session status (`running`, `stopping`).
   final String status;
+
+  /// ISO-8601 timestamp the session was started.
   final String startedAt;
-  final int? pid;
 
   const SessionSummary({
+    required this.sessionId,
     required this.deploymentId,
-    required this.team,
-    required this.mode,
+    required this.model,
     required this.status,
     required this.startedAt,
-    this.pid,
   });
+
+  factory SessionSummary.fromJson(Map<String, dynamic> json) {
+    return SessionSummary(
+      sessionId: json['id'] as String? ?? '',
+      deploymentId: SessionService.extractDeploymentId(json),
+      model: json['model'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      startedAt: json['startedAt'] as String? ?? '',
+    );
+  }
 
   @override
   String toString() =>
-      'SessionSummary($deploymentId, team=$team, mode=$mode, status=$status, '
-      'startedAt=$startedAt, pid=$pid)';
+      'SessionSummary($sessionId, deployment=$deploymentId, '
+      'model=$model, status=$status, startedAt=$startedAt)';
 }
 
 /// Result of a `startSession` attempt.
 class StartSessionResult {
-  /// Deployment ID extracted from `opa deploy`'s first output line.
+  /// Deployment ID returned by `POST /api/deploy`.
   ///
-  /// Empty string when extraction failed (e.g. timeout or no match).
+  /// Empty string when the deploy failed or no deployment id was returned.
   final String deploymentId;
 
-  /// OS pid of the spawned `opa` subprocess. Null if spawn failed.
-  final int? pid;
-
-  /// The running subprocess, when the caller wants to attach to it.
-  ///
-  /// Phase 1 returns the process so a future attach command can wire
-  /// stdin/stdout. The service does not retain ownership — the caller is
-  /// responsible for draining or terminating it. Note: prefer subscribing to
-  /// [stdoutStream]/[stderrStream] over `process.stdout`/`process.stderr` —
-  /// the service wraps stdout in a broadcast stream so multiple listeners
-  /// (the first-line extractor and the long-running drain) can coexist.
-  final Process? process;
-
-  /// Broadcast view of the subprocess stdout. Use this (not
-  /// `process.stdout`) when forwarding bytes in attach mode; the service keeps
-  /// a drain listener on it to avoid back-pressure (OPS-2). Null when no
-  /// process was spawned.
-  final Stream<List<int>>? stdoutStream;
-
-  /// Broadcast view of the subprocess stderr. See [stdoutStream].
-  final Stream<List<int>>? stderrStream;
+  /// Status returned by the deploy API: `success`, `pending`, or `failed`.
+  final String status;
 
   /// Human-readable error message when [deploymentId] is empty.
   final String? error;
 
   const StartSessionResult({
     required this.deploymentId,
-    this.pid,
-    this.process,
-    this.stdoutStream,
-    this.stderrStream,
+    required this.status,
     this.error,
   });
 
-  bool get succeeded => deploymentId.isNotEmpty && pid != null;
-}
-
-/// Live handle to a started session's subprocess, stored in the in-process
-/// `liveProcesses` map shared between `SessionStartCommand` and
-/// `SessionAttachCommand`. Wraps the [Process] together with broadcast
-/// stdout/stderr streams so the attach runner can subscribe without
-/// conflicting with the service's drain listeners (OPS-2).
-class LiveProcess {
-  final Process process;
-  final Stream<List<int>> stdoutStream;
-  final Stream<List<int>> stderrStream;
-
-  const LiveProcess({
-    required this.process,
-    required this.stdoutStream,
-    required this.stderrStream,
-  });
+  bool get succeeded => deploymentId.isNotEmpty && status != 'failed';
 }
 
 /// Handle to a deployment's runtime state, used by the attach command.
 class SessionHandle {
   final String deploymentId;
-  final int? pid;
+  final String? sessionId;
   final String status;
   final String deployDir;
   final String activityLogPath;
 
   const SessionHandle({
     required this.deploymentId,
-    required this.pid,
+    required this.sessionId,
     required this.status,
     required this.deployDir,
     required this.activityLogPath,
   });
 }
 
+/// Thrown when the pa-platform Agent API is unreachable (not running, wrong
+/// port, or connection refused). Carries a user-facing message so the CLI
+/// can surface a clear error instead of a raw stack trace.
+class PaPlatformUnavailableException implements Exception {
+  final String message;
+
+  PaPlatformUnavailableException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Outcome of `stopSession`.
 class StopSessionResult {
-  final String deploymentId;
-  final bool signalSent;
+  /// The session id (or deployment id) the caller requested to stop.
+  final String id;
+  final bool stopped;
   final String? error;
 
+  /// HTTP status code from the stop attempt. Null on network errors. Used
+  /// internally to decide whether to retry via [SessionService.listSessions]
+  /// (only on 404).
+  final int? statusCode;
+
   const StopSessionResult({
-    required this.deploymentId,
-    required this.signalSent,
+    required this.id,
+    required this.stopped,
     this.error,
+    this.statusCode,
   });
+}
+
+/// Internal subclass that carries the HTTP status code from a stop attempt.
+class _StopSessionResultWithStatus extends StopSessionResult {
+  _StopSessionResultWithStatus({
+    required super.id,
+    required super.stopped,
+    super.error,
+    required int statusCode,
+  }) : super(statusCode: statusCode);
 }
 
 /// Business logic for `avo session …` subcommands.
 ///
-/// All filesystem and process access goes through injectable paths so the
-/// service is testable without touching the real registry or spawning real
-/// subprocesses. The default constructors resolve the standard PA locations
-/// from `HOME` and `PA_BIN`.
+/// All HTTP access goes through an injectable [http.Client] so the service
+/// is testable without a running pa-platform. The default constructor
+/// resolves the API base URL from the `AGENT_API_URL` environment variable
+/// (matching the sync server convention) and the ai-usage tree from `HOME`.
 class SessionService {
-  /// Path to `registry.jsonl`.
-  final String registryPath;
+  /// Base URL of the pa-platform Agent API (e.g. `http://localhost:9848`).
+  final String apiBaseUrl;
 
-  /// Base path of the ai-usage tree (used to locate session logs).
+  /// Base path of the ai-usage tree (used to locate deploy dirs and session
+  /// logs).
   final String aiUsagePath;
 
-  /// Path to the `opa` binary used by `startSession`.
-  final String opaBinPath;
+  /// Path to `registry.jsonl` — used only by the attach runner for exit
+  /// detection. Phase 4 will replace this with API-based polling.
+  final String registryPath;
 
-  /// Override for `Process.start` — used by tests to avoid real spawns.
-  ///
-  /// When null, `startSession` calls [Process.start] directly.
-  final ProcessStartFn? processStartOverride;
-
-  /// Override for sending a signal to a pid — used by tests.
-  ///
-  /// When null, `stopSession` calls [Process.killPid].
-  final ProcessKillFn? processKillOverride;
+  /// HTTP client used for all API calls. Injectable for tests.
+  final http.Client httpClient;
 
   SessionService({
-    String? registryPath,
+    String? apiBaseUrl,
     String? aiUsagePath,
-    String? opaBinPath,
-    this.processStartOverride,
-    this.processKillOverride,
-  })  : registryPath = registryPath ??
+    String? registryPath,
+    http.Client? httpClient,
+  })  : apiBaseUrl = (apiBaseUrl ??
+                Platform.environment['AGENT_API_URL'] ??
+                'http://localhost:9848')
+            .replaceAll(RegExp(r'/+$'), ''),
+        aiUsagePath = aiUsagePath ??
+            p.join(Platform.environment['HOME'] ?? '/home', 'Documents',
+                'ai-usage'),
+        registryPath = registryPath ??
             p.join(Platform.environment['HOME'] ?? '/home', 'Documents',
                 'ai-usage', 'deployments', 'registry.jsonl'),
-        aiUsagePath = aiUsagePath ??
-            p.join(
-                Platform.environment['HOME'] ?? '/home', 'Documents',
-                'ai-usage'),
-        opaBinPath = opaBinPath ?? Platform.environment['OPA_BIN'] ?? 'opa';
+        httpClient = httpClient ?? http.Client();
 
-  /// List all deployments as [SessionSummary] records.
+  /// Probe the pa-platform Agent API health endpoint.
   ///
-  /// Reads and parses [registryPath] via [parseRegistryFile] +
-  /// [computeDeploymentStatuses]. The mode is derived from the primer path
-  /// embedded in the "started" event when present (best-effort); otherwise
-  /// empty. Returns an empty list when the registry is missing.
-  List<SessionSummary> listSessions() {
-    final events = parseRegistryFile(registryPath);
-    if (events.isEmpty) return [];
-    final statuses = computeDeploymentStatuses(events);
-    // Build a lookup of primer → mode by scanning started events.
-    final primerByDeploy = <String, String>{};
-    for (final e in events) {
-      if (e.event == 'started') {
-        // The "mode" is not a dedicated field in the registry; the primer
-        // path sometimes encodes it. We leave mode empty for now — Phase 2
-        // may surface it from the primer file. Keep the field stable so the
-        // CLI can render a column without further refactor.
-        primerByDeploy.putIfAbsent(e.deploymentId, () => '');
-      }
+  /// Returns `true` when pa-platform is reachable and reports
+  /// `{"status":"ok"}`, `false` on any network error or non-200 response.
+  /// Use this before long-running operations to fail fast with a clear
+  /// message instead of letting the first API call hang or crash.
+  Future<bool> checkHealth() async {
+    try {
+      final response =
+          await httpClient.get(Uri.parse('$apiBaseUrl/api/health'));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
     }
-    return statuses
-        .map((s) => SessionSummary(
-              deploymentId: s.deploymentId,
-              team: s.team,
-              mode: primerByDeploy[s.deploymentId] ?? '',
-              status: s.status,
-              startedAt: s.startedAt,
-              pid: s.pid,
-            ))
+  }
+
+  /// List all active sessions via `GET /api/sessions`.
+  ///
+  /// Returns an empty list when pa-platform returns no sessions. Throws an
+  /// [Exception] on network errors or non-200 responses so the CLI command
+  /// can surface a clear error message.
+  Future<List<SessionSummary>> listSessions() async {
+    http.Response response;
+    try {
+      response =
+          await httpClient.get(Uri.parse('$apiBaseUrl/api/sessions'));
+    } catch (e) {
+      throw PaPlatformUnavailableException(
+          'pa-platform is not running at $apiBaseUrl. '
+          'Start it with `pa-core serve`. ($e)');
+    }
+    if (response.statusCode != 200) {
+      throw Exception(
+          'GET /api/sessions returned ${response.statusCode}: ${response.body}');
+    }
+    final body = jsonDecode(response.body);
+    // The pa-platform returns a bare JSON array. Some proxies may wrap in
+    // {"sessions": [...]}; handle both shapes defensively.
+    List<dynamic> items;
+    if (body is List) {
+      items = body;
+    } else if (body is Map<String, dynamic> && body['sessions'] is List) {
+      items = body['sessions'] as List;
+    } else {
+      items = [];
+    }
+    return items
+        .map((e) => SessionSummary.fromJson(e as Map<String, dynamic>))
         .toList(growable: false);
   }
 
-  /// Spawn `opa deploy <team> --mode <mode>` and capture the deployment ID.
+  /// Extract the deployment id from a pa-platform response, accepting both
+  /// the camelCase key `deploymentId` and the snake_case variant
+  /// `deployment_id`.
   ///
-  /// Mirrors the pattern in `agent_api_service.dart:_handleStartDeployment`:
-  /// read stdout until the first newline, extract `d-<hex6>` via regex. The
-  /// returned [StartSessionResult.process] is the live subprocess — callers
-  /// that want to attach must drain its stdout/stderr.
+  /// This helper serves two endpoints that use different key conventions:
+  ///   - `GET /api/sessions` emits camelCase `deploymentId`.
+  ///   - `POST /api/deploy` emits snake_case `deployment_id` (per the
+  ///     pa-platform `deploy-control.ts` route handler).
   ///
-  /// [extraArgs] forwarded after the standard args (e.g. `--ticket`,
-  /// `--provider`, `--objective`). [timeout] bounds the wait for the first
-  /// stdout line; defaults to 5s matching the agent API.
+  /// The camelCase-first-then-snake_case fallback order is required so that
+  /// callers consuming responses from either endpoint do not need to
+  /// duplicate the fallback logic.
+  ///
+  /// Cross-check: this precedence MUST stay aligned with
+  /// `SessionRecord._extractDeploymentId` in
+  /// `phone/lib/models/session_record.dart`, which also reads camelCase
+  /// first and falls back to snake_case. When changing the precedence here,
+  /// update both helpers and their tests together.
+  ///
+  /// Returns the deployment id string, or an empty string when neither key is
+  /// present or the value is not a string.
+  static String extractDeploymentId(Map<String, dynamic> json) {
+    final v = json['deploymentId'];
+    if (v is String && v.isNotEmpty) return v;
+    final alt = json['deployment_id'];
+    if (alt is String && alt.isNotEmpty) return alt;
+    return '';
+  }
+
+  /// Trigger a deployment via `POST /api/deploy`.
+  ///
+  /// The pa-platform spawns the `opa deploy` subprocess server-side and
+  /// auto-registers the session via `POST /api/sessions` (handled by the
+  /// deploy-control route). This method does **not** spawn any subprocess
+  /// locally — no `Process.start`, no `Process` handle.
+  ///
+  /// [extraArgs] are parsed for `--ticket`, `--objective`, `--repo`, and
+  /// `--provider` flags and forwarded as fields in the JSON body.
   Future<StartSessionResult> startSession(
     String team,
     String mode, {
     List<String> extraArgs = const [],
-    Duration timeout = const Duration(seconds: 5),
   }) async {
-    final args = [
-      'deploy',
-      team,
-      '--mode',
-      mode,
-      ...extraArgs,
-    ];
-
-    final Process process;
+    final body = _buildDeployBody(team, mode, extraArgs);
+    http.Response response;
     try {
-      if (processStartOverride != null) {
-        process = await processStartOverride!(opaBinPath, args);
-      } else {
-        process = await Process.start(opaBinPath, args, runInShell: false);
-      }
+      response = await httpClient.post(
+        Uri.parse('$apiBaseUrl/api/deploy'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
     } catch (e) {
       return StartSessionResult(
         deploymentId: '',
-        error: 'Failed to start opa deploy: $e',
+        status: 'failed',
+        error: 'pa-platform is not running at $apiBaseUrl. '
+            'Start it with `pa-core serve`. ($e)',
       );
     }
 
-    // Drain stderr to avoid back-pressure. Wrap in a broadcast stream so the
-    // caller (attach mode) can also subscribe without conflicting with this
-    // drain (OPS-2).
-    final stderrBroadcast = process.stderr.asBroadcastStream();
-    stderrBroadcast.listen((_) {});
-
-    // Convert stdout to a broadcast stream so the first-line listener (used to
-    // extract the deployment id) and the long-running drain listener (kept
-    // alive by the caller, e.g. `SessionStartCommand`) can both subscribe
-    // without "Stream has already been listened to" errors.
-    final stdoutBroadcast = process.stdout.asBroadcastStream();
-
-    final completer = Completer<String>();
-    var partial = '';
-    final sub = stdoutBroadcast.transform(utf8.decoder).listen(
-      (chunk) {
-        if (completer.isCompleted) return;
-        final nl = chunk.indexOf('\n');
-        if (nl >= 0) {
-          completer.complete(partial + chunk.substring(0, nl));
-        } else {
-          partial += chunk;
-        }
-      },
-      onDone: () {
-        if (!completer.isCompleted) completer.complete(partial);
-      },
-      onError: (Object e) {
-        if (!completer.isCompleted) completer.complete('');
-      },
-      cancelOnError: true,
-    );
-
-    final String firstLine;
-    try {
-      firstLine = await completer.future
-          .timeout(timeout, onTimeout: () => '');
-    } finally {
-      await sub.cancel();
-    }
-    // Long-running drain so the subprocess stdout buffer doesn't fill up
-    // (OPS-2). Attach mode subscribes to [StartSessionResult.stdoutStream]
-    // to forward bytes; this drain is a no-op sink that prevents
-    // back-pressure when no one is attached.
-    stdoutBroadcast.listen((_) {});
-
-    final match = RegExp(r'\b(d-[a-f0-9]{6})\b').firstMatch(firstLine);
-    final deploymentId = match?.group(1) ?? '';
-    if (deploymentId.isEmpty) {
-      // Best-effort cleanup: kill the spawned process so we don't leak it
-      // when the deployment ID couldn't be captured.
+    // POST /api/deploy should return 202 on success (per the phone contract).
+    // Guard against non-2xx responses and malformed JSON bodies so the CLI
+    // never crashes on an unexpected server response (NFR5/AC9). Mirrors the
+    // try/catch + status-code pattern already used in [_stopById].
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String? message;
       try {
-        process.kill(ProcessSignal.sigterm);
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        message = body['error'] as String? ?? body['reason'] as String?;
       } catch (_) {}
+      final snippet = response.body.length > 200
+          ? response.body.substring(0, 200)
+          : response.body;
       return StartSessionResult(
         deploymentId: '',
-        pid: process.pid,
-        error: 'Could not extract deployment ID from opa output: '
-            '"$firstLine"',
+        status: 'failed',
+        error: message ??
+            'Deploy failed (HTTP ${response.statusCode}): $snippet',
+      );
+    }
+
+    Map<String, dynamic> result;
+    try {
+      result = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      return StartSessionResult(
+        deploymentId: '',
+        status: 'failed',
+        error: 'Deploy returned non-JSON response (HTTP '
+            '${response.statusCode}): $e',
+      );
+    }
+    final status = result['status'] as String? ?? 'failed';
+    final deploymentId = extractDeploymentId(result);
+    if (status == 'failed' || deploymentId.isEmpty) {
+      return StartSessionResult(
+        deploymentId: '',
+        status: 'failed',
+        error: result['reason'] as String? ?? 'Deploy failed',
       );
     }
     return StartSessionResult(
       deploymentId: deploymentId,
-      pid: process.pid,
-      process: process,
-      stdoutStream: stdoutBroadcast,
-      stderrStream: stderrBroadcast,
+      status: status,
     );
   }
 
-  /// Send SIGTERM to the subprocess tracking [deploymentId].
+  /// Stop a session via `POST /api/sessions/:id/stop`.
   ///
-  /// Looks up the pid from the registry (the most recent "pid" event for the
-  /// deployment). Returns [StopSessionResult.signalSent] false when no pid is
-  /// recorded or the signal could not be delivered. This method does NOT
-  /// update the registry file — the deployment's own completion/crashed
-  /// event is written by the `opa` process itself as it terminates.
-  Future<StopSessionResult> stopSession(String deploymentId) async {
-    final summaries = listSessions();
-    final match =
-        summaries.where((s) => s.deploymentId == deploymentId).firstOrNull;
+  /// Accepts either a session id (e.g. `s<base36>-<n>`) or a deployment id
+  /// (e.g. `d-<hex6>`). When a deployment id is passed, the method looks
+  /// up the matching session via `GET /api/sessions` first.
+  Future<StopSessionResult> stopSession(String id) async {
+    // Try the id directly first — it may be a session id.
+    final direct = await _stopById(id);
+    if (direct.stopped) return direct;
+    // Only retry via listSessions when the direct stop returned 404 (the
+    // id was not a valid session id). Network errors and other failures
+    // should not trigger a second API call.
+    if (direct.statusCode != 404) return direct;
+    // The id may be a deployment id — look up the session record and retry.
+    final sessions = await listSessions();
+    final match = sessions.where((s) => s.deploymentId == id).firstOrNull;
     if (match == null) {
       return StopSessionResult(
-        deploymentId: deploymentId,
-        signalSent: false,
-        error: 'No deployment found with id $deploymentId',
+        id: id,
+        stopped: false,
+        error: direct.error ?? 'No session found for $id',
       );
     }
-    final pid = match.pid;
-    if (pid == null) {
-      return StopSessionResult(
-        deploymentId: deploymentId,
-        signalSent: false,
-        error: 'Deployment $deploymentId has no recorded pid',
-      );
-    }
-    try {
-      if (processKillOverride != null) {
-        final ok = await processKillOverride!(pid, ProcessSignal.sigterm);
-        return StopSessionResult(
-            deploymentId: deploymentId, signalSent: ok);
-      }
-      final ok = Process.killPid(pid, ProcessSignal.sigterm);
-      return StopSessionResult(
-          deploymentId: deploymentId, signalSent: ok);
-    } catch (e) {
-      return StopSessionResult(
-        deploymentId: deploymentId,
-        signalSent: false,
-        error: 'Failed to signal pid $pid: $e',
-      );
-    }
+    return _stopById(match.sessionId);
   }
 
-  /// Resolve the deploy directory and recorded pid for [deploymentId].
+  Future<StopSessionResult> _stopById(String sessionId) async {
+    http.Response response;
+    try {
+      response = await httpClient.post(
+        Uri.parse('$apiBaseUrl/api/sessions/$sessionId/stop'),
+      );
+    } catch (e) {
+      return StopSessionResult(
+        id: sessionId,
+        stopped: false,
+        error: 'pa-platform is not running at $apiBaseUrl. '
+            'Start it with `pa-core serve`. ($e)',
+      );
+    }
+    if (response.statusCode == 200) {
+      return StopSessionResult(id: sessionId, stopped: true);
+    }
+    String? message;
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      message = body['error'] as String?;
+    } catch (_) {}
+    return _StopSessionResultWithStatus(
+      id: sessionId,
+      stopped: false,
+      error: message ?? 'Stop returned ${response.statusCode}',
+      statusCode: response.statusCode,
+    );
+  }
+
+  /// Resolve the deploy directory and session metadata for [deploymentId].
   ///
   /// Used by the attach command to locate the live `activity.jsonl` event
-  /// stream and to poll the subprocess for exit detection. Returns null when
-  /// the deployment id is unknown to the registry.
-  SessionHandle? findSession(String deploymentId) {
-    final summaries = listSessions();
-    final match =
-        summaries.where((s) => s.deploymentId == deploymentId).firstOrNull;
+  /// stream. Returns null when no active session matches the deployment id.
+  Future<SessionHandle?> findSession(String deploymentId) async {
+    final sessions = await listSessions();
+    final match = sessions
+        .where((s) => s.deploymentId == deploymentId)
+        .firstOrNull;
     if (match == null) return null;
     final deployDir = p.join(aiUsagePath, 'deployments', deploymentId);
     return SessionHandle(
       deploymentId: deploymentId,
-      pid: match.pid,
+      sessionId: match.sessionId,
       status: match.status,
       deployDir: deployDir,
       activityLogPath: p.join(deployDir, 'activity.jsonl'),
@@ -416,11 +447,36 @@ class SessionService {
     }
     return null;
   }
+
+  /// Build the JSON body for `POST /api/deploy` from team, mode, and
+  /// extraArgs. Parses `--ticket`, `--objective`, `--repo`, and `--provider`
+  /// flags from [extraArgs].
+  Map<String, dynamic> _buildDeployBody(
+      String team, String mode, List<String> extraArgs) {
+    final body = <String, dynamic>{'team': team, 'mode': mode};
+    for (var i = 0; i < extraArgs.length; i++) {
+      final arg = extraArgs[i];
+      if (i + 1 >= extraArgs.length) break;
+      final value = extraArgs[i + 1];
+      switch (arg) {
+        case '--ticket':
+          body['ticket'] = value;
+          i++;
+          break;
+        case '--objective':
+          body['objective'] = value;
+          i++;
+          break;
+        case '--repo':
+          body['repo'] = value;
+          i++;
+          break;
+        case '--provider':
+          body['provider'] = value;
+          i++;
+          break;
+      }
+    }
+    return body;
+  }
 }
-
-/// Function signature for [SessionService.processStartOverride].
-typedef ProcessStartFn = Future<Process> Function(
-    String executable, List<String> args);
-
-/// Function signature for [SessionService.processKillOverride].
-typedef ProcessKillFn = Future<bool> Function(int pid, ProcessSignal signal);

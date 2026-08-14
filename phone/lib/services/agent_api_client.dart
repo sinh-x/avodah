@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show HttpStatus;
 
 import 'package:flutter/foundation.dart';
 
@@ -10,17 +9,22 @@ import '../models/activity_event.dart';
 import '../models/agent_team.dart';
 import '../models/bulletin.dart';
 import '../models/create_idea_payload.dart';
+import '../models/dashboard_views.dart';
 import '../models/deploy_result.dart';
 import '../models/deploy_routing.dart';
 import '../models/deployment.dart';
 import '../models/focus_item.dart';
+import '../models/git_summary.dart';
 import '../models/repo_branches.dart';
 import '../models/repo_commits.dart';
+import '../models/repo_compare.dart';
 import '../models/repo_diff.dart';
 import '../models/repo_git_info.dart';
+import '../models/repo_remote_branches.dart';
 import '../models/feedback_payload.dart';
 import '../models/pa_team.dart';
 import '../models/review_item.dart';
+import '../models/session_record.dart';
 import '../models/team_folder.dart';
 import '../models/ticket.dart';
 import '../models/timer_info.dart';
@@ -885,9 +889,14 @@ class AgentApiClient {
     );
 
     // Send and stream response
-    final streamed = await _client.send(request).timeout(
-      const Duration(minutes: 5),
-    );
+    http.StreamedResponse streamed;
+    try {
+      streamed = await _client.send(request).timeout(
+        const Duration(minutes: 5),
+      );
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -922,9 +931,14 @@ class AgentApiClient {
   Future<List<int>> getImageBytes(String path) async {
     final encoded = Uri.encodeComponent(path);
     final uri = Uri.parse('$baseUrl/api/images?path=$encoded');
-    final response = await _client
-        .get(uri, headers: _authHeaders)
-        .timeout(const Duration(seconds: 15));
+    http.Response response;
+    try {
+      response = await _client
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -960,12 +974,341 @@ class AgentApiClient {
     await _patch('/api/bulletin/$encoded', body: {'status': 'resolved'});
   }
 
+  // --- Sessions ---
+
+  /// List all active sessions registered with the SessionManager.
+  ///
+  /// GET /api/sessions → SessionRecord[]
+  Future<List<SessionRecord>> listSessions() async {
+    final uri = Uri.parse('$baseUrl/api/sessions');
+    http.Response response;
+    try {
+      response = await _client
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
+    if (response.statusCode != 200) {
+      _throwApiException(response.statusCode, response.body);
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is List) {
+      return decoded
+          .map((e) => SessionRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    // Some servers may wrap in {"sessions": [...]}
+    final items = (decoded as Map<String, dynamic>)['sessions'] as List? ?? [];
+    return items
+        .map((e) => SessionRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Register a deploy session.
+  ///
+  /// POST /api/sessions body={deploymentId, model?} → {sessionId, deploymentId, model?, status}
+  Future<Map<String, dynamic>> createSession({
+    required String deploymentId,
+    String? model,
+  }) async {
+    final body = <String, dynamic>{'deploymentId': deploymentId};
+    if (model != null) body['model'] = model;
+    return await _post('/api/sessions', body: body);
+  }
+
+  /// Stop a session by id.
+  ///
+  /// POST /api/sessions/:id/stop → {status: "stopped"}
+  Future<void> stopSession(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    await _post('/api/sessions/$encoded/stop');
+  }
+
+  // --- Repo Browsing (additional) ---
+
+  /// Fetch a lightweight git summary for all configured repos.
+  ///
+  /// GET /api/repos/git-summary → GitSummary
+  Future<GitSummary> getRepoGitSummary() async {
+    final response = await _get('/api/repos/git-summary');
+    return GitSummary.fromJson(response);
+  }
+
+  /// List remote-tracking branches for a repo.
+  ///
+  /// GET /api/repos/:key/branches/remote → RepoRemoteBranches
+  Future<RepoRemoteBranches> getRepoRemoteBranches(String key) async {
+    final encoded = Uri.encodeComponent(key);
+    final response = await _get('/api/repos/$encoded/branches/remote');
+    return RepoRemoteBranches.fromJson(response);
+  }
+
+  /// Compare two refs (branches or tags) and return the paginated commit list.
+  ///
+  /// GET /api/repos/:key/compare?from=X&to=Y&limit=N&offset=M → RepoCompare
+  Future<RepoCompare> getRepoCompare(
+    String key,
+    String from,
+    String to, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      'from': from,
+      'to': to,
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    final encoded = Uri.encodeComponent(key);
+    final query = '?${Uri(queryParameters: params).query}';
+    final response = await _get('/api/repos/$encoded/compare$query');
+    return RepoCompare.fromJson(response);
+  }
+
+  // --- Deploy Control & Status ---
+
+  /// Query the status of a deployment.
+  ///
+  /// GET /api/deploy/status/:id → {status: DeploymentStatus}
+  Future<Map<String, dynamic>> getDeployStatus(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    return await _get('/api/deploy/status/$encoded');
+  }
+
+  /// Return the raw registry event log for a deployment.
+  ///
+  /// GET /api/deploy/events/:id → {events: [RegistryEvent]}
+  Future<List<Map<String, dynamic>>> getDeployEvents(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    final response = await _get('/api/deploy/events/$encoded');
+    final events = response['events'] as List? ?? [];
+    return events
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// Emit a `started` registry event for a deployment.
+  ///
+  /// POST /api/deploy/start body={deploymentId, team, ...}
+  Future<void> emitDeployStart({
+    required String deploymentId,
+    required String team,
+    String? primer,
+    List<String>? agents,
+    String? ticketId,
+    String? objective,
+    String? provider,
+    String? repo,
+  }) async {
+    final body = <String, dynamic>{
+      'deploymentId': deploymentId,
+      'team': team,
+    };
+    if (primer != null) body['primer'] = primer;
+    if (agents != null) body['agents'] = agents;
+    if (ticketId != null) body['ticketId'] = ticketId;
+    if (objective != null) body['objective'] = objective;
+    if (provider != null) body['provider'] = provider;
+    if (repo != null) body['repo'] = repo;
+    await _post('/api/deploy/start', body: body);
+  }
+
+  /// Emit a `pid` registry event.
+  ///
+  /// POST /api/deploy/pid body={deploymentId, team, pid}
+  Future<void> emitDeployPid({
+    required String deploymentId,
+    required String team,
+    required int pid,
+  }) async {
+    await _post('/api/deploy/pid', body: {
+      'deploymentId': deploymentId,
+      'team': team,
+      'pid': pid,
+    });
+  }
+
+  /// Emit a `completed` registry event.
+  ///
+  /// POST /api/deploy/complete body={deploymentId, team, status?, summary?, ...}
+  Future<void> emitDeployComplete({
+    required String deploymentId,
+    required String team,
+    String? status,
+    String? summary,
+    String? logFile,
+    int? exitCode,
+    bool? fallback,
+  }) async {
+    final body = <String, dynamic>{
+      'deploymentId': deploymentId,
+      'team': team,
+    };
+    if (status != null) body['status'] = status;
+    if (summary != null) body['summary'] = summary;
+    if (logFile != null) body['logFile'] = logFile;
+    if (exitCode != null) body['exitCode'] = exitCode;
+    if (fallback != null) body['fallback'] = fallback;
+    await _post('/api/deploy/complete', body: body);
+  }
+
+  /// Emit a `crashed` registry event.
+  ///
+  /// POST /api/deploy/crash body={deploymentId, team, error?, exitCode?}
+  Future<void> emitDeployCrash({
+    required String deploymentId,
+    required String team,
+    String? error,
+    int? exitCode,
+  }) async {
+    final body = <String, dynamic>{
+      'deploymentId': deploymentId,
+      'team': team,
+    };
+    if (error != null) body['error'] = error;
+    if (exitCode != null) body['exitCode'] = exitCode;
+    await _post('/api/deploy/crash', body: body);
+  }
+
+  /// Emit an `amended` registry event to update a completed deployment.
+  ///
+  /// POST /api/deploy/amend body={deploymentId, team, note?, status?, summary?}
+  Future<void> emitDeployAmend({
+    required String deploymentId,
+    required String team,
+    String? note,
+    String? status,
+    String? summary,
+  }) async {
+    final body = <String, dynamic>{
+      'deploymentId': deploymentId,
+      'team': team,
+    };
+    if (note != null) body['note'] = note;
+    if (status != null) body['status'] = status;
+    if (summary != null) body['summary'] = summary;
+    await _post('/api/deploy/amend', body: body);
+  }
+
+  // --- Skills ---
+
+  /// Return the full skill registry report.
+  ///
+  /// GET /api/skills → {generatedAt, scannedRoots, inventory, issues, openCodeVisibility}
+  Future<Map<String, dynamic>> getSkills() async {
+    return await _get('/api/skills');
+  }
+
+  // --- Knowledge ---
+
+  /// List knowledge boundaries (item types and their storage locations).
+  ///
+  /// GET /api/knowledge-boundaries → {boundaries: [KnowledgeBoundary]}
+  Future<List<KnowledgeBoundary>> getKnowledgeBoundaries() async {
+    final response = await _get('/api/knowledge-boundaries');
+    final boundaries = response['boundaries'] as List? ?? [];
+    return boundaries
+        .map((e) => KnowledgeBoundary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// List improvement candidates aggregated from session logs.
+  ///
+  /// GET /api/improvement-candidates → {candidates: [ImprovementCandidate]}
+  Future<List<ImprovementCandidate>> getImprovementCandidates() async {
+    final response = await _get('/api/improvement-candidates');
+    final candidates = response['candidates'] as List? ?? [];
+    return candidates
+        .map((e) =>
+            ImprovementCandidate.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  // --- Dashboard Views ---
+
+  /// Fetch aggregate counts for the dashboard.
+  ///
+  /// GET /api/dashboard/overview → DashboardOverview
+  Future<DashboardOverview> getDashboardOverview() async {
+    final response = await _get('/api/dashboard/overview');
+    return DashboardOverview.fromJson(response);
+  }
+
+  /// Fetch up to 200 deployment status records for the dashboard.
+  ///
+  /// GET /api/dashboard/views/deployments → DashboardDeployments
+  Future<DashboardDeployments> getDashboardDeployments() async {
+    final response = await _get('/api/dashboard/views/deployments');
+    return DashboardDeployments.fromJson(response);
+  }
+
+  /// Fetch up to 500 tickets for the dashboard.
+  ///
+  /// GET /api/dashboard/views/tickets → DashboardTickets
+  Future<DashboardTickets> getDashboardTickets() async {
+    final response = await _get('/api/dashboard/views/tickets');
+    return DashboardTickets.fromJson(response);
+  }
+
+  /// Fetch up to 250 skill inventory entries for the dashboard.
+  ///
+  /// GET /api/dashboard/views/skills → DashboardSkills
+  Future<DashboardSkills> getDashboardSkills() async {
+    final response = await _get('/api/dashboard/views/skills');
+    return DashboardSkills.fromJson(response);
+  }
+
+  /// Fetch knowledge boundaries for the dashboard.
+  ///
+  /// GET /api/dashboard/views/knowledge-memory → DashboardKnowledgeMemory
+  Future<DashboardKnowledgeMemory> getDashboardKnowledgeMemory() async {
+    final response = await _get('/api/dashboard/views/knowledge-memory');
+    return DashboardKnowledgeMemory.fromJson(response);
+  }
+
+  /// Fetch up to 500 improvement candidates for the dashboard.
+  ///
+  /// GET /api/dashboard/views/improvement-candidates → DashboardImprovementCandidates
+  Future<DashboardImprovementCandidates>
+      getDashboardImprovementCandidates() async {
+    final response =
+        await _get('/api/dashboard/views/improvement-candidates');
+    return DashboardImprovementCandidates.fromJson(response);
+  }
+
+  /// Fetch OpenCode integration metadata for the dashboard.
+  ///
+  /// GET /api/dashboard/views/opencode-integration → DashboardOpencodeIntegration
+  Future<DashboardOpencodeIntegration>
+      getDashboardOpencodeIntegration() async {
+    final response =
+        await _get('/api/dashboard/views/opencode-integration');
+    return DashboardOpencodeIntegration.fromJson(response);
+  }
+
+  // --- Ticket Review ---
+
+  /// Fetch a ticket together with enriched doc_refs for review.
+  ///
+  /// GET /api/tickets/:id/review → {ticket, doc_refs}
+  Future<TicketReviewResult> getTicketReview(String id) async {
+    final encoded = Uri.encodeComponent(id);
+    final response = await _get('/api/tickets/$encoded/review');
+    return TicketReviewResult.fromJson(response);
+  }
+
   // --- HTTP helpers ---
 
   Future<Map<String, dynamic>> _get(String path) async {
-    final response = await _client
-        .get(Uri.parse('$baseUrl$path'), headers: _authHeaders)
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .get(Uri.parse('$baseUrl$path'), headers: _authHeaders)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode != 200) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -974,13 +1317,18 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _post(String path,
       {Map<String, dynamic>? body}) async {
-    final response = await _client
-        .post(
-          Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json', ..._authHeaders},
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$baseUrl$path'),
+            headers: {'Content-Type': 'application/json', ..._authHeaders},
+            body: jsonEncode(body ?? {}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -989,13 +1337,18 @@ class AgentApiClient {
 
   Future<Map<String, dynamic>> _patch(String path,
       {Map<String, dynamic>? body}) async {
-    final response = await _client
-        .patch(
-          Uri.parse('$baseUrl$path'),
-          headers: {'Content-Type': 'application/json', ..._authHeaders},
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(const Duration(seconds: 10));
+    http.Response response;
+    try {
+      response = await _client
+          .patch(
+            Uri.parse('$baseUrl$path'),
+            headers: {'Content-Type': 'application/json', ..._authHeaders},
+            body: jsonEncode(body ?? {}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
     }
@@ -1008,7 +1361,13 @@ class AgentApiClient {
     request.headers['Content-Type'] = 'application/json';
     request.headers.addAll(_authHeaders);
     if (body != null) request.body = jsonEncode(body);
-    final streamed = await _client.send(request).timeout(const Duration(seconds: 10));
+    http.StreamedResponse streamed;
+    try {
+      streamed =
+          await _client.send(request).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      throw AgentApiException(0, _networkErrorMessage(e));
+    }
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwApiException(response.statusCode, response.body);
@@ -1030,6 +1389,25 @@ class AgentApiClient {
     } catch (_) {
       throw AgentApiException(statusCode, rawBody);
     }
+  }
+
+  /// Build a user-facing error message for network failures (connection
+  /// refused, timeout, DNS). The caller wraps this in an [AgentApiException]
+  /// with status code 0 so the UI can distinguish network errors from HTTP
+  /// errors.
+  String _networkErrorMessage(Object error) {
+    final detail = error.toString();
+    if (detail.contains('Connection refused') ||
+        detail.contains('Failed host lookup') ||
+        detail.contains('Connection terminated') ||
+        detail.contains('Connection closed') ||
+        detail.contains('TimeoutException') ||
+        detail.contains('SocketException') ||
+        detail.contains('HandshakeException')) {
+      return 'pa-platform is not running at $baseUrl. '
+          'Start it with `pa-core serve`.';
+    }
+    return 'Could not reach pa-platform at $baseUrl: $detail';
   }
 
   void dispose() {
@@ -1140,4 +1518,47 @@ class SelfUpdateStatus {
   bool get isSuccess => status == 'success';
   bool get isError => status == 'error';
   bool get isIdle => status == 'idle';
+}
+
+/// Result of GET /api/tickets/:id/review — ticket with enriched doc_refs.
+class TicketReviewResult {
+  final Ticket ticket;
+  final List<ReviewDocRef> docRefs;
+
+  const TicketReviewResult({required this.ticket, required this.docRefs});
+
+  factory TicketReviewResult.fromJson(Map<String, dynamic> json) {
+    final ticketJson = json['ticket'] as Map<String, dynamic>;
+    final docRefsRaw = json['doc_refs'] as List? ?? [];
+    return TicketReviewResult(
+      ticket: Ticket.fromJson(ticketJson),
+      docRefs: docRefsRaw
+          .map((e) => ReviewDocRef.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// A doc_ref with resolved URL and title, returned by the review endpoint.
+class ReviewDocRef {
+  final String path;
+  final String? type;
+  final String url;
+  final String title;
+
+  const ReviewDocRef({
+    required this.path,
+    this.type,
+    required this.url,
+    required this.title,
+  });
+
+  factory ReviewDocRef.fromJson(Map<String, dynamic> json) {
+    return ReviewDocRef(
+      path: json['path'] as String? ?? '',
+      type: json['type'] as String?,
+      url: json['url'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+    );
+  }
 }

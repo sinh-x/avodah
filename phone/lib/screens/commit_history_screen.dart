@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/repo_commits.dart';
 import '../models/repo_diff.dart';
 import '../services/agent_api_client.dart';
-import '../utils/date_helpers.dart';
-import '../widgets/diff_widgets.dart';
 import '../widgets/expandable_commit_tile.dart';
 
 /// Screen showing paginated commit history for a specific branch.
@@ -36,7 +34,6 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
   bool _loadingMore = false;
   int _offset = 0;
   static const int _limit = 20;
-  int _total = 0;
   final ScrollController _scrollController = ScrollController();
   final Map<String, RepoDiff?> _diffCache = {};
   final Set<String> _failedDiffs = {};
@@ -91,7 +88,6 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
         setState(() {
           _commits = result.commits;
           _filteredCommits = filtered;
-          _total = filtered.length;
           _loading = false;
         });
       }
@@ -129,7 +125,6 @@ class _CommitHistoryScreenState extends State<CommitHistoryScreen> {
           _commits = [..._commits, ...result.commits];
           _filteredCommits = [..._filteredCommits, ...newFiltered];
           _offset += result.commits.length;
-          _total = _filteredCommits.length;
           _loadingMore = false;
         });
       }

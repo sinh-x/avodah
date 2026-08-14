@@ -116,17 +116,15 @@ Future<void> main(List<String> args) async {
     // Session command group — wire all subcommands with a shared SessionService.
     // Subcommands are added lazily here (not in SessionCommand's constructor)
     // so the SessionService is constructed once and injected into each
-    // subcommand, matching the existing SyncCommand pattern.
+    // subcommand, matching the existing SyncCommand pattern. Phase 3 removed
+    // the liveProcesses map — sessions are now managed via the pa-platform API.
     final sessionService = SessionService();
-    final liveProcesses = <String, LiveProcess>{};
     final sessionCommand = SessionCommand()
       ..addSubcommand(SessionListCommand(sessionService))
       ..addSubcommand(SessionHistoryCommand(sessionService))
-      ..addSubcommand(SessionStartCommand(sessionService,
-          liveProcesses: liveProcesses))
+      ..addSubcommand(SessionStartCommand(sessionService))
       ..addSubcommand(SessionStopCommand(sessionService))
-      ..addSubcommand(SessionAttachCommand(sessionService,
-          liveProcesses: liveProcesses));
+      ..addSubcommand(SessionAttachCommand(sessionService));
     runner.addCommand(sessionCommand);
 
     // No args → run status + hint
