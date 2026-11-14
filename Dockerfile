@@ -57,11 +57,11 @@ RUN mkdir -p /data /config
 ENV AVODAH_DATA_DIR=/data
 ENV AVODAH_CONFIG_DIR=/config
 ENV JIRA_ENABLED=false
-ENV AGENT_API_URL=http://host.docker.internal:9848
+ENV AGENT_API_URL=http://127.0.0.1:9848
+ENV SYNC_HOST=127.0.0.1
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 
-# Sync server port (container always listens on 9847;
-# host-side port is configurable via SYNC_PORT in docker-compose)
+# Informational only under host networking; SYNC_PORT changes the process.
 EXPOSE 9847
-
-# Run sync-only server on fixed container port 9847
-CMD ["/app/sync_server", "--port", "9847"]
+ENTRYPOINT ["/app/sync_server"]

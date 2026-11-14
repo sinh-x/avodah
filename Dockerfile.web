@@ -23,20 +23,17 @@ ENV CI=true
 COPY . .
 
 # Enable web support
-RUN flutter config --enable-web || true
+RUN flutter config --enable-web
 
 # Work in phone/ directory for building
 WORKDIR /app/phone
-
-# Enable web platform for this project (phone/ was Android-only)
-RUN flutter create . --platforms web --project-name avodah_viewer --org com.sinhx 2>/dev/null || true
 
 # Resolve dependencies
 RUN flutter pub get
 
 # Download Drift WASM files into web/ (versions must match pubspec.lock)
-RUN curl -L -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
-    && curl -L -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
+RUN curl --fail --location -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
+    && curl --fail --location -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
 
 # Build Flutter web release.
 # --base-href=/avodah/ matches the drgnfly-caddy mount path so Uri.base in the
@@ -49,6 +46,8 @@ RUN flutter build web --release --base-href=/avodah/
 # Stage 2: Serve — Caddy static file server
 # ──────────────────────────────────────────────────────────────
 FROM caddy:2-alpine
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 
 # Copy Caddyfile configuration
 COPY Caddyfile /etc/caddy/Caddyfile

@@ -1,186 +1,89 @@
-# Avodah Sync Server — Docker Deployment
+# Avodah deployment contract
 
-Runs the Avodah CRDT sync server in a Docker container. The container handles:
-- **Sync API** (`/sync/*`) — CRDT delta sync between desktop and phone
-- **HTTP proxy** (`/api/*`) — forwarded to `pa serve` on the host (port 9848)
-- **WebSocket proxy** (`/ws`) — forwarded to `pa serve` on the host (port 9848)
+This is a runbook, not permission to change running services or private state.
+DFC-004 owns HTTPS/prefix routing and NX-070 owns host startup, DNS, renewal,
+backup scheduling and alerts. Keep gateway containment until independent security
+review and exact rollout authority. See [route contract](docs/server-route-contract.md),
+[browser delivery](docs/browser-sync.md) and [operations](docs/operations.md).
 
-The phone connects only to this container (port 9847). The container transparently proxies non-sync traffic to `pa serve`, so the phone has no knowledge of port 9848.
+## Architecture
 
-## Prerequisites
+Browser/Android → trusted HTTPS `/avodah` → shared gateway:
+- all `/api/*` and allowed native `/ws` routes → loopback sync9847;
+- static bundle only → loopback web8080.
 
-- Docker 20.10+
-- Docker Compose v2 (`docker compose` command, not `docker-compose`)
-- Existing Avodah data at `~/.local/share/avodah/` and config at `~/.config/avodah/`
+Sync protects configuration and CRDT with device headers, then proxies eligible
+PA requests to loopback9848 retaining PA's independent authorization. No direct
+API gateway→PA bypass and no API failure→SPA fallback. Public status/enrollment
+are narrow exceptions. Core CRDT works when optional PA/Jira are unavailable.
+Static Caddy preserves COOP/COEP and SQLite WASM MIME; it does not proxy APIs.
 
-## Quick Start
+## Effective configuration
 
-```bash
-# Build and start (detached)
-docker compose up -d
+Sync port: `--port` > SYNC_PORT > config.json `sync.port` >9847.
+Host: `--host` > SYNC_HOST >127.0.0.1 (no persisted host key).
+Literal IPv4/IPv6 addresses only; ports1..65535. Invalid values exit before DB,
+node creation, migrations or startup pulls. IPv6 loopback: `--host ::1`.
+Nonloopback native development requires `--allow-nonloopback`; never use this
+behind the shared production gateway. WEB_HOST defaults127.0.0.1; WEB_PORT8080
+changes the actual static listener. SYNC_PORT changes the actual server listener,
+not a Docker mapping. Host networking has **no ports publications**. If changing
+ports (e.g. SYNC_PORT=19847 WEB_PORT=18080), DFC-004 must separately update its
+upstream routes. No Avodah env variable rewrites the shared gateway.
 
-# View logs
-docker compose logs -f
+Compose explicitly supplies9847/127.0.0.1, overriding persisted ports. Override
+with a private `--env-file`, not an auto-loaded Jira-on override. There is no
+tracked automatic override. Inspect any operator-local override before rollout;
+legacy automatic overrides may still exist outside this clean checkout.
 
-# Stop
-docker compose down
-```
+Variables: AVODAH_CONFIG and AVODAH_DATA select existing host directories mounted
+read-write at /config and /data. Keep config.json, node-id, Jira credentials and
+SQLite DB together for recovery. AGENT_PORT defaults9848. SYNC_ALLOWED_ORIGINS
+must contain the exact trusted HTTPS origin (no `/avodah` path); default denies
+browser Origin-bearing requests. Origin is not device authentication.
 
-The sync server is available at `http://localhost:9847`.
+## Jira intent and private opt-in
 
-## Environment Variables
+A clean checkout genuinely defaults JIRA_ENABLED=false. Sinh's recorded live
+intent is **enabled** using a private explicit JIRA_ENABLED=true opt-in. Preserve
+that setting at separately authorized rollout; do not silently turn off a live
+integration. Missing credentials reports configured/unavailable and does not
+instantiate anonymous Jira writes. JIRA_ENABLED accepts true/false only. The
+credential file is `/config/jira-credentials.json`, inside the read-write config
+mount; restrict its access individually. No live Jira push is a test, including
+startup/migration replay. Validate existing worklog push state before enabling.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SYNC_PORT` | `9847` | Host-side port the sync server is reachable on |
-| `SYNC_HOST` | `127.0.0.1` | Host/interface the sync server binds to; keep loopback-only behind Caddy |
-| `AGENT_PORT` | `9848` | Port where `pa serve` listens on the host |
-| `JIRA_ENABLED` | `false` | Enable Jira auto-push on worklog sync |
-| `AVODAH_CONFIG` | `~/.config/avodah` | Host path to config directory (mounted read-write) |
-| `AVODAH_DATA` | `~/.local/share/avodah` | Host path to data directory (mounted read-write) |
+## Existing-data rollout (operator-authorized only)
 
-Set these in a `.env` file next to `docker-compose.yml`:
+1. Record old source/image/DB schema and effective config metadata privately.
+2. Verify one DB writer; do not run native sync alongside Docker on the same DB.
+3. Take a separately authorized consistent private backup and isolated restore.
+4. Build from a clean exact commit; record resolved base digests, dependency locks,
+   downloaded WASM/worker checksums and output image IDs/digests. Mutable tags and
+   OCI revision labels alone do not prove provenance. Do not assume historical
+   containers were built from current source.
+5. Render Compose with the chosen private env file without dumping secrets.
+   Build with SOURCE_REVISION set to the checked full Git commit. Inspect image
+   IDs before authorized replacement; never prune rollback images/resources.
+6. Set explicit live Jira opt-in and trusted origin. Arrange **private foreground
+   operator console** for enrollment: codes go to /dev/tty, not shared logs. A
+   detached container without that console fails enrollment closed.
+7. Replace only the existing instance under its owner. Check loopback listeners,
+   health, missing/invalid/revoked rejection, exact bundle/image and safe rollback.
+   DFC-004 alone authorizes route containment removal. Browser/Android acceptance
+   and legacy native scoped-credential migration remain separate rollout gates.
 
-```env
-SYNC_PORT=9847
-SYNC_HOST=127.0.0.1
-AGENT_PORT=9848
-JIRA_ENABLED=false
-```
+Use `docker compose --env-file /private/path config --quiet` for syntax checking.
+Do not publish resolved environment or `docker inspect` payloads containing secrets.
+`docker compose build` builds candidates; `up`/`down` have live effects and are not
+verification shortcuts. Reverting to an old insecure image does not authorize
+reopening old routes: retain hardened gateway containment during rollback.
 
-## Volume Mounts
+## Safe diagnosis
 
-| Container path | Host path | Mode | Contents |
-|----------------|-----------|------|----------|
-| `/config` | `~/.config/avodah/` | read-write | `config.json`, `node-id`, Jira credentials |
-| `/data` | `~/.local/share/avodah/` | read-write | `avodah.db` (SQLite database) |
-
-> **Warning:** Only one sync server instance should access the SQLite database at a time. Running both the Docker container and the native `avodah-sync` binary simultaneously will cause SQLite locking errors.
-
-## TLS Termination (Upstream Reverse Proxy)
-
-The sync server speaks plain HTTP only. TLS is terminated by an upstream
-reverse proxy (e.g. `drgnfly-caddy`) that fronts the container at
-`https://drgnfly.tail10c2c6.ts.net/avodah` and forwards to `localhost:9847`.
-
-The committed Compose configuration binds HTTP on the host's loopback interface
-with `SYNC_HOST=127.0.0.1`; the sync server should not be exposed externally.
-Only override this for isolated local testing where an upstream proxy is not in
-use.
-
-The phone connects to the upstream HTTPS URL (e.g.
-`https://drgnfly.tail10c2c6.ts.net/avodah`); the upstream Caddy strips the
-`/avodah` path prefix and forwards `/api/sync/*`, `/api/*`, and `/ws`
-requests on to the sync server / `pa serve` on the host.
-
-## Proxy Architecture
-
-```
-Phone ──HTTPS──→ drgnfly-caddy /avodah
-  ├── /api/sync/* ──HTTP──→ localhost:9847 (avodah-sync)
-  ├── /api/*      ──HTTP──→ localhost:9848 (pa serve)
-  └── /ws         ──HTTP──→ localhost:9847 (avodah-sync WebSocket proxy)
-
-Host ──→ :9847 (Docker container — avodah-sync)
-  ├── /api/sync/* Handled by sync server (CRDT delta sync)
-  ├── /api/config/* Handled by sync server (category config)
-  ├── /api/*      HTTP proxied ──→ host:9848 (pa serve)
-  └── /ws         WebSocket proxied ──→ host:9848 (pa serve)
-
-Host ──→ :9848 (pa serve — personal-assistant repo)
-  ├── /api/*      Agent workflow API (inbox, teams, deploy, etc.)
-  └── /ws         WebSocket real-time events
-```
-
-The Compose service uses `network_mode: host`, so `AGENT_API_URL` points to
-`http://localhost:9848` to reach `pa serve` on the same host.
-
-**If `pa serve` is not running:** Proxy requests return HTTP 502. Sync continues working normally — the sync API is always available regardless of agent API availability.
-
-## Jira Integration
-
-Jira sync is disabled by default. To enable:
-
-```bash
-JIRA_ENABLED=true docker compose up -d
-```
-
-Jira credentials must be present at `~/.config/avodah/jira-credentials.json` (mounted read-only into `/config/jira-credentials.json`).
-
-## Building the Image
-
-The multi-stage Dockerfile compiles `mcp/bin/sync_server.dart` to a native binary using `dart compile exe`, then copies only the binary and `libsqlite3` into a `debian:bookworm-slim` runtime image.
-
-```bash
-# Build only
-docker compose build
-
-# Build with no cache (after dependency changes)
-docker compose build --no-cache
-```
-
-Expected image size: ~40–60MB (native binary + SQLite3 + minimal Debian).
-
-## Troubleshooting
-
-### Container fails to start — database locked
-
-```
-Error: SQLite error: database is locked
-```
-
-Another process has the database open. Stop the native `avodah-sync` binary before starting the container (or vice versa).
-
-### Cannot reach agent API — 502 errors
-
-```
-/api/* requests return 502 Bad Gateway
-```
-
-`pa serve` is not running on port 9848. Start it:
-
-```bash
-pa serve --port 9848
-```
-
-Sync continues working. Only agent API requests (inbox, teams, deploy) are affected.
-
-### Agent API host not reachable
-
-With `network_mode: host`, `AGENT_API_URL=http://localhost:9848` should reach
-`pa serve` on the host. Check Docker and `pa serve` first:
-
-```bash
-docker --version
-curl http://localhost:9848/api/health
-```
-
-If you run without host networking, set `AGENT_API_URL` to a reachable host name
-or LAN IP instead:
-
-```env
-AGENT_API_URL=http://192.168.1.x:9848
-```
-
-### Image size too large
-
-If the image exceeds your target, rebuild without cache:
-
-```bash
-docker compose build --no-cache
-docker system prune -f  # remove dangling layers
-docker images avodah-sync
-```
-
-### View container environment
-
-```bash
-docker compose exec avodah-sync env | grep -E 'AVODAH|JIRA|AGENT|SYNC'
-```
-
-### Check sync server health
-
-```bash
-curl http://localhost:9847/
-# Expected: {"status":"ok","service":"avodah-sync"}
-```
+Use bounded `curl --fail --max-time 3 http://127.0.0.1:9847/health` for liveness
+and `/ready` for local CRDT readiness. `/dependencies` reports optional feature
+status without credentials. Web health must read index.html plus required assets,
+not only an unconditional `/health` response. Pairing403 ≠ PA denial ≠ PA502.
+NX-070 owns PA service recovery; do not launch another unmanaged PA instance.
+No destructive Docker prune or broad chmod/chown is part of this runbook.

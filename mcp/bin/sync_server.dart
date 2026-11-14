@@ -5,7 +5,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
-import 'package:args/args.dart';
+import 'package:avodah_mcp/config/sync_listener_config.dart';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
@@ -18,25 +18,17 @@ import 'package:avodah_mcp/storage/database_opener.dart';
 Future<void> main(List<String> args) async {
   final paths = AvodahPaths();
   final config = await AvoConfig.load(paths);
-  final parser = ArgParser()
-    ..addOption('port', abbr: 'p', defaultsTo: config.syncPort.toString())
-    ..addOption('host',
-        abbr: 'h', defaultsTo: Platform.environment['SYNC_HOST'] ?? '127.0.0.1')
-    ..addFlag('allow-nonloopback',
-        defaultsTo: false,
-        negatable: false,
-        help: 'Explicit isolated-development network exposure opt-in');
-  final parsed = parser.parse(args);
-  final port = int.parse(parsed['port'] as String);
-  final host = InternetAddress(parsed['host'] as String);
-  if (port < 1 ||
-      port > 65535 ||
-      (!host.isLoopback && !(parsed['allow-nonloopback'] as bool))) {
-    stderr.writeln(
-        'Invalid listener: port 1..65535; loopback unless explicitly opted in');
+  late SyncListenerConfig listener;
+  try {
+    listener = SyncListenerConfig.parse(args, Platform.environment,
+        configPort: config.syncPort);
+  } on FormatException {
+    stderr.writeln('Invalid listener/Jira configuration');
     exitCode = 64;
     return;
   }
+  final port = listener.port;
+  final host = listener.host;
   await paths.ensureDirectories();
   final db = openDatabase(paths.databasePath);
   final clock = HybridLogicalClock(nodeId: paths.getNodeIdSync());
