@@ -14,6 +14,7 @@ from pathlib import Path
 import shutil
 import socket
 import ssl
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -34,6 +35,7 @@ def main():
     p.add_argument('--sync-image', required=True)
     p.add_argument('--web-image', required=True)
     p.add_argument('--browser', action='store_true')
+    p.add_argument('--health-faults', action='store_true', help='Includes up to120s Docker health fault observation')
     args = p.parse_args()
     for image in [args.sync_image, args.web_image]:
         if not image.startswith('avodah-avo121-test-'):
@@ -86,19 +88,30 @@ def main():
                            '-o','/dev/null','-w','%{http_code}',url)
             assert int(value) == expected
         try:
-            network = docker('network','create','--internal',name)
+            # --internal suppresses host port publication on this Docker host.
+            # Use a private bridge with no outbound masquerading and no DNS;
+            # only synthetic local endpoints/configuration are supplied.
+            network = docker('network','create','--opt',
+                             'com.docker.network.bridge.enable_ip_masquerade=false',name)
+            anchor = launch('namespace',args.sync_image,[
+                '--network',name,'--dns','127.0.0.1','-p',f'127.0.0.1:{port}:18443',
+                '--entrypoint','/bin/sh'],['-c','sleep infinity'])
             sync = launch('sync',args.sync_image,[
-                '--network',name,'-p',f'127.0.0.1:{port}:18443',
+                '--network',f'container:{anchor}',
+                '--health-cmd','curl --fail --silent --max-time 3 http://127.0.0.1:19847/ready >/dev/null',
+                '--health-interval','30s','--health-timeout','5s','--health-retries','3','--health-start-period','30s',
                 '--user',f'{os.getuid()}:{os.getgid()}',
                 '-v',f'{root}/config:/config','-v',f'{root}/data:/data',
                 '-e','XDG_STATE_HOME=/data/state','-e','HOME=/tmp',
                 '-e','SYNC_HOST=127.0.0.1','-e','SYNC_PORT=19847','-e','JIRA_ENABLED=false',
                 '-e',f'SYNC_ALLOWED_ORIGINS={origin}',
                 '-e','PAIRING_CODE_FILE=/config/pairing/code','-e','AGENT_API_URL=http://127.0.0.1:19999'])
-            web = launch('web',args.web_image,['--cap-add','NET_BIND_SERVICE','--network',f'container:{sync}',
+            web = launch('web',args.web_image,['--cap-add','NET_BIND_SERVICE','--network',f'container:{anchor}',
                 '--user',f'{os.getuid()}:{os.getgid()}',
                 '-e','XDG_CONFIG_HOME=/tmp/config','-e','XDG_DATA_HOME=/tmp/data',
-                '-e','WEB_HOST=127.0.0.1','-e','WEB_PORT=18080'])
+                '-e','WEB_HOST=127.0.0.1','-e','WEB_PORT=18080',
+                '--health-cmd','wget -q -T 1 -O /dev/null http://127.0.0.1:18080/index.html && wget -q -T 1 -O /dev/null http://127.0.0.1:18080/sqlite3.wasm && wget -q -T 1 -O /dev/null http://127.0.0.1:18080/drift_worker.js',
+                '--health-interval','30s','--health-timeout','5s','--health-retries','3','--health-start-period','30s'])
             fixture = root/'gateway.Caddyfile'
             fixture.write_text('''{
  admin off
@@ -123,22 +136,56 @@ http://127.0.0.1:19999 {
  respond `{"error":"synthetic PA denial"}` 403
 }
 ''')
-            launch('gateway',args.web_image,['--cap-add','NET_BIND_SERVICE','--network',f'container:{sync}',
+            launch('gateway',args.web_image,['--cap-add','NET_BIND_SERVICE','--network',f'container:{anchor}',
                 '--user',f'{os.getuid()}:{os.getgid()}',
                 '-e','XDG_CONFIG_HOME=/tmp/config','-e','XDG_DATA_HOME=/tmp/data',
                 '-v',f'{root}/tls:/fixture-tls:ro','-v',f'{fixture}:/fixture.Caddyfile:ro',
                 '--entrypoint','caddy'],['run','--config','/fixture.Caddyfile','--adapter','caddyfile'])
             deadline = time.monotonic()+30
+            failure = 'no response'
             while True:
                 try:
-                    if request('/_fixture/ready')[0] == 200: break
-                except (OSError,urllib.error.URLError): pass
-                if time.monotonic()>deadline: raise AssertionError('fixture startup failed')
+                    code = request('/_fixture/ready')[0]
+                    if code == 200: break
+                    failure = f'HTTP {code}'
+                except (OSError,urllib.error.URLError) as error:
+                    failure = str(error)
+                if time.monotonic()>deadline: raise AssertionError('fixture startup failed: '+failure)
                 time.sleep(.2)
             probe(sync,'http://127.0.0.1:19847/ready')
             probe(sync,'http://127.0.0.1:18080/sqlite3.wasm')
+            dependencies=json.loads(docker('exec',sync,'curl','--noproxy','*','--silent','--max-time','3',
+                'http://127.0.0.1:19847/dependencies'))
+            assert dependencies == {'pa':'auth-unavailable','jira':'disabled'}
+            report['optional_dependency_denial_core_ready'] = True
+            if args.health_faults:
+                lock=sqlite3.connect(root/'data/avodah.db')
+                try:
+                    lock.execute('BEGIN EXCLUSIVE')
+                    start=time.monotonic()
+                    assert request('/_fixture/ready')[0] == 503
+                    report['locked_db_not_ready_seconds']=round(time.monotonic()-start,3)
+                    assert report['locked_db_not_ready_seconds'] < 3
+                finally: lock.close()
+                assert request('/_fixture/ready')[0] == 200
+                # The actual declared Docker policy must detect a missing asset.
+                end=time.monotonic()+40
+                while docker('inspect',web,'--format','{{.State.Health.Status}}')!='healthy':
+                    if time.monotonic()>end: raise AssertionError('web never became healthy')
+                    time.sleep(1)
+                docker('exec','--user','0',web,'mv','/srv/sqlite3.wasm','/srv/sqlite3.wasm.fixture-held')
+                start=time.monotonic()
+                try:
+                    while docker('inspect',web,'--format','{{.State.Health.Status}}')!='unhealthy':
+                        if time.monotonic()-start>120: raise AssertionError('Docker unhealthy detection exceeded120s')
+                        time.sleep(1)
+                    report['missing_asset_docker_unhealthy_seconds']=round(time.monotonic()-start,3)
+                    assert request('/_fixture/ready')[0] == 200
+                finally:
+                    docker('exec','--user','0',web,'mv','/srv/sqlite3.wasm.fixture-held','/srv/sqlite3.wasm')
+                probe(sync,'http://127.0.0.1:18080/sqlite3.wasm')
             # Peer network access must fail even though same-namespace loopback works.
-            address = docker('inspect',sync,'--format',f'{{{{(index .NetworkSettings.Networks "{name}").IPAddress}}}}')
+            address = docker('inspect',anchor,'--format',f'{{{{(index .NetworkSettings.Networks "{name}").IPAddress}}}}')
             for backend in [19847,18080,2019]:
                 result = subprocess.run(['docker','run','--rm','--network',name,'--entrypoint','curl',
                     args.sync_image,'--noproxy','*','--silent','--max-time','2',f'http://{address}:{backend}/'],
@@ -165,6 +212,11 @@ http://127.0.0.1:19999 {
                     Path('/tmp/avo121-browser-debug.log').write_bytes(error.stderr)
                     raise
                 credentials = browser.pop('credentials')
+                restarted = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
+                    str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
+                assert restarted.pop('credentials') == credentials
+                assert restarted['rememberedRestart']
+                browser['fullRestartPersistence'] = True
                 report['browser'] = browser
                 auth = {'X-Av-Node-Id':credentials['node'],'X-Av-Pair-Token':credentials['token']}
                 assert request('/avodah/api/sync/pair',headers=auth)[0] == 200
@@ -185,10 +237,27 @@ http://127.0.0.1:19999 {
                     '-e','XDG_STATE_HOME=/data/state','-e','HOME=/tmp',
                     '-e','SYNC_PORT=19847','-e','JIRA_ENABLED=false'])
                 time.sleep(1)
-                config = f'url = "http://127.0.0.1:19847/api/sync/pair"\nheader = "X-Av-Node-Id: {credentials["node"]}"\nheader = "X-Av-Pair-Token: {credentials["token"]}"\nfail\nsilent\nmax-time = 3\n'
-                value = docker('exec','-i',clone,'curl','--noproxy','*','--config','-',input=config.encode())
-                assert json.loads(value)['paired'] is True
+                def restored_request(path, method='GET', body=None):
+                    config = f'url = "http://127.0.0.1:19847{path}"\nrequest = "{method}"\nheader = "X-Av-Node-Id: {credentials["node"]}"\nheader = "X-Av-Pair-Token: {credentials["token"]}"\nheader = "Content-Type: application/json"\nfail\nsilent\nmax-time = 3\n'
+                    if body is not None: config += 'data = '+json.dumps(json.dumps(body))+'\n'
+                    return json.loads(docker('exec','-i',clone,'curl','--noproxy','*','--config','-',input=config.encode()))
+                assert restored_request('/api/sync/pair')['paired'] is True
+                stamp=f'{int(time.time()*1000)}-0-{credentials["node"]}'
+                types=['task','worklog','timer','project','dailyPlan','dayPlanTask','categoryChip']
+                deltas=[{'type':kind,'id':'active-timer' if kind=='timer' else f'restored-{kind}',
+                    'fields':{field:{'v':'synthetic-restored','t':stamp}
+                    for field in ['title','taskTitle','name','date','category','label']}} for kind in types]
+                payload={'node':credentials['node'],'deltas':deltas}
+                assert restored_request('/api/sync/deltas','POST',payload)['merged']==7
+                pulled=restored_request('/api/sync/deltas')['deltas']
+                assert set(types).issubset({d['type'] for d in pulled})
+                assert restored_request('/api/sync/deltas','POST',payload)['merged']==7
+                assert len(restored_request('/api/sync/deltas')['deltas'])==len(pulled)
+                docker('stop','--time','5',clone);docker('start',clone);time.sleep(.5)
+                assert restored_request('/api/sync/pair')['paired'] is True
+                assert len(restored_request('/api/sync/deltas')['deltas'])==len(pulled)
                 report['isolated_restore_authenticated'] = True
+                report['isolated_restore_seven_family_push_pull_replay_restart'] = True
                 report['restore_seconds'] = round(time.monotonic()-start,3)
                 docker('start',sync);time.sleep(.5)
                 assert request('/avodah/api/sync/pair','DELETE',headers=auth)[0] == 200
@@ -211,7 +280,7 @@ http://127.0.0.1:19999 {
             raise
         finally:
             for ident in reversed(containers):
-                subprocess.run(['docker','rm','-f',ident],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
+                subprocess.run(['docker','rm','-f','-v',ident],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
             if network:
                 subprocess.run(['docker','network','rm',network],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
         print(json.dumps(report,sort_keys=True,indent=2))
@@ -221,5 +290,5 @@ if __name__ == '__main__':
     except Exception as error:
         # No command stderr/stdout, profile contents, codes or credentials in logs.
         print(json.dumps({'passed':False,'error_type':type(error).__name__,
-                          'message':str(error) if isinstance(error, AssertionError) else 'Fixture failed; inspect test stage privately'}))
+                          'message':str(error) if isinstance(error, (AssertionError, urllib.error.URLError)) else 'Fixture failed; inspect test stage privately'}))
         raise SystemExit(1)

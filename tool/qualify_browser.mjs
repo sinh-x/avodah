@@ -47,18 +47,35 @@ try {
   await send('Page.navigate',{url:`${origin}/avodah/`},sessionId);
   await wait(()=>evaluate(`!!document.querySelector('flt-semantics-placeholder')`),'Flutter did not initialize');
   await evaluate(`document.querySelector('flt-semantics-placeholder').click()`);
-  await wait(()=>evaluate(`!!document.querySelector('[aria-label*="Six-digit pairing code"]')`),'Pairing code field unavailable');
-  await click('Six-digit pairing code');
-  const code=await wait(async()=>{try{const value=(await readFile(codeFile,'utf8')).trim();return /^\d{6}$/.test(value)?value:null;}catch{return null;}},'Private fixture code unavailable');
-  await send('Input.insertText',{text:code},sessionId);
-  await click('Confirm & Pair');
+  const remembered=await evaluate(`localStorage.getItem('avodah.pair.${origin}/avodah.token')`);
+  if(!remembered){
+    await wait(()=>evaluate(`!!document.querySelector('[aria-label*="Six-digit pairing code"]')`),'Pairing code field unavailable');
+    await click('Six-digit pairing code');
+    const code=await wait(async()=>{try{const value=(await readFile(codeFile,'utf8')).trim();return /^\d{6}$/.test(value)?value:null;}catch{return null;}},'Private fixture code unavailable');
+    await send('Input.insertText',{text:code},sessionId);
+    await click('Confirm & Pair');
+  }
   const credentials=await wait(()=>evaluate(`(()=>{const token=localStorage.getItem('avodah.pair.${origin}/avodah.token');const entry=Object.entries(localStorage).find(([k])=>k.includes('crdt_node_id:')&&k.includes('${origin}'));if(!token||!entry)return null;let node=entry[1];try{node=JSON.parse(node)}catch{}return {token,node};})()`),'Browser did not persist pairing');
   await send('Page.reload',{ignoreCache:true},sessionId);
+  await new Promise(r=>setTimeout(r,500));
+  await wait(()=>evaluate(`!!document.querySelector('flt-semantics-placeholder')`),'Reloaded Flutter did not initialize');
+  await evaluate(`document.querySelector('flt-semantics-placeholder').click()`);
+  await wait(()=>evaluate(`[...document.querySelectorAll('[aria-label]')].some(e=>(e.getAttribute('aria-label')||'').includes('Dashboard'))`),'Reloaded app did not reach its home navigation');
   await wait(()=>evaluate(`localStorage.getItem('avodah.pair.${origin}/avodah.token')===${JSON.stringify(credentials.token)}`),'Credential did not survive reload');
   const result=await evaluate(`fetch('${origin}/avodah/api/config/categories',{headers:{'X-Av-Node-Id':${JSON.stringify(credentials.node)},'X-Av-Pair-Token':${JSON.stringify(credentials.token)}}}).then(async r=>({status:r.status,secure:isSecureContext,isolated:crossOriginIsolated}))`);
   if(result.status!==200||!result.secure||!result.isolated)throw Error('Authenticated HTTPS/isolation check failed');
+  await send('Network.enable',{},sessionId);
+  await send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0},sessionId);
+  const offline=await evaluate(`fetch('${origin}/avodah/api/sync/status').then(()=>false,()=>true)`);
+  if(!offline)throw Error('Offline injection failed');
+  if(await evaluate(`localStorage.getItem('avodah.pair.${origin}/avodah.token')`) !== credentials.token)throw Error('Offline erased pairing');
+  await send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1},sessionId);
+  await send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:false},sessionId);
+  const noOverflow=await evaluate('document.documentElement.scrollWidth<=innerWidth');
+  if(!noOverflow)throw Error('375px document overflow');
   // Output only into the Python parent's PIPE, never a test log/artifact.
-  process.stdout.write(JSON.stringify({credentials,result,version:(await send('Browser.getVersion')).product}));
+  process.stdout.write(JSON.stringify({credentials,result,offlineCredentialPreserved:true,
+    narrowDocumentNoOverflow:true,rememberedRestart:!!remembered,version:(await send('Browser.getVersion')).product}));
 } finally {
   ws?.close();chrome.kill('SIGTERM');
 }
