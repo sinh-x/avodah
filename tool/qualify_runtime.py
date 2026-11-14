@@ -77,6 +77,9 @@ def main():
                   '--format','{{index .Config.Labels "org.opencontainers.image.revision"}}'),
                   'sync_image':docker('image','inspect',args.sync_image,'--format','{{.Id}}'),
                   'web_image':docker('image','inspect',args.web_image,'--format','{{.Id}}')}
+        web_source = docker('image','inspect',args.web_image,
+            '--format','{{index .Config.Labels "org.opencontainers.image.revision"}}')
+        assert web_source == report['source'], 'Candidate image source labels differ'
         def launch(label, image, options, command=()):
             ident = docker('run','-d','--name',f'{name}-{label}','--cpus','1','--memory','512m',
                 '--pids-limit','128','--cap-drop','ALL','--security-opt','no-new-privileges',
@@ -154,6 +157,9 @@ http://127.0.0.1:19999 {
                 time.sleep(.2)
             probe(sync,'http://127.0.0.1:19847/ready')
             probe(sync,'http://127.0.0.1:18080/sqlite3.wasm')
+            hashes = docker('exec',web,'sha256sum','/etc/caddy/Caddyfile','/srv/main.dart.js',
+                            '/srv/sqlite3.wasm','/srv/drift_worker.js')
+            report['web_payload_sha256'] = {line.split()[1]:line.split()[0] for line in hashes.splitlines()}
             dependencies=json.loads(docker('exec',sync,'curl','--noproxy','*','--silent','--max-time','3',
                 'http://127.0.0.1:19847/dependencies'))
             assert dependencies == {'pa':'auth-unavailable','jira':'disabled'}, 'Dependency status mismatch'
@@ -215,8 +221,14 @@ http://127.0.0.1:19999 {
                 credentials = browser.pop('credentials')
                 restarted = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
                     str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
-                assert restarted.pop('credentials') == credentials
-                assert restarted['rememberedRestart']
+                recovered = restarted.pop('credentials')
+                report['browser_environment'] = browser.get('browserEnvironment')
+                report['browser_restart_comparison'] = {
+                    'same_node':recovered['node']==credentials['node'],
+                    'same_credential':recovered['token']==credentials['token'],
+                    'remembered':restarted['rememberedRestart']}
+                assert recovered == credentials, 'Browser credential changed across a clean restart'
+                assert restarted['rememberedRestart'], 'Browser did not remember its pairing'
                 browser['fullRestartPersistence'] = True
                 report['browser'] = browser
                 auth = {'X-Av-Node-Id':credentials['node'],'X-Av-Pair-Token':credentials['token']}

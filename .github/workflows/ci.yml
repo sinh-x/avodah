@@ -44,8 +44,36 @@ jobs:
           cd phone
           flutter build linux --debug
 
-  bump-build:
+  runtime-isolated:
     needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build pinned candidate images
+        run: |
+          REV=$(git rev-parse HEAD)
+          docker build --build-arg SOURCE_REVISION="$REV" -f Dockerfile -t avodah-avo121-test-sync:ci .
+          docker build --build-arg SOURCE_REVISION="$REV" -f Dockerfile.web -t avodah-avo121-test-web:ci .
+      - name: Isolated HTTPS, browser, health and recovery
+        run: |
+          export CHROME_EXECUTABLE=$(command -v google-chrome)
+          python3 tool/qualify_runtime.py --sync-image avodah-avo121-test-sync:ci \
+            --web-image avodah-avo121-test-web:ci --browser --health-faults > runtime-fixture.json
+          sh tool/qualify_ipv6.sh avodah-avo121-test-sync:ci avodah-avo121-test-web:ci > ipv6-fixture.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sanitized-runtime-qualification
+          path: |
+            runtime-fixture.json
+            ipv6-fixture.json
+
+  bump-build:
+    needs: [build, runtime-isolated]
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/develop' &&
