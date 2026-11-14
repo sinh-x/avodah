@@ -28,7 +28,7 @@ class SyncHttpHandler {
     '/api/sync/status': {'GET'},
     '/api/sync/pair/start': {'POST'},
     '/api/sync/pair/confirm': {'POST'},
-    '/api/sync/pair': {'DELETE'},
+    '/api/sync/pair': {'GET', 'DELETE'},
   };
   static const proxyMethods = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'};
 
@@ -133,8 +133,12 @@ class SyncHttpHandler {
       case '/api/sync/status':
         jsonResponse(r, 200, await pairing.getStatus());
       case '/api/sync/pair':
-        await pairing.revokePairing(r.headers.value('X-Av-Node-Id')!);
-        jsonResponse(r, 200, {'success': true});
+        if (r.method == 'GET') {
+          jsonResponse(r, 200, {'paired': true});
+        } else {
+          await pairing.revokePairing(r.headers.value('X-Av-Node-Id')!);
+          jsonResponse(r, 200, {'success': true});
+        }
       default:
         final body = await readJsonBody(r, 8192);
         final node = body['nodeId'];

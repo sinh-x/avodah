@@ -22,11 +22,23 @@ network/TLS failure is offline. No fallback to unauthenticated PA or SPA.
 
 Native TLS/certificate approval remains a conditional native implementation;
 WebSocket headers remain native-only. Browser Session shows an explicit unavailable
-message and the transport also rejects accidental session calls. Legacy native
-unscoped tokens are retained privately but not automatically forwarded to any
-server: prior ownership cannot be proven. Before upgrading an existing phone,
-operator-assisted scoped-credential migration/revoke-and-re-enroll is a required
-rollout gate. Do not silently discard the old token or change node identity.
+message and the transport also rejects accidental session calls.
+
+### Existing phone upgrade (server first)
+Deploy the hardened server before the updated phone. Pairing → **Use existing
+phone pairing?** displays the normalized destination and asks the user to confirm
+it is the original trusted server. Cancel sends nothing. Only that explicit action
+sends the saved credential and unchanged node ID to authenticated GET
+`/api/sync/pair`. HTTPS trust is still checked; redirects, denial, offline and
+storage failure do not claim migration. On success it binds the saved credential
+to that exact deployment, verifies secure persistence and keeps the old secret
+privately for old-app rollback. Another server cannot silently import it. Local
+Forget/Revoke removes that legacy fallback too, preventing automatic resurrection.
+An older server without the verification route must be upgraded first. A revoked
+legacy credential is not recovered by public enrollment or an identity-name reset;
+use the existing trusted operator/device-management owner. Local records are kept.
+Automated HTTP/storage/UI regressions cover this path; actual Android upgrade
+and device trust behavior still need separately authorized observation.
 
 Partial push acknowledgement throws so local pending changes are retained. Failed
 pull merges do not advance the receive watermark; replay is idempotent. Server

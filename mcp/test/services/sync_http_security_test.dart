@@ -87,6 +87,7 @@ void main() {
       '/api/config/categories': ['GET'],
       '/api/config/category-chips': ['GET', 'POST', 'DELETE'],
       '/api/sync/deltas': ['GET', 'POST'],
+      '/api/sync/pair': ['GET', 'DELETE'],
       '/api/test': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     };
     final before = sync.clock.lastTimestamp.pack();
@@ -108,6 +109,11 @@ void main() {
     expect(await db.select(db.syncWatermarks).get(), isEmpty);
     expect((await pairing.getPairedDevice('device'))!.lastSeen, 1);
     expect(calls, 0);
+    final verification = await send('GET', '/api/sync/pair', headers: auth());
+    expect(verification.statusCode, 200);
+    expect(jsonDecode(verification.body), {'paired': true});
+    expect(sync.clock.lastTimestamp.pack(), before);
+    expect((await pairing.getPairedDevice('device'))!.lastSeen, 1);
     expect(
         (await send('GET', '/api/config/categories', headers: auth()))
             .statusCode,

@@ -32,6 +32,7 @@ dependencies:
 
   # Secure sync (Phase 4 - AVO-065)
   cryptography: ^2.7.0
+  crypto: ^3.0.7
   flutter_secure_storage: ^9.2.2
 
   # Share intent receiver (for Android share-to-capture, P1)

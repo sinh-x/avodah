@@ -38,13 +38,12 @@ void main() {
       expect(url, 'http://100.64.0.1:9847');
     });
 
-    test('migrates legacy wss:// URL to http://', () async {
-      // wss → http (the regex strips both wss and ws to http)
+    test('migrates legacy wss:// URL without a TLS downgrade', () async {
       SharedPreferences.setMockInitialValues({
         kServerUrlKey: 'wss://drgnfly.tail10c2c6.ts.net:9847',
       });
       final url = await SettingsScreen.loadServerUrl();
-      expect(url, 'http://drgnfly.tail10c2c6.ts.net:9847');
+      expect(url, 'https://drgnfly.tail10c2c6.ts.net:9847');
     });
 
     test('strips trailing slashes', () async {

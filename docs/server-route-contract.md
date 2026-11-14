@@ -16,7 +16,7 @@ X-Av-Node-Id / X-Av-Pair-Token. PA credentials/approval remain independent.
 | /, /health | GET | minimal public liveness |
 | /api/sync/status | GET | public needsPairing only |
 | /api/sync/pair/start, /confirm | POST | human-code enrollment |
-| /api/sync/pair | DELETE | valid exact device, confirmed self-revoke |
+| /api/sync/pair | GET, DELETE | valid exact device; minimal paired:true verification or confirmed self-revoke |
 | /api/sync/deltas | GET, POST | valid exact device |
 | /api/config/categories | GET | valid exact device |
 | /api/config/category-chips | GET, POST, DELETE | valid exact device |

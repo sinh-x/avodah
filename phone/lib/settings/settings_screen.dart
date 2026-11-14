@@ -39,7 +39,7 @@ class SettingsScreen extends StatefulWidget {
 
   /// Loads the saved server URL, or returns the default.
   ///
-  /// Auto-migrates legacy `ws://` URLs to `http://` (Phase 9 removed WebSocket).
+  /// Migrates legacy ws/wss URLs without downgrading secure transport.
   /// On web, defaults to the page's own origin (same-origin requests go through
   /// the Caddy reverse proxy) instead of the hardcoded Tailscale IP.
   static Future<String> loadServerUrl() async {
@@ -62,8 +62,10 @@ class SettingsScreen extends StatefulWidget {
       }
     }
     var url = storedUrl ?? defaultUrl;
-    if (url.startsWith('ws://') || url.startsWith('wss://')) {
-      url = url.replaceFirst(RegExp(r'^wss?://'), 'http://');
+    if (url.startsWith('wss://')) {
+      url = url.replaceFirst('wss://', 'https://');
+    } else if (url.startsWith('ws://')) {
+      url = url.replaceFirst('ws://', 'http://');
     }
     // Strip trailing slashes to avoid double-slash in API paths
     while (url.endsWith('/')) {

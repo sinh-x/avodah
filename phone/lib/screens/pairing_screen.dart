@@ -43,6 +43,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   /// Pairing state machine states.
   static const _kStateLoading = 'loading';
+  static const _kStateLegacy = 'legacy';
   static const _kStateEnterPasscode = 'enter_passcode';
   static const _kStatePairing = 'pairing';
   static const _kStateError = 'error';
@@ -78,6 +79,22 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Future<void> _startPairingFlow() async {
     setState(() => _state = _kStateLoading);
+    try {
+      await widget.args.cryptoClient.loadPersistedState();
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Credential storage is unavailable. Local records are preserved; enable storage and retry.';
+        });
+      return;
+    }
+    if (!mounted) return;
+    if (widget.args.cryptoClient.hasLegacyPairing) {
+      setState(() => _state = _kStateLegacy);
+      return;
+    }
 
     // First check status to get the fingerprint
     PairingStatus? status;
@@ -143,6 +160,31 @@ class _PairingScreenState extends State<PairingScreen> {
     }
   }
 
+  Future<void> _migrateLegacyPairing() async {
+    setState(() => _state = _kStatePairing);
+    try {
+      await widget.args.cryptoClient.migrateLegacyPairing();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      final pending = widget.args.cryptoClient.checkPendingCertFingerprint();
+      if (pending != null && mounted) {
+        final approved = await _showCertApprovalDialog(pending);
+        if (approved) {
+          await widget.args.cryptoClient.approveCert(pending);
+          if (mounted) setState(() => _state = _kStateLegacy);
+          return;
+        }
+        widget.args.cryptoClient.rejectCert();
+      }
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Saved pairing was not migrated. Confirm this is your original server, update the server first, or retry when online. Local data and the saved credential are preserved.';
+        });
+    }
+  }
+
   Future<bool> _showCertApprovalDialog(String fingerprint) async {
     final approved = await showDialog<bool>(
       context: context,
@@ -202,6 +244,36 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Widget _buildBody() {
     switch (_state) {
+      case _kStateLegacy:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Use existing phone pairing?',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              Text(widget.args.cryptoClient.serverScope),
+              const SizedBox(height: 16),
+              const Text(
+                'Your saved pairing predates server-scoped storage. Continue only if this is your original trusted server. The saved credential will be sent only to this server for verification. Local records and node identity are kept.',
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _migrateLegacyPairing,
+                child: const Text(
+                  'Confirm original server and use saved pairing',
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
       case _kStateLoading:
         return const Center(
           child: Column(

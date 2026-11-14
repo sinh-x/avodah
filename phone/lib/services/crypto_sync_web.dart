@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'package:web/web.dart' as web;
+import '../utils/server_scope.dart';
 
 /// Browser credentials are origin storage, not HttpOnly or XSS-isolated.
 /// Every request re-reads storage so other tabs' Forget/Revoke takes effect.
@@ -9,9 +10,14 @@ class CryptoSyncService {
   final String baseUrl;
   final String nodeId;
   late final String _key;
+  String? _transientToken;
+  String get serverScope => normalizeServerScope(baseUrl);
+  bool get hasLegacyPairing => false;
+  Future<void> migrateLegacyPairing() async =>
+      throw UnsupportedError('Legacy migration is native-only');
 
   CryptoSyncService({required this.baseUrl, required this.nodeId}) {
-    final uri = Uri.parse(baseUrl);
+    final uri = Uri.parse(serverScope);
     final page = Uri.parse(web.window.location.href);
     if (uri.origin != page.origin ||
         uri.scheme != 'https' ||
@@ -24,25 +30,28 @@ class CryptoSyncService {
         'avodah.pair.${uri.origin}${uri.path.replaceFirst(RegExp(r'/+$'), '')}';
   }
 
-  String? get pairingToken => web.window.localStorage.getItem('$_key.token');
+  String? get pairingToken =>
+      _transientToken ?? web.window.localStorage.getItem('$_key.token');
   bool get isPaired => pairingToken?.isNotEmpty ?? false;
-  void setPairingToken(String? token) {
-    if (token == null)
-      web.window.localStorage.removeItem('$_key.token');
-    else
-      web.window.localStorage.setItem('$_key.token', token);
-  }
+  void setPairingToken(String? token) => _transientToken = token;
 
   Future<void> loadPersistedState() async {
     pairingToken;
   }
 
   Future<void> persistPairingToken(String token) async {
-    setPairingToken(token);
-    if (pairingToken != token) throw StateError('Credential storage failed');
+    web.window.localStorage.setItem('$_key.token', token);
+    if (web.window.localStorage.getItem('$_key.token') != token) {
+      throw StateError('Credential storage failed');
+    }
+    _transientToken = null;
   }
 
-  Future<void> clearPairingToken() async => setPairingToken(null);
+  Future<void> clearPairingToken() async {
+    _transientToken = null;
+    web.window.localStorage.removeItem('$_key.token');
+  }
+
   Future<void> storeServerPubKey(List<int> key) async =>
       web.window.localStorage.setItem('$_key.server', base64Encode(key));
   Future<List<int>?> getStoredServerPubKey() async {

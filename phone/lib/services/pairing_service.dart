@@ -26,12 +26,9 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'crypto_sync_service.dart';
-
-/// Storage keys for pairing data.
 
 /// Result of a pairing status check.
 class PairingStatus {
@@ -72,7 +69,6 @@ class PhonePairingService {
   PhonePairingService({
     required CryptoSyncService cryptoClient,
     required this.nodeId,
-    FlutterSecureStorage? secureStorage,
   }) : _cryptoClient = cryptoClient;
 
   /// Returns true if a pairing token is persisted.
@@ -259,6 +255,9 @@ class PhonePairingService {
   }
 
   Future<String> _readResponseBody(Stream<List<int>> response) async {
-    return utf8.decoder.bind(response).join();
+    return utf8.decoder
+        .bind(response)
+        .join()
+        .timeout(const Duration(seconds: 10));
   }
 }
