@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -12,6 +13,18 @@ import 'package:cryptography/cryptography.dart' hide KeyPair;
 import 'package:drift/drift.dart' show Value;
 import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
+
+class _ObservedPolicy extends SyncRequestPolicy {
+  void Function()? onAccepted;
+  _ObservedPolicy() : super(allowedOrigins: ['https://fixture.test']);
+  @override
+  Future<bool> authenticate(
+      HttpRequest request, PairingService? pairing) async {
+    final accepted = await super.authenticate(request, pairing);
+    if (accepted) onAccepted?.call();
+    return accepted;
+  }
+}
 
 class _RacingSyncApi extends SyncApiService {
   Future<void> Function()? afterExtract;
@@ -58,7 +71,7 @@ void main() {
         clock: HybridLogicalClock(nodeId: 'server'),
         pairingService: pairing,
         config: AvoConfig(),
-        policy: SyncRequestPolicy(allowedOrigins: ['https://fixture.test']));
+        policy: _ObservedPolicy());
     calls = 0;
     upstream = await HttpServer.bind('127.0.0.1', 0);
     upstream.listen((r) async {
@@ -246,6 +259,49 @@ void main() {
       }
     }
   });
+
+  for (final path in [
+    '/api/sync/deltas',
+    '/api/config/category-chips',
+    '/api/test'
+  ]) {
+    test('revocation fences an admitted streamed mutation: $path', () async {
+      final admitted = Completer<void>();
+      (sync.policy as _ObservedPolicy).onAccepted = () {
+        if (!admitted.isCompleted) admitted.complete();
+      };
+      final io = HttpClient();
+      try {
+        final request = await io.postUrl(Uri.parse('$base$path'));
+        auth().forEach(request.headers.set);
+        final body = jsonEncode({
+          'node': 'device',
+          'deltas': [],
+          'action': 'add',
+          'category': 'Working',
+          'chip': 'must-not-exist'
+        });
+        request.write(body.substring(0, 1));
+        await request.flush();
+        await admitted.future.timeout(const Duration(seconds: 2));
+        expect(
+            (await send('DELETE', '/api/sync/pair', headers: auth()))
+                .statusCode,
+            200);
+        final before = sync.clock.lastTimestamp.pack();
+        request.write(body.substring(1));
+        final response = await request.close();
+        expect(response.statusCode, 403);
+        await response.drain<void>();
+        expect(sync.clock.lastTimestamp.pack(), before);
+        expect(await db.select(db.categoryChips).get(), isEmpty);
+        expect(await db.select(db.syncWatermarks).get(), isEmpty);
+        expect(calls, 0);
+      } finally {
+        io.close(force: true);
+      }
+    });
+  }
 
   test('exact origins, method matrix, preflight and reserved routes', () async {
     for (final origin in [

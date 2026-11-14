@@ -156,14 +156,15 @@ http://127.0.0.1:19999 {
             probe(sync,'http://127.0.0.1:18080/sqlite3.wasm')
             dependencies=json.loads(docker('exec',sync,'curl','--noproxy','*','--silent','--max-time','3',
                 'http://127.0.0.1:19847/dependencies'))
-            assert dependencies == {'pa':'auth-unavailable','jira':'disabled'}
+            assert dependencies == {'pa':'auth-unavailable','jira':'disabled'}, 'Dependency status mismatch'
             report['optional_dependency_denial_core_ready'] = True
             if args.health_faults:
                 lock=sqlite3.connect(root/'data/avodah.db')
                 try:
                     lock.execute('BEGIN EXCLUSIVE')
                     start=time.monotonic()
-                    assert request('/_fixture/ready')[0] == 503
+                    locked_status=request('/_fixture/ready')[0]
+                    assert locked_status == 503, f'Locked DB returned {locked_status}, expected503'
                     report['locked_db_not_ready_seconds']=round(time.monotonic()-start,3)
                     assert report['locked_db_not_ready_seconds'] < 3
                 finally: lock.close()
@@ -270,6 +271,7 @@ http://127.0.0.1:19999 {
             report['stopped_backend_detection_seconds']=round(time.monotonic()-start,3)
             report['cleanup'] = 'exact fixture resources removed in finally'
         except Exception:
+            Path('/tmp/avo121-runtime-partial.json').write_text(json.dumps(report))
             # Fixture-only sanitized process logs; the server code channel is
             # a separate private file, never stdout/stderr. No live container IDs.
             with open('/tmp/avo121-fixture-debug.log','w') as debug:

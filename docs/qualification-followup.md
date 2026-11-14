@@ -35,7 +35,10 @@ production rollout permission. No production mounts/services are used by tests.
   WS attempts close their own HTTP transport.
 - Pull captures watermark before asynchronous table extraction, so a concurrent
   write cannot be skipped. Merge batches run in serialized SQLite transactions;
-  partial failure retains received watermark. Jira scans/posts are serialized to
+  partial failure retains received watermark. Streamed mutations re-check device
+  authority inside the commit transaction, and PA forwarding re-checks after
+  receiving the body: a completed revoke fences a previously admitted slow POST.
+  Chip changes are transactional and acknowledged only after commit. Jira scans/posts are serialized to
   avoid duplicate acknowledged worklogs from concurrent sync batches; empty
   credentials cannot produce anonymous requests. Errors/logs are sanitized.
 - Recovery validates directory ownership, rejects symlink destination/lock/

@@ -179,6 +179,8 @@ class SyncHttpHandler {
     final client = http.Client();
     try {
       final bytes = await readBoundedBytes(r, avoMaxPushDeltaBodyBytes);
+      // Admission may have preceded a streamed body and a completed revoke.
+      if (!await policy.authenticate(r, pairing)) return;
       final upstream = http.Request(r.method, Uri.parse('$agentApiUrl${r.uri}'))
         ..followRedirects = false
         ..bodyBytes = bytes;

@@ -46,6 +46,8 @@ class SyncDocType {
   static const String categoryChip = 'categoryChip';
 }
 
+class _PairingRevoked implements Exception {}
+
 /// Handles CRDT delta sync HTTP requests.
 class SyncApiService {
   final AppDatabase db;
@@ -230,8 +232,14 @@ class SyncApiService {
             {'error': 'Method not allowed'});
       }
     } catch (e) {
-      _jsonResponse(request, e is HttpException ? 413 : 400,
-          {'error': e is HttpException ? 'Body too large' : 'Invalid request'});
+      if (e is _PairingRevoked) {
+        _jsonResponse(request, 403,
+            {'error': 'Pairing required', 'code': 'PAIRING_REQUIRED'});
+      } else {
+        _jsonResponse(request, e is HttpException ? 413 : 400, {
+          'error': e is HttpException ? 'Body too large' : 'Invalid request'
+        });
+      }
     }
 
     return true;
@@ -290,8 +298,10 @@ class SyncApiService {
       return;
     }
 
-    final result =
-        await mergePushBatch(remoteNode: remoteNode, deltas: deltasJson);
+    final result = await mergePushBatch(
+        remoteNode: remoteNode,
+        deltas: deltasJson,
+        pairToken: request.headers.value('X-Av-Pair-Token'));
 
     _jsonResponse(request, HttpStatus.ok, {
       'merged': result.merged,
@@ -417,73 +427,17 @@ class SyncApiService {
       return;
     }
 
-    if (action == 'add') {
-      // Find existing chip by category+label to check if it already exists
-      final existingChips = await db.select(db.categoryChips).get();
-      CategoryChip? existing;
-      for (final row in existingChips) {
-        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
-        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-          existing = row;
-          break;
-        }
-      }
-
-      if (existing != null) {
-        _jsonResponse(request, HttpStatus.ok, {
-          'success': true,
-          'action': 'already_exists',
-          'category': category,
-          'chip': chip,
-        });
-      } else {
-        // Create new CRDT document and upsert
-        final doc = CategoryChipDocument.create(
-          clock: clock,
-          category: category,
-          label: chip,
-          sortOrder: 0,
-        );
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
-        _jsonResponse(request, HttpStatus.ok, {
-          'success': true,
-          'action': 'added',
-          'category': category,
-          'chip': chip,
-        });
-      }
-    } else if (action == 'remove') {
-      // Soft-delete via CRDT _deleted field
-      final existingChips = await db.select(db.categoryChips).get();
-      CategoryChip? existing;
-      for (final row in existingChips) {
-        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
-        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-          existing = row;
-          break;
-        }
-      }
-
-      if (existing != null) {
-        final doc =
-            CategoryChipDocument.fromDrift(chip: existing, clock: clock);
-        doc.delete();
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
-      }
-      _jsonResponse(request, HttpStatus.ok, {
-        'success': true,
-        'action': 'removed',
-        'category': category,
-        'chip': chip,
-      });
-    } else {
-      _jsonResponse(request, HttpStatus.badRequest,
-          {'error': 'Invalid action. Use "add" or "remove"'});
+    if (action != 'add' && action != 'remove') {
+      _jsonResponse(
+          request, 400, {'error': 'Invalid action. Use "add" or "remove"'});
+      return;
     }
+    final result = await db.transaction(() async {
+      await _ensureStillPaired(request);
+      return _mutateChip(category, chip, add: action == 'add');
+    });
+    // Do not acknowledge a mutation before its transaction commits.
+    _jsonResponse(request, 200, result);
   }
 
   /// DELETE /api/config/category-chips?category=Working&chip=standup
@@ -499,24 +453,55 @@ class SyncApiService {
       return;
     }
 
-    // Find and soft-delete via CRDT _deleted field
-    final existingChips = await db.select(db.categoryChips).get();
-    for (final row in existingChips) {
+    final result = await db.transaction(() async {
+      await _ensureStillPaired(request);
+      return _mutateChip(category, chip, add: false);
+    });
+    _jsonResponse(request, 200, result);
+  }
+
+  Future<void> _ensureStillPaired(HttpRequest request) async {
+    // Null is only usable by an explicitly stubbed domain policy in unit tests;
+    // the public request guard always denies an unconfigured pairing service.
+    if (pairingService != null &&
+        !await pairingService!.verifyPairToken(
+            request.headers.value('X-Av-Node-Id') ?? '',
+            request.headers.value('X-Av-Pair-Token') ?? '')) {
+      throw _PairingRevoked();
+    }
+  }
+
+  Future<Map<String, dynamic>> _mutateChip(String category, String chip,
+      {required bool add}) async {
+    final rows = await db.select(db.categoryChips).get();
+    CategoryChipDocument? existing;
+    for (final row in rows) {
       final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
       if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-        doc.delete();
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
+        existing = doc;
         break;
       }
     }
-
-    _jsonResponse(request, HttpStatus.ok, {
+    var action = add ? 'already_exists' : 'removed';
+    if (add && existing == null) {
+      final doc = CategoryChipDocument.create(
+          clock: clock, category: category, label: chip, sortOrder: 0);
+      await db
+          .into(db.categoryChips)
+          .insertOnConflictUpdate(doc.toDriftCompanion());
+      action = 'added';
+    } else if (!add && existing != null) {
+      existing.delete();
+      await db
+          .into(db.categoryChips)
+          .insertOnConflictUpdate(existing.toDriftCompanion());
+    }
+    return {
       'success': true,
+      'action': action,
       'category': category,
-      'chip': chip,
-    });
+      'chip': chip
+    };
   }
 
   /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.
@@ -526,8 +511,14 @@ class SyncApiService {
   Future<({int merged, List<String> errors, String watermark})> mergePushBatch({
     required String remoteNode,
     required List<Map<String, dynamic>> deltas,
+    String? pairToken,
   }) async {
     final result = await db.transaction(() async {
+      if (pairToken != null &&
+          (pairingService == null ||
+              !await pairingService!.verifyPairToken(remoteNode, pairToken))) {
+        throw _PairingRevoked();
+      }
       var merged = 0;
       final errors = <String>[];
       _remoteNodeId = remoteNode;
