@@ -1,0 +1,238 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:avodah_core/avodah_core.dart';
+import 'package:avodah_mcp/config/avo_config.dart';
+import 'package:avodah_mcp/services/pairing_service.dart';
+import 'package:avodah_mcp/services/sync_api_service.dart';
+import 'package:avodah_mcp/services/sync_http_handler.dart';
+import 'package:avodah_mcp/services/sync_request_policy.dart';
+import 'package:avodah_mcp/storage/database_opener.dart';
+import 'package:cryptography/cryptography.dart' hide KeyPair;
+import 'package:drift/drift.dart' show Value;
+import 'package:http/http.dart' as http;
+import 'package:test/test.dart';
+
+void main() {
+  late AppDatabase db;
+  late PairingService pairing;
+  late SyncApiService sync;
+  late HttpServer server, upstream;
+  late String base, token, code;
+  late int calls;
+  late DateTime now;
+  final client = http.Client();
+
+  setUp(() async {
+    db = openMemoryDatabase();
+    now = DateTime.now();
+    pairing =
+        PairingService(db: db, deliverCode: (v) => code = v, now: () => now);
+    final key = Uint8List.fromList(List.filled(32, 7));
+    token = await generateSyncVerifyCode(key);
+    await db.into(db.pairedDevices).insert(PairedDevicesCompanion.insert(
+        id: 'device',
+        publicKey: key,
+        privateKey: Value(key),
+        created: 1,
+        lastSeen: const Value(1)));
+    sync = SyncApiService(
+        db: db,
+        clock: HybridLogicalClock(nodeId: 'server'),
+        pairingService: pairing,
+        config: AvoConfig(),
+        policy: SyncRequestPolicy(allowedOrigins: ['https://fixture.test']));
+    calls = 0;
+    upstream = await HttpServer.bind('127.0.0.1', 0);
+    upstream.listen((r) async {
+      calls++;
+      if (WebSocketTransformer.isUpgradeRequest(r)) {
+        final ws = await WebSocketTransformer.upgrade(r);
+        ws.listen(ws.add);
+      } else {
+        r.response.statusCode =
+            403; // PA still independently denies paired users.
+        r.response.write('{"error":"PA denied"}');
+        await r.response.close();
+      }
+    });
+    server = await HttpServer.bind('127.0.0.1', 0);
+    final handler = SyncHttpHandler(
+        sync: sync,
+        pairing: pairing,
+        agentApiUrl: 'http://127.0.0.1:${upstream.port}');
+    server.listen(handler.call);
+    base = 'http://127.0.0.1:${server.port}';
+  });
+  tearDown(() async {
+    await server.close(force: true);
+    await upstream.close(force: true);
+    await db.close();
+  });
+  tearDownAll(client.close);
+
+  Future<http.Response> send(String method, String path,
+      {Map<String, String>? headers, String? body}) async {
+    final r = http.Request(method, Uri.parse('$base$path'))
+      ..headers.addAll(headers ?? {})
+      ..body = body ?? '';
+    return http.Response.fromStream(await client.send(r));
+  }
+
+  Map<String, String> auth() =>
+      {'X-Av-Node-Id': 'device', 'X-Av-Pair-Token': token};
+
+  test('protected negative matrix has no DB/clock/upstream effects', () async {
+    final routes = {
+      '/api/config/categories': ['GET'],
+      '/api/config/category-chips': ['GET', 'POST', 'DELETE'],
+      '/api/sync/deltas': ['GET', 'POST'],
+      '/api/test': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    };
+    final before = sync.clock.lastTimestamp.pack();
+    for (final headers in [
+      <String, String>{},
+      {'X-Av-Node-Id': 'device', 'X-Av-Pair-Token': 'invalid'},
+      {'X-Av-Node-Id': 'other', 'X-Av-Pair-Token': token},
+      {'X-Av-Node-Id': 'bad identity', 'X-Av-Pair-Token': token}
+    ]) {
+      for (final route in routes.entries) {
+        for (final method in route.value) {
+          final r = await send(method, route.key, headers: headers, body: '{}');
+          expect(r.statusCode, 403, reason: '$method ${route.key}');
+        }
+      }
+    }
+    expect(sync.clock.lastTimestamp.pack(), before);
+    expect(await db.select(db.categoryChips).get(), isEmpty);
+    expect(await db.select(db.syncWatermarks).get(), isEmpty);
+    expect((await pairing.getPairedDevice('device'))!.lastSeen, 1);
+    expect(calls, 0);
+    expect(
+        (await send('GET', '/api/config/categories', headers: auth()))
+            .statusCode,
+        200);
+    expect(
+        (await send('POST', '/api/config/category-chips',
+                headers: auth(),
+                body: jsonEncode({
+                  'action': 'add',
+                  'category': 'Working',
+                  'chip': 'standup'
+                })))
+            .statusCode,
+        200);
+    expect(await db.select(db.categoryChips).get(), hasLength(1));
+    expect((await send('GET', '/api/test', headers: auth())).statusCode, 403);
+    expect(calls, 1);
+    expect((await send('DELETE', '/api/sync/pair', headers: auth())).statusCode,
+        200);
+    for (final route in routes.entries) {
+      for (final method in route.value) {
+        expect(
+            (await send(method, route.key, headers: auth(), body: '{}'))
+                .statusCode,
+            403);
+      }
+    }
+    expect(await db.select(db.categoryChips).get(), hasLength(1));
+    expect(calls, 1);
+  });
+
+  test('exact origins, method matrix, preflight and reserved routes', () async {
+    for (final origin in [
+      'null',
+      'https://fixture.test.evil',
+      'http://fixture.test'
+    ]) {
+      expect(
+          (await send('GET', '/api/sync/status', headers: {'Origin': origin}))
+              .statusCode,
+          403);
+    }
+    final r = await send('OPTIONS', '/api/config/category-chips', headers: {
+      'Origin': 'https://fixture.test',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers':
+          'Content-Type,X-Av-Node-Id,X-Av-Pair-Token'
+    });
+    expect(r.statusCode, 204);
+    expect(r.headers['access-control-allow-origin'], 'https://fixture.test');
+    expect((await send('HEAD', '/api/sync/status')).statusCode, 405);
+    expect(
+        (await send('HEAD', '/api/config/categories', headers: auth()))
+            .statusCode,
+        405);
+    expect((await send('GET', '/api/sync/unknown', headers: auth())).statusCode,
+        404);
+    expect(calls, 0);
+  });
+
+  test(
+      'enrollment is private, one-use, expired/bounded and additional devices work',
+      () async {
+    final start =
+        await send('POST', '/api/sync/pair/start', body: '{"nodeId":"second"}');
+    expect(start.statusCode, 200);
+    expect(start.body, isNot(contains(code)));
+    final key = await generateKeyPair();
+    final mac = await Hmac.sha256()
+        .calculateMac(key.publicKey, secretKey: SecretKey(utf8.encode(code)));
+    final body = jsonEncode({
+      'nodeId': 'second',
+      'phonePubKey': base64Encode(key.publicKey),
+      'hmacProof': base64Encode(mac.bytes)
+    });
+    expect(
+        (await send('POST', '/api/sync/pair/confirm', body: body)).statusCode,
+        200);
+    expect(
+        (await send('POST', '/api/sync/pair/confirm', body: body)).statusCode,
+        403);
+    await pairing.startPairing('expire');
+    now = now.add(const Duration(seconds: 300));
+    expect(
+        (await pairing.confirmPairing(
+            nodeId: 'expire',
+            phonePubKeyBase64: '',
+            hmacProofBase64: ''))['success'],
+        false);
+    await pairing.startPairing('attempts');
+    for (var i = 0; i < 5; i++) {
+      await pairing.confirmPairing(
+          nodeId: 'attempts', phonePubKeyBase64: '', hmacProofBase64: '');
+    }
+    expect(
+        (await pairing.confirmPairing(
+            nodeId: 'attempts',
+            phonePubKeyBase64: '',
+            hmacProofBase64: ''))['error'],
+        contains('timeout'));
+    expect(
+        (await send('POST', '/api/sync/pair/start', body: 'x' * 8193))
+            .statusCode,
+        413);
+    for (var i = 0; i < 11; i++) {
+      final response = await send('POST', '/api/sync/pair/start',
+          body: '{"nodeId":"node$i"}');
+      if (i == 10) expect(response.statusCode, 429);
+    }
+  });
+
+  test('native WS works, invalid never connects, active revoke closes',
+      () async {
+    final wsBase = base.replaceFirst('http:', 'ws:');
+    await expectLater(
+        WebSocket.connect('$wsBase/ws/session'), throwsA(anything));
+    expect(calls, 0);
+    final ws = await WebSocket.connect('$wsBase/ws/session', headers: auth());
+    ws.add('echo');
+    final messages = ws.asBroadcastStream();
+    expect(await messages.first, 'echo');
+    await send('DELETE', '/api/sync/pair', headers: auth());
+    await messages.drain<void>().timeout(const Duration(seconds: 3));
+    await expectLater(WebSocket.connect('$wsBase/ws/session', headers: auth()),
+        throwsA(anything));
+    expect(calls, 1);
+  });
+}

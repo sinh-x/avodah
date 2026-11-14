@@ -22,6 +22,7 @@ import '../config/avo_config.dart';
 import '../config/paths.dart';
 import 'jira_service.dart';
 import 'pairing_service.dart';
+import 'sync_request_policy.dart';
 
 /// Stale timer threshold in minutes.
 const int avoStaleTimerMinutes = 10;
@@ -68,6 +69,7 @@ class SyncApiService {
 
   /// Optional pairing service for device authentication.
   final PairingService? pairingService;
+  final SyncRequestPolicy policy;
 
   SyncApiService({
     required this.db,
@@ -77,7 +79,8 @@ class SyncApiService {
     this.config,
     this.paths,
     this.pairingService,
-  });
+    SyncRequestPolicy? policy,
+  }) : policy = policy ?? SyncRequestPolicy();
 
   /// Tracks the current remote node ID during mergePushBatch for
   /// reconciliation logic.
@@ -191,43 +194,14 @@ class SyncApiService {
       return false;
     }
 
-    // Set CORS headers (restricted to paired origin after pairing is established)
-    await _setCorsHeaders(request);
-
-    if (method == 'OPTIONS') {
-      request.response
-        ..statusCode = HttpStatus.ok
-        ..close();
-      return true;
-    }
-
-    // Auth check for /api/sync/deltas — requires valid X-Av-Pair-Token
-    if (path == '/api/sync/deltas') {
-      final nodeId = request.headers.value('X-Av-Node-Id');
-      final token = request.headers.value('X-Av-Pair-Token');
-
-      if (nodeId == null || token == null) {
-        _jsonResponse(request, HttpStatus.forbidden,
-            {'error': 'Missing X-Av-Node-Id or X-Av-Pair-Token header'});
-        return true;
-      }
-
-      if (pairingService == null) {
-        _jsonResponse(request, HttpStatus.internalServerError,
-            {'error': 'Pairing service not configured'});
-        return true;
-      }
-
-      final isValid = await pairingService!.verifyPairToken(nodeId, token);
-      if (!isValid) {
-        _jsonResponse(request, HttpStatus.forbidden,
-            {'error': 'Invalid or expired pairing token'});
-        return true;
-      }
-
-      // Update lastSeen for the paired device
-      await _updateLastSeen(nodeId);
-    }
+    if (!policy.checkOrigin(request)) return true;
+    final methods = path == '/api/config/categories'
+        ? {'GET'}
+        : path == '/api/config/category-chips'
+            ? {'GET', 'POST', 'DELETE'}
+            : {'GET', 'POST'};
+    if (policy.preflight(request, methods)) return true;
+    if (!await policy.authenticate(request, pairingService)) return true;
 
     try {
       if (path == '/api/config/categories') {
@@ -256,10 +230,9 @@ class SyncApiService {
         _jsonResponse(request, HttpStatus.methodNotAllowed,
             {'error': 'Method not allowed'});
       }
-    } catch (e, stack) {
-      stderr.writeln('Sync API error: $e\n$stack');
-      _jsonResponse(
-          request, HttpStatus.internalServerError, {'error': e.toString()});
+    } catch (e) {
+      _jsonResponse(request, e is HttpException ? 413 : 400,
+          {'error': e is HttpException ? 'Body too large' : 'Invalid request'});
     }
 
     return true;
@@ -304,26 +277,14 @@ class SyncApiService {
       return;
     }
 
-    // Read raw bytes first, then decode with allowMalformed to handle
-    // any non-UTF-8 data in CRDT field values from the phone.
-    final bytes = await request.fold<List<int>>([], (a, b) => a..addAll(b));
-
-    if (bytes.length > avoMaxPushDeltaBodyBytes) {
-      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
-        'error':
-            'Body too large: ${bytes.length}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
-      });
-      return;
-    }
-
-    final body = utf8.decode(bytes, allowMalformed: true);
-    final json = jsonDecode(body) as Map<String, dynamic>;
+    final json = await readJsonBody(request, avoMaxPushDeltaBodyBytes);
 
     final remoteNode = json['node'] as String?;
     final deltasJson =
         (json['deltas'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 
-    if (remoteNode == null || remoteNode.isEmpty) {
+    if (remoteNode == null || remoteNode.isEmpty ||
+        remoteNode != request.headers.value('X-Av-Node-Id')) {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Missing "node" field'});
       return;
@@ -438,13 +399,7 @@ class SyncApiService {
       return;
     }
 
-    final body = await utf8.decoder.bind(request).join();
-    if (body.isEmpty) {
-      _jsonResponse(
-          request, HttpStatus.badRequest, {'error': 'Request body is empty'});
-      return;
-    }
-    final json = jsonDecode(body) as Map<String, dynamic>;
+    final json = await readJsonBody(request, 8192);
 
     final action = json['action'] as String?;
     final category = json['category'] as String?;
@@ -590,7 +545,9 @@ class SyncApiService {
     // Record the watermark of what we received from the remote node
     // and propagate merged deltas to connected clients immediately.
     if (merged > 0) {
-      await setWatermark(remoteNode, watermark, direction: 'received');
+      if (errors.isEmpty) {
+        await setWatermark(remoteNode, watermark, direction: 'received');
+      }
       onDeltasMerged?.call(merged);
       // Trigger Jira push for any newly merged worklogs (fire-and-forget).
       jiraService?.push().then(
@@ -1179,56 +1136,4 @@ class SyncApiService {
     }
   }
 
-  // ============================================================
-  // Auth & CORS helpers
-  // ============================================================
-
-  /// Sets CORS headers for sync endpoints.
-  ///
-  /// After pairing is established, CORS is restricted to the paired device's origin.
-  /// Before pairing, a permissive CORS is set for the pairing endpoints.
-  ///
-  /// Returns the paired device's origin if known, otherwise null.
-  Future<String?> _setCorsHeaders(HttpRequest request) async {
-    final origin = request.headers.value('origin');
-
-    // If pairing service is available, check if we have a paired device
-    String? allowedOrigin;
-    if (pairingService != null && origin != null) {
-      // Try to look up the paired device by nodeId (from X-Av-Node-Id header)
-      final nodeId = request.headers.value('X-Av-Node-Id');
-      if (nodeId != null) {
-        final device = await pairingService!.getPairedDevice(nodeId);
-        if (device != null && device.origin != null) {
-          // If origin matches the stored origin (or is a sub-origin of it), allow it
-          if (origin == device.origin ||
-              origin.startsWith(
-                  device.origin!.replaceFirst(RegExp(r'^https?://'), ''))) {
-            allowedOrigin = origin;
-          }
-        }
-      }
-    }
-
-    // Default: allow the origin header value for pairing endpoints
-    // (After pairing, the phone sends the same origin it used during pairing)
-    allowedOrigin ??= origin ?? '*';
-
-    request.response.headers.add('Access-Control-Allow-Origin',
-        allowedOrigin == '*' ? '*' : allowedOrigin);
-    request.response.headers
-        .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    request.response.headers.add('Access-Control-Allow-Headers',
-        'Content-Type, X-Av-Pair-Token, X-Av-Node-Id');
-
-    return allowedOrigin == '*' ? null : allowedOrigin;
-  }
-
-  /// Updates the lastSeen timestamp for a paired device.
-  Future<void> _updateLastSeen(String nodeId) async {
-    await (db.update(db.pairedDevices)..where((d) => d.id.equals(nodeId)))
-        .write(PairedDevicesCompanion(
-      lastSeen: Value(DateTime.now().millisecondsSinceEpoch),
-    ));
-  }
 }

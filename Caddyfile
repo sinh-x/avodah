@@ -2,8 +2,8 @@
 # TLS is handled by the external (drgnfly) Caddy at https://drgnfly/avodah,
 # which strips the /avodah prefix before forwarding to localhost:8080.
 # This Caddy only serves the Flutter web bundle; API and WebSocket routes
-# are handled directly by drgnfly-caddy → sync_server (9847) / pa-serve (9848).
-http://:{$WEB_PORT:-8080} {
+# are handled only through drgnfly-caddy → authenticated sync_server (9847).
+http://{$WEB_HOST:127.0.0.1}:{$WEB_PORT:8080} {
     # Serve Flutter web static assets from /srv
     root * /srv
     file_server

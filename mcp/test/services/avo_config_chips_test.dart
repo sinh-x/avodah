@@ -7,9 +7,22 @@ import 'dart:io';
 import 'package:avodah_core/avodah_core.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
-import 'package:avodah_mcp/services/sync_api_service.dart';
+import 'package:avodah_mcp/services/sync_api_service.dart' as api;
+import 'package:avodah_mcp/services/sync_request_policy.dart';
+import 'package:avodah_mcp/services/pairing_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:test/test.dart';
+
+// Domain tests stub authority explicitly. Real request-level auth and nonmutation
+// are covered separately by sync_http_security_test.dart, never bypassed in prod.
+class _DomainPolicy extends SyncRequestPolicy {
+  @override
+  Future<bool> authenticate(HttpRequest request, PairingService? pairing) async => true;
+}
+
+api.SyncApiService SyncApiService({required AppDatabase db,
+    required HybridLogicalClock clock, AvoConfig? config}) =>
+  api.SyncApiService(db: db, clock: clock, config: config, policy: _DomainPolicy());
 
 void main() {
   group('AvoConfig categoryChips', () {
@@ -119,7 +132,7 @@ void main() {
   group('SyncApiService /api/config/category-chips', () {
     late AppDatabase db;
     late HybridLogicalClock clock;
-    late SyncApiService syncApi;
+    late api.SyncApiService syncApi;
 
     setUp(() {
       db = openMemoryDatabase();
