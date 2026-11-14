@@ -25,10 +25,7 @@ class PairingScreenArgs {
   final CryptoSyncService cryptoClient;
   final String nodeId;
 
-  const PairingScreenArgs({
-    required this.cryptoClient,
-    required this.nodeId,
-  });
+  const PairingScreenArgs({required this.cryptoClient, required this.nodeId});
 }
 
 /// Pairing screen widget.
@@ -88,8 +85,8 @@ class _PairingScreenState extends State<PairingScreen> {
       status = await _pairingService.checkPairingStatus();
     } on Exception catch (e) {
       // Check if there's a pending cert fingerprint
-      final pendingFingerprint =
-          widget.args.cryptoClient.checkPendingCertFingerprint();
+      final pendingFingerprint = widget.args.cryptoClient
+          .checkPendingCertFingerprint();
       if (pendingFingerprint != null) {
         // Show cert approval dialog
         if (!mounted) return;
@@ -104,7 +101,8 @@ class _PairingScreenState extends State<PairingScreen> {
           widget.args.cryptoClient.rejectCert();
           setState(() {
             _state = _kStateError;
-            _errorMessage = 'Certificate not approved. Pairing requires TLS verification.';
+            _errorMessage =
+                'Certificate not approved. Pairing requires TLS verification.';
           });
           return;
         }
@@ -121,16 +119,8 @@ class _PairingScreenState extends State<PairingScreen> {
 
     if (!mounted) return;
 
-    if (!status.needsPairing) {
-      // Server thinks it's paired but we got here (likely 403 — phone lost
-      // its token). Revoke the stale pairing so we can re-pair cleanly.
-      debugPrint('[PairingScreen] Server paired but phone token missing — revoking stale pairing');
-      try {
-        await _pairingService.revokePairing();
-      } catch (e) {
-        debugPrint('[PairingScreen] Revoke failed (non-fatal): $e');
-      }
-    }
+    // Global status describes the server, not this device. Other enrolled
+    // devices must never suppress enrollment or trigger a revoke here.
 
     // Store fingerprint if provided
     _serverFingerprint = status.serverFingerprint;
@@ -318,7 +308,7 @@ class _PairingScreenState extends State<PairingScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Enter the 6-digit code shown on your\nserver console to pair this device.',
+            'Enter the private operator code within 5 minutes. Local data is preserved.',
             style: TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
@@ -357,6 +347,7 @@ class _PairingScreenState extends State<PairingScreen> {
                   ),
                   decoration: const InputDecoration(
                     counterText: '',
+                    labelText: 'Six-digit pairing code',
                     hintText: '------',
                     hintStyle: TextStyle(
                       fontSize: 32,
@@ -386,8 +377,11 @@ class _PairingScreenState extends State<PairingScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.verified_user_outlined,
-                          size: 16, color: Colors.grey),
+                      const Icon(
+                        Icons.verified_user_outlined,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'TLS Certificate Fingerprint',

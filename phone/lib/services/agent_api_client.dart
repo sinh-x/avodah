@@ -29,6 +29,7 @@ import '../models/team_folder.dart';
 import '../models/ticket.dart';
 import '../models/timer_info.dart';
 import 'kanban_constants.dart';
+import 'scoped_http_client.dart';
 
 /// HTTP client for the agent workflow API endpoints.
 ///
@@ -41,16 +42,19 @@ class AgentApiClient {
 
   /// Pairing token for authenticated proxy requests.
   String? pairingToken;
+  String? Function()? pairingTokenProvider;
+  String? get activePairingToken => pairingTokenProvider != null
+      ? pairingTokenProvider!() : pairingToken;
 
   /// Node ID for authenticated proxy requests.
   String? nodeId;
 
   AgentApiClient({required this.baseUrl, http.Client? client})
-      : _client = client ?? http.Client();
+      : _client = client ?? createScopedClient(baseUrl);
 
   /// Auth headers for proxy requests via the sync server.
   Map<String, String> get _authHeaders => {
-        if (pairingToken != null) 'X-Av-Pair-Token': pairingToken!,
+        if (activePairingToken != null) 'X-Av-Pair-Token': activePairingToken!,
         if (nodeId != null) 'X-Av-Node-Id': nodeId!,
       };
 

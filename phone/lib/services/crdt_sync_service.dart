@@ -25,6 +25,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cryptography/cryptography.dart' show SecureRandom;
 
 import 'crypto_sync_service.dart';
 import 'pairing_service.dart';
@@ -168,6 +169,8 @@ class CrdtSyncService {
   final HybridLogicalClock clock;
   final http.Client _plainClient;
   final CryptoSyncService? _cryptoClient;
+  CryptoSyncService? get authenticatedTransport => _cryptoClient;
+  final String nodeId;
 
   DateTime? _lastPushStartedAt;
   DateTime? _lastPushCompletedAt;
@@ -191,7 +194,7 @@ class CrdtSyncService {
     http.Client? client,
     CryptoSyncService? cryptoClient,
     this.onNeedsPairing,
-    required String nodeId,
+    required this.nodeId,
   }) : _plainClient = client ?? http.Client(),
        _cryptoClient = cryptoClient {
     if (_cryptoClient != null) {
@@ -212,13 +215,18 @@ class CrdtSyncService {
   bool get isPaired => _cryptoClient?.isPaired ?? false;
 
   /// Returns or creates the phone's persistent node ID.
-  static Future<String> getOrCreateNodeId() async {
+  static Future<String> getOrCreateNodeId({String? scope}) async {
     final prefs = await SharedPreferences.getInstance();
-    var nodeId = prefs.getString(_kPhoneNodeIdKey);
+    final key = scope == null
+        ? _kPhoneNodeIdKey
+        : '$_kPhoneNodeIdKey:${scope.replaceFirst(RegExp(r'/+$'), '')}';
+    var nodeId = prefs.getString(key);
     if (nodeId == null || nodeId.isEmpty) {
       // Generate a stable node ID from timestamp + random bits
-      nodeId = 'phone-${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(_kPhoneNodeIdKey, nodeId);
+      nodeId =
+          '${scope == null ? 'phone' : 'browser'}-${base64UrlEncode(List.generate(18, (_) => SecureRandom.fast.nextInt(256))).replaceAll('=', '')}';
+      if (!await prefs.setString(key, nodeId))
+        throw StateError('Node storage unavailable');
     }
     return nodeId;
   }
@@ -245,7 +253,6 @@ class CrdtSyncService {
     }
 
     final watermark = await _getDesktopWatermark();
-    final nodeId = await getOrCreateNodeId();
 
     debugPrint('[Sync] Pulling deltas since watermark=$watermark');
 
@@ -306,6 +313,10 @@ class CrdtSyncService {
           '$e [category=${category.name}]',
         );
       }
+    }
+
+    if (merged != deltas.length) {
+      throw StateError('Sync merge failed; watermark retained for replay');
     }
 
     // Advance our clock to at least the desktop's watermark
@@ -418,7 +429,7 @@ class CrdtSyncService {
       case _SyncDocType.categoryChip:
         await _mergeCategoryChip(id, state);
       default:
-        debugPrint('[CrdtSync] Unknown delta type: $type — skipping');
+        throw StateError('Unsupported sync document type');
     }
   }
 
@@ -585,7 +596,6 @@ class CrdtSyncService {
     debugPrint('[Sync] Pushing ${deltas.length} deltas');
 
     try {
-      final nodeId = await getOrCreateNodeId();
       final body = jsonEncode({'node': nodeId, 'deltas': deltas});
 
       final int statusCode;
@@ -631,6 +641,12 @@ class CrdtSyncService {
       final json = jsonDecode(responseBody) as Map<String, dynamic>;
       final merged = (json['merged'] as num?)?.toInt() ?? 0;
       final watermark = json['watermark'] as String?;
+      if (merged != deltas.length ||
+          (json['errors'] as List? ?? []).isNotEmpty) {
+        throw StateError(
+          'Sync push not fully acknowledged; local changes retained',
+        );
+      }
 
       // Advance our clock to the desktop's post-merge watermark
       if (watermark != null && watermark != '0') {

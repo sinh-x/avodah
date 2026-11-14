@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:avodah_core/version.dart';
 import '../services/agent_api_client.dart';
+import '../screens/pairing_screen.dart';
 import '../services/crdt_sync_service.dart';
 import '../services/display_settings_service.dart';
 
@@ -133,8 +134,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Forget This Server?'),
         content: const Text(
-          'This will remove pairing with the current sync server. '
-          'You will need to pair again to resume sync.\n\n'
+          'This requests confirmed remote revocation. If offline, nothing is '
+          'forgotten. Use Forget locally separately if needed.\n\n'
           'Your local data will NOT be deleted.',
         ),
         actions: [
@@ -145,7 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Forget Server'),
+            child: const Text('Revoke this device'),
           ),
         ],
       ),
@@ -160,7 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Server forgotten. Please restart the app.'),
+            content: Text('Remote revocation confirmed. Local data preserved.'),
           ),
         );
       }
@@ -578,6 +579,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildTechnicalTab() {
     return ListView(
       children: [
+        if (widget.crdtSyncService?.authenticatedTransport != null) ...[
+          ListTile(
+            title: const Text('Pair this device'),
+            subtitle: Text(widget.crdtSyncService!.baseUrl),
+            trailing: const Icon(Icons.link),
+            onTap: () async {
+              final transport = widget.crdtSyncService!.authenticatedTransport!;
+              await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PairingScreen(
+                    args: PairingScreenArgs(
+                      cryptoClient: transport,
+                      nodeId: transport.nodeId,
+                    ),
+                  ),
+                ),
+              );
+              await widget.crdtSyncService!.loadPersistedState();
+              if (mounted) setState(() {});
+            },
+          ),
+          ListTile(
+            title: const Text('Forget locally'),
+            subtitle: const Text(
+              'Server may still trust this device. Local records are kept.',
+            ),
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Forget locally?'),
+                  content: const Text(
+                    'This does not revoke server trust. Unsynced local data stays here.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Forget locally'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed != true) return;
+              await widget.crdtSyncService!.pairingService?.forgetLocally();
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
         // Sync Server URL
         Padding(
           padding: const EdgeInsets.all(16),
@@ -699,7 +753,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           )
                         : const Icon(Icons.link_off, color: Colors.red),
                     label: Text(
-                      _forgetting ? 'Forgetting...' : 'Forget This Server',
+                      _forgetting ? 'Revoking...' : 'Revoke this device',
                     ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,

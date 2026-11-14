@@ -24,7 +24,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:web_socket_channel/io.dart';
+import 'ws_connect.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/ws_session_event.dart';
@@ -88,7 +88,7 @@ class WsSessionClient {
   }) async {
     final base = wsBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/ws/session');
-    final channel = IOWebSocketChannel.connect(uri, headers: headers);
+    final channel = connectNativeSession(uri, headers);
     try {
       await channel.ready.timeout(
         const Duration(seconds: 10),
