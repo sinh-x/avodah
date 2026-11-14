@@ -19,8 +19,10 @@ WORKDIR /app
 # Allow Flutter to run as root inside Docker
 ENV CI=true
 
-# Copy entire repo to /app (needed because phone/ depends on ../packages/avodah_core)
-COPY . .
+# Only application/build inputs; static Caddy changes must not rebuild Flutter.
+COPY packages/avodah_core/ packages/avodah_core/
+COPY phone/ phone/
+COPY tool/fetch-web-assets.sh tool/fetch-web-assets.sh
 
 # Enable web support
 RUN flutter config --enable-web

@@ -15,8 +15,10 @@ production rollout permission. No production mounts/services are used by tests.
   rather than the incorrect hand-rolled implementation. wss URL migration no
   longer downgrades TLS. Browser storage-failure rollback can use an ephemeral
   in-memory credential without first writing the failing storage again.
-- Static Caddy admin is off, removing its competing :2019 listener. This does not
-  change the shared gateway's separately owned admin endpoint.
+- Static Caddy admin is off, removing its competing :2019 listener. Actual peer
+  container probes also caught that a site hostname alone does not restrict
+  Caddy's socket bind: an explicit `bind {$WEB_HOST:127.0.0.1}` now does so.
+  This does not change the shared gateway's separately owned admin endpoint.
 - CI Linux failure traced to old plugin-vendored JSON literal operators becoming
   warnings-as-errors in new Clang. A compiler-checked, target-specific exception
   keeps that one third-party deprecation as a warning; all other -Werror checks
