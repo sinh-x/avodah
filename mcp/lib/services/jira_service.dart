@@ -302,7 +302,10 @@ class JiraService {
     try {
       final profileConfig = await JiraProfileConfig.load(runtimePath);
       final profile = profileConfig.getProfile(config.profileName);
-      return profile?.toCredentials();
+      if (profile == null || profile.username.trim().isEmpty || profile.apiToken.trim().isEmpty) {
+        return null;
+      }
+      return profile.toCredentials();
     } catch (_) {
       return null;
     }

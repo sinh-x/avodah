@@ -13,6 +13,23 @@ import 'package:drift/drift.dart' show Value;
 import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
 
+class _RacingSyncApi extends SyncApiService {
+  Future<void> Function()? afterExtract;
+  _RacingSyncApi(
+      {required super.db,
+      required super.clock,
+      required super.pairingService,
+      required super.config,
+      required super.policy});
+  @override
+  Future<List<Map<String, dynamic>>> extractDeltas(
+      HybridTimestamp since) async {
+    final result = await super.extractDeltas(since);
+    await afterExtract?.call();
+    return result;
+  }
+}
+
 void main() {
   late AppDatabase db;
   late PairingService pairing;
@@ -36,7 +53,7 @@ void main() {
         privateKey: Value(key),
         created: 1,
         lastSeen: const Value(1)));
-    sync = SyncApiService(
+    sync = _RacingSyncApi(
         db: db,
         clock: HybridLogicalClock(nodeId: 'server'),
         pairingService: pairing,
@@ -145,6 +162,91 @@ void main() {
     expect(calls, 1);
   });
 
+  test('seven-family state remains byte-equivalent after every auth rejection',
+      () async {
+    final stamp = sync.clock.now().pack();
+    final result =
+        await sync.mergePushBatch(remoteNode: 'fixture-seed', deltas: [
+      for (final type in [
+        'task',
+        'worklog',
+        'timer',
+        'project',
+        'dailyPlan',
+        'dayPlanTask',
+        'categoryChip'
+      ])
+        {
+          'type': type,
+          'id': type == 'timer' ? 'active-timer' : 'fixture-$type',
+          'fields': {
+            for (final field in [
+              'title',
+              'taskTitle',
+              'name',
+              'date',
+              'category',
+              'label'
+            ])
+              field: {'v': 'synthetic', 't': stamp}
+          }
+        }
+    ]);
+    expect(result.errors, isEmpty);
+    expect(result.merged, 7);
+    Future<String> state() async => jsonEncode({
+          for (final table in db.allTables)
+            table.actualTableName: (await db
+                    .customSelect('SELECT * FROM "${table.actualTableName}"')
+                    .get())
+                .map((row) => row.data)
+                .toList()
+        });
+    final routes = {
+      '/api/config/categories': ['GET'],
+      '/api/config/category-chips?category=synthetic&chip=synthetic': [
+        'GET',
+        'POST',
+        'DELETE'
+      ],
+      '/api/sync/deltas': ['GET', 'POST'],
+      '/api/sync/pair': ['GET', 'DELETE'],
+      '/api/test': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    };
+    for (final headers in [
+      <String, String>{},
+      {'X-Av-Node-Id': 'device', 'X-Av-Pair-Token': 'invalid'},
+      {'X-Av-Node-Id': 'wrong-node', 'X-Av-Pair-Token': token}
+    ]) {
+      final before = await state();
+      final clockBefore = sync.clock.lastTimestamp.pack();
+      for (final route in routes.entries) {
+        for (final method in route.value) {
+          final response = await send(method, route.key,
+              headers: headers,
+              body:
+                  '{"action":"remove","category":"synthetic","chip":"synthetic","node":"device","deltas":[]}');
+          expect(response.statusCode, 403);
+          expect(await state(), before, reason: '$method ${route.key}');
+          expect(sync.clock.lastTimestamp.pack(), clockBefore);
+          expect(calls, 0);
+        }
+      }
+    }
+    await pairing.revokePairing('device');
+    final before = await state();
+    for (final route in routes.entries) {
+      for (final method in route.value) {
+        expect(
+            (await send(method, route.key, headers: auth(), body: '{}'))
+                .statusCode,
+            403);
+        expect(await state(), before);
+        expect(calls, 0);
+      }
+    }
+  });
+
   test('exact origins, method matrix, preflight and reserved routes', () async {
     for (final origin in [
       'null',
@@ -223,6 +325,25 @@ void main() {
           body: '{"nodeId":"node$i"}');
       if (i == 10) expect(response.statusCode, 429);
     }
+  });
+
+  test('concurrent write after extraction is not skipped by the next pull',
+      () async {
+    final service = sync as _RacingSyncApi;
+    service.afterExtract = () async {
+      service.afterExtract = null;
+      final doc =
+          TaskDocument.create(clock: sync.clock, title: 'concurrent fixture');
+      await db.into(db.tasks).insert(doc.toDriftCompanion());
+    };
+    final first = jsonDecode(
+        (await send('GET', '/api/sync/deltas', headers: auth())).body) as Map;
+    expect(first['deltas'], isEmpty);
+    final second = jsonDecode((await send('GET',
+            '/api/sync/deltas?since=${Uri.encodeQueryComponent(first['watermark'] as String)}',
+            headers: auth()))
+        .body) as Map;
+    expect(second['deltas'], hasLength(1));
   });
 
   test('health distinguishes core readiness and optional PA denial', () async {

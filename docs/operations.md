@@ -93,14 +93,18 @@ Record exact clean Git commit and `git status --porcelain`, Dart/Flutter version
 pubspec and lock hashes, resolved Docker base digests, downloaded web-asset hashes,
 image IDs/digests and candidate bundle checksums in a private rollout dossier.
 OCI revision labels accept SOURCE_REVISION; unknown/default or mutable build tags
-are not provenance. Both Docker builders currently use mutable upstream tags;
-resolve/pin them in the exact release invocation and record the result. Do not
-claim reproducibility or installed correspondence from version strings.
+are not provenance. Docker builders/runtimes now pin exact Dart3.10.8/Flutter3.38.9/Caddy2.11.2
+and Debian base digests in the Dockerfiles; MCP/core/phone dependency locks are
+tracked and enforced. Public SQLite WASM/worker inputs are checksum-pinned.
+Record OS package inventories too: apt indexes remain external mutable inputs.
+Do not claim bit-for-bit reproducibility or installed correspondence from version
+strings, source labels, or pinned bases alone.
 
 Before upgrade verify prechange recovery and schema compatibility on disposable
 copies. Existing chip migration remains additive/idempotent; schema rollback is
 not automatically safe. Compare old/new schema and pairing credential behavior,
-especially unscoped legacy native credentials. Incompatible downgrade requires
+especially the explicit, verified legacy-native credential migration in
+[browser-sync.md](browser-sync.md). Incompatible downgrade requires
 forward recovery or restoration into **new isolated storage**, not live overwrite.
 Retain old images and backups. Rollback must keep hardened gateway containment;
 never reopen insecure config routes to make an old client work.

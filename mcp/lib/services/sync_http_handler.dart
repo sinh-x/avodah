@@ -178,13 +178,7 @@ class SyncHttpHandler {
   Future<void> _proxy(HttpRequest r) async {
     final client = http.Client();
     try {
-      final bytes = <int>[];
-      await for (final chunk in r.timeout(const Duration(seconds: 3))) {
-        if (bytes.length + chunk.length > avoMaxPushDeltaBodyBytes) {
-          throw const HttpException('body too large');
-        }
-        bytes.addAll(chunk);
-      }
+      final bytes = await readBoundedBytes(r, avoMaxPushDeltaBodyBytes);
       final upstream = http.Request(r.method, Uri.parse('$agentApiUrl${r.uri}'))
         ..followRedirects = false
         ..bodyBytes = bytes;
@@ -203,8 +197,7 @@ class SyncHttpHandler {
       // PA Authorization is forwarded, never synthesized from device authority.
       final response =
           await client.send(upstream).timeout(const Duration(seconds: 3));
-      final body =
-          await response.stream.toBytes().timeout(const Duration(seconds: 3));
+      final body = await readBoundedBytes(response.stream, 16 * 1024 * 1024);
       r.response.statusCode = response.statusCode;
       response.headers.forEach((name, value) {
         if (!{
@@ -220,6 +213,11 @@ class SyncHttpHandler {
       });
       r.response.add(body);
       await r.response.close();
+    } on HttpException {
+      jsonResponse(r, 413, {'error': 'Proxy body limit exceeded'});
+    } on TimeoutException {
+      jsonResponse(
+          r, 502, {'error': 'PA request timed out', 'code': 'BAD_GATEWAY'});
     } catch (_) {
       jsonResponse(r, 502, {'error': 'PA unavailable', 'code': 'BAD_GATEWAY'});
     } finally {
@@ -229,12 +227,15 @@ class SyncHttpHandler {
 
   Future<void> _webSocket(HttpRequest r) async {
     WebSocket? upstream;
+    final transport = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 3);
     try {
       final uri = Uri.parse('$agentApiUrl${r.uri}');
       final auth = r.headers.value('authorization');
       upstream = await WebSocket.connect(
         uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws').toString(),
         headers: {if (auth != null) 'Authorization': auth},
+        customClient: transport,
       ).timeout(const Duration(seconds: 3));
       // Recheck after connect to fence a revocation racing the handshake.
       if (!await policy.authenticate(r, pairing)) {
@@ -246,13 +247,27 @@ class SyncHttpHandler {
       pairing.trackSocket(node, upstream);
       pairing.trackSocket(node, downstream);
       final peer = upstream;
-      peer.listen(downstream.add,
+      final token = r.headers.value('X-Av-Pair-Token')!;
+      Future<void> forward(WebSocket target, dynamic data) async {
+        if (await pairing.verifyPairToken(node, token) &&
+            target.readyState == WebSocket.open) {
+          target.add(data);
+        } else {
+          await peer.close(WebSocketStatus.policyViolation);
+          await downstream.close(WebSocketStatus.policyViolation);
+        }
+      }
+
+      peer.asyncMap((data) => forward(downstream, data)).listen((_) {},
           onDone: downstream.close, onError: (_) => downstream.close());
-      downstream.listen(peer.add,
-          onDone: peer.close, onError: (_) => peer.close());
+      downstream
+          .asyncMap((data) => forward(peer, data))
+          .listen((_) {}, onDone: peer.close, onError: (_) => peer.close());
     } catch (_) {
       await upstream?.close();
       jsonResponse(r, 502, {'error': 'PA WebSocket unavailable'});
+    } finally {
+      transport.close(force: true);
     }
   }
 }

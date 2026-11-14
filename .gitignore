@@ -4,6 +4,9 @@
 build/
 *.iml
 pubspec.lock
+!mcp/pubspec.lock
+!phone/pubspec.lock
+!packages/avodah_core/pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
 

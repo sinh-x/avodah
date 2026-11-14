@@ -95,6 +95,33 @@ class RecoveryTests(unittest.TestCase):
         recovery.verify(good)
         self.assertFalse(list(self.backups.glob('.pending-*')))
 
+    def test_symlink_destination_lock_and_manifest_are_rejected(self):
+        link = self.root / 'linked-backups'
+        link.symlink_to(self.backups, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            recovery.backup(self.data, self.config, link, 'fixture', quiesced=True)
+        unrelated = self.root / 'unrelated'
+        unrelated.write_text('untouched')
+        (self.backups / '.backup.lock').symlink_to(unrelated)
+        with self.assertRaises(OSError):
+            self.snapshot()
+        self.assertEqual(unrelated.read_text(), 'untouched')
+        (self.backups / '.backup.lock').unlink()
+        generation = self.snapshot()
+        (generation / 'manifest.json').unlink()
+        (generation / 'manifest.json').symlink_to(unrelated)
+        with self.assertRaises(ValueError):
+            recovery.verify(generation)
+
+    def test_interruption_preserves_last_good_generation(self):
+        from unittest.mock import patch
+        good = self.snapshot()
+        with patch.object(recovery.shutil, 'copyfile', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.snapshot()
+        recovery.verify(good)
+        self.assertFalse(list(self.backups.glob('.pending-*')))
+
     def test_retention_verifies_all_before_removing_and_keeps_daily_weekly(self):
         for days in range(35):
             generation = self.snapshot()
@@ -103,8 +130,14 @@ class RecoveryTests(unittest.TestCase):
             manifest['created'] = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).isoformat()
             manifest_path.write_text(json.dumps(manifest))
         recovery.retain(self.backups)
-        # sort is by generation name, so qualification uses chronological manifest time.
-        self.assertGreaterEqual(len([p for p in self.backups.iterdir() if p.is_dir()]), 7)
+        dates = [dt.datetime.fromisoformat(recovery.verify(p)['created'])
+                 for p in self.backups.iterdir() if p.is_dir()]
+        self.assertGreaterEqual(len(dates), 7)
+        self.assertLessEqual(len(dates), 11)
+        expected_days = {(dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=i)).date()
+                         for i in range(7)}
+        self.assertTrue(expected_days.issubset({d.date() for d in dates}))
+        self.assertEqual(len({d.isocalendar()[:2] for d in dates}), 4)
 
 
 if __name__ == '__main__':

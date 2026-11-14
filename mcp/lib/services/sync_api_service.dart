@@ -85,6 +85,8 @@ class SyncApiService {
   /// Tracks the current remote node ID during mergePushBatch for
   /// reconciliation logic.
   String? _remoteNodeId;
+  Future<void> _jiraPush = Future<void>.value();
+  Future<void> get pendingJiraPush => _jiraPush;
 
   /// Tracks reconciliation details for user notification on completion.
   bool _didReconcile = false;
@@ -118,8 +120,7 @@ class SyncApiService {
 
       final origin = device.origin;
       if (origin == null || origin.isEmpty) {
-        stderr.writeln(
-            'Sync: skipping phone ${device.id} — no origin stored');
+        stderr.writeln('Sync: skipping phone ${device.id} — no origin stored');
         continue;
       }
 
@@ -139,21 +140,19 @@ class SyncApiService {
 
         final client = http.Client();
         try {
-          final response = await client
-              .get(
-                uri,
-                headers: {
-                  'X-Av-Node-Id': clock.nodeId,
-                  'X-Av-Pair-Token': token,
-                  'Content-Type': 'application/json',
-                },
-              )
-              .timeout(const Duration(seconds: 5));
+          final response = await client.get(
+            uri,
+            headers: {
+              'X-Av-Node-Id': clock.nodeId,
+              'X-Av-Pair-Token': token,
+              'Content-Type': 'application/json',
+            },
+          ).timeout(const Duration(seconds: 5));
 
           if (response.statusCode == 200) {
-            final body =
-                jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true))
-                    as Map<String, dynamic>;
+            final body = jsonDecode(
+                    utf8.decode(response.bodyBytes, allowMalformed: true))
+                as Map<String, dynamic>;
             final deltasJson = (body['deltas'] as List<dynamic>? ?? [])
                 .cast<Map<String, dynamic>>();
 
@@ -246,10 +245,10 @@ class SyncApiService {
     final sinceParam = request.uri.queryParameters['since'];
     final since = _parseWatermark(sinceParam);
 
-    final deltas = await extractDeltas(since);
-
-    // Current clock state as the new watermark
+    // Capture before asynchronous table reads. A concurrent write occurring
+    // after a table was read must remain newer than this response watermark.
     final watermark = clock.now().pack();
+    final deltas = await extractDeltas(since);
 
     _jsonResponse(request, HttpStatus.ok, {
       'deltas': deltas,
@@ -283,7 +282,8 @@ class SyncApiService {
     final deltasJson =
         (json['deltas'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 
-    if (remoteNode == null || remoteNode.isEmpty ||
+    if (remoteNode == null ||
+        remoteNode.isEmpty ||
         remoteNode != request.headers.value('X-Av-Node-Id')) {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Missing "node" field'});
@@ -527,37 +527,41 @@ class SyncApiService {
     required String remoteNode,
     required List<Map<String, dynamic>> deltas,
   }) async {
-    var merged = 0;
-    final errors = <String>[];
-    _remoteNodeId = remoteNode;
-
-    for (final delta in deltas) {
-      try {
-        await mergeDelta(delta);
-        merged++;
-      } catch (e) {
-        errors.add('${delta['type']}/${delta['id']}: $e');
+    final result = await db.transaction(() async {
+      var merged = 0;
+      final errors = <String>[];
+      _remoteNodeId = remoteNode;
+      for (final delta in deltas) {
+        try {
+          await mergeDelta(delta);
+          merged++;
+        } catch (_) {
+          errors.add('Invalid sync document');
+        }
       }
-    }
-
-    final watermark = clock.now().pack();
-
-    // Record the watermark of what we received from the remote node
-    // and propagate merged deltas to connected clients immediately.
-    if (merged > 0) {
-      if (errors.isEmpty) {
+      final watermark = clock.now().pack();
+      if (merged > 0 && errors.isEmpty) {
         await setWatermark(remoteNode, watermark, direction: 'received');
       }
-      onDeltasMerged?.call(merged);
-      // Trigger Jira push for any newly merged worklogs (fire-and-forget).
-      jiraService?.push().then(
-            (_) {},
-            onError: (Object e) =>
-                stderr.writeln('Jira push after phone sync failed: $e'),
-          );
+      return (merged: merged, errors: errors, watermark: watermark);
+    });
+    // Notify only after commit. Concurrent read/merge/write batches must not
+    // overwrite independent fields from another paired device's stale snapshot.
+    if (result.merged > 0) {
+      onDeltasMerged?.call(result.merged);
+      if (jiraService != null) {
+        // Serialize scans/posts: concurrent sync batches must not both push
+        // the same still-unlinked worklog before its first POST commits.
+        _jiraPush = _jiraPush.then((_) async {
+          try {
+            await jiraService!.push();
+          } catch (_) {
+            stderr.writeln('Jira push after sync unavailable');
+          }
+        });
+      }
     }
-
-    return (merged: merged, errors: errors, watermark: watermark);
+    return result;
   }
 
   /// Extracts all CRDT deltas modified after [since].
@@ -853,8 +857,7 @@ class SyncApiService {
   }
 
   /// Extracts the boolean value from a field in [state].
-  bool? _extractBoolField(
-      Map<String, CrdtFieldState> state, String fieldName) {
+  bool? _extractBoolField(Map<String, CrdtFieldState> state, String fieldName) {
     final field = state[fieldName];
     if (field == null) return null;
     final v = field.value;
@@ -1016,50 +1019,64 @@ class SyncApiService {
 
     // Tasks
     final tasks = await db.select(db.tasks).get();
-    counts['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['task'] =
+        tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['task'] =
+          tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Worklogs
     final worklogs = await db.select(db.worklogEntries).get();
-    counts['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['worklog'] =
+        worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['worklog'] =
+          worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Timers
-    counts['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['timer'] =
+        timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['timer'] =
+          timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Projects
     final projects = await db.select(db.projects).get();
-    counts['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['project'] =
+        projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['project'] =
+          projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Daily plans
     final dailyPlans = await db.select(db.dailyPlanEntries).get();
-    counts['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['dailyPlan'] = dailyPlans.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['dailyPlan'] = dailyPlans.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Day plan tasks
     final dayPlanTasks = await db.select(db.dayPlanTasks).get();
-    counts['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['dayPlanTask'] = dayPlanTasks.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Category chips
     final categoryChips = await db.select(db.categoryChips).get();
-    counts['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['categoryChip'] = categoryChips.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['categoryChip'] = categoryChips.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     return {
@@ -1089,8 +1106,7 @@ class SyncApiService {
     if (timeSinceLastSync < staleThresholdMs) return null;
 
     // Reuse desktopTimer already computed by syncDiagnostics
-    final desktopTimer =
-        diagnostics['desktopTimer'] as Map<String, dynamic>?;
+    final desktopTimer = diagnostics['desktopTimer'] as Map<String, dynamic>?;
     if (desktopTimer != null && desktopTimer['isRunning'] == true) {
       final minutes = timeSinceLastSync ~/ 60000;
       final startedAtMs = desktopTimer['startedAtMs'] as int?;
@@ -1135,5 +1151,4 @@ class SyncApiService {
       stderr.writeln('Response write error (client likely disconnected): $e');
     }
   }
-
 }

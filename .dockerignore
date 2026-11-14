@@ -22,7 +22,8 @@ result/
 # Project files not needed in Docker build context
 completions/
 docs/
-tool/
+tool/*
+!tool/sync-entrypoint.sh
 flake.lock
 flake.nix
 *.nix
@@ -35,6 +36,16 @@ DOCKER.md
 # Root pubspec (Flutter app — not used by Dockerfile)
 pubspec.yaml
 pubspec.lock
+
+# Preserve enforced dependency inputs and exclude local-only state.
+!mcp/pubspec.lock
+!packages/avodah_core/pubspec.lock
+.git
+**/.dart_tool/
+**/build/
+**/__pycache__/
+.env*
+docker-compose.override.yml
 
 # Keep:
 #   mcp/           — sync server source

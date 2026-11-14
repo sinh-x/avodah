@@ -12,7 +12,7 @@
 # ──────────────────────────────────────────────────────────────
 # Stage 1: Build — Flutter web assets
 # ──────────────────────────────────────────────────────────────
-FROM ghcr.io/cirruslabs/flutter:stable AS builder
+FROM ghcr.io/cirruslabs/flutter:3.38.9@sha256:96171a9d81137ecb995621ffcfcd64ce777d3408c83aba6417d20048dbfca091 AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN flutter config --enable-web
 WORKDIR /app/phone
 
 # Resolve dependencies
-RUN flutter pub get
+RUN flutter pub get --enforce-lockfile
 
 # Download Drift WASM files into web/ (versions must match pubspec.lock)
 RUN sh /app/tool/fetch-web-assets.sh
@@ -39,12 +39,12 @@ RUN sh /app/tool/fetch-web-assets.sh
 # running app reflects the real URL (used by loadServerUrl on web). Flutter's
 # own asset URLs then become /avodah/... which drgnfly-caddy rewrites back to
 # / before reaching this container's Caddy file_server.
-RUN flutter build web --release --base-href=/avodah/
+RUN flutter build web --release --no-web-resources-cdn --base-href=/avodah/
 
 # ──────────────────────────────────────────────────────────────
 # Stage 2: Serve — Caddy static file server
 # ──────────────────────────────────────────────────────────────
-FROM caddy:2-alpine
+FROM caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
 ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 

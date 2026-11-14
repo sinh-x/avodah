@@ -13,7 +13,7 @@
 # ──────────────────────────────────────────────────────────────
 # Stage 1: Build — compile Dart to native binary
 # ──────────────────────────────────────────────────────────────
-FROM dart:stable AS builder
+FROM dart:3.10.8-sdk@sha256:a2a76f3bc4d52ce15005a980cbb87db13d156b7cad2d2e686f97a977c3cf77cf AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY mcp/ mcp/
 
 # Resolve dependencies
 WORKDIR /app/mcp
-RUN dart pub get
+RUN dart pub get --enforce-lockfile
 
 # Compile to native binary (no Dart VM needed at runtime)
 RUN dart compile exe bin/sync_server.dart -o /app/sync_server
@@ -33,7 +33,7 @@ RUN dart compile exe bin/sync_server.dart -o /app/sync_server
 # ──────────────────────────────────────────────────────────────
 # Stage 2: Runtime — minimal Debian image with SQLite3
 # ──────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 
 # Install SQLite3 shared library (required by sqlite3 Dart package)
 # ca-certificates: needed for HTTPS connections (Jira API)

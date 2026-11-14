@@ -1,3 +1,9 @@
+# This static backend owns no administration listener (especially not :2019).
+{
+    admin off
+    auto_https off
+}
+
 # Avodah web app — HTTP-only, terminated upstream by drgnfly-caddy.
 # TLS is handled by the external (drgnfly) Caddy at https://drgnfly/avodah,
 # which strips the /avodah prefix before forwarding to localhost:8080.

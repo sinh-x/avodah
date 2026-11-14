@@ -88,11 +88,14 @@ class PairingService {
             FileSystemEntityType.link) {
       throw StateError('Private enrollment channel required');
     }
-    final handle = file.openSync(mode: FileMode.writeOnly);
+    final handle = file.openSync(mode: FileMode.append);
     try {
-      if (file.statSync().mode & 0x3f != 0) {
+      if (file.statSync().mode & 0x3f != 0 ||
+          file.statSync().type != FileSystemEntityType.file) {
         throw StateError('Enrollment file must be private');
       }
+      handle.truncateSync(0);
+      handle.setPositionSync(0);
       handle.writeStringSync('$code\n');
       handle.flushSync();
     } finally {
@@ -101,6 +104,10 @@ class PairingService {
   }
 
   void trackSocket(String nodeId, WebSocket socket) {
+    if (_revoked.contains(nodeId)) {
+      socket.close(WebSocketStatus.policyViolation, 'Pairing revoked');
+      return;
+    }
     _sockets.putIfAbsent(nodeId, () => []).add(socket);
     socket.done.whenComplete(() => _sockets[nodeId]?.remove(socket));
   }

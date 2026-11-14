@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import stat
 import tempfile
 
 CONFIG = {'config.json', 'config.toml', 'node-id', 'jira-credentials.json'}
@@ -24,8 +25,8 @@ def private_dir(path):
     if path.is_symlink():
         raise ValueError('symlink directory rejected')
     path.mkdir(mode=0o700, parents=False, exist_ok=True)
-    if path.stat().st_mode & 0o077:
-        raise ValueError('destination must already be private (0700)')
+    if path.stat().st_mode & 0o077 or path.stat().st_uid != os.geteuid():
+        raise ValueError('destination must already be private and owned by this operator')
 
 
 def digest(path):
@@ -46,7 +47,12 @@ def check_db(path):
 def verify(generation):
     if generation.is_symlink():
         raise ValueError('symlink rejected')
-    manifest = json.loads((generation / 'manifest.json').read_text())
+    if generation.stat().st_mode & 0o077 or generation.stat().st_uid != os.geteuid():
+        raise ValueError('generation directory must be private')
+    manifest_path = generation / 'manifest.json'
+    if manifest_path.is_symlink() or manifest_path.stat().st_mode & 0o077:
+        raise ValueError('manifest must be private and not a symlink')
+    manifest = json.loads(manifest_path.read_text())
     files = manifest['files']
     if manifest['format'] != 1 or not REQUIRED.issubset(set(files) | {'manifest.json'}):
         raise ValueError('incomplete recovery set')
@@ -68,12 +74,18 @@ def verify(generation):
 def backup(data, config, destination, revision, quiesced=False, apply_retention=False):
     if not quiesced:
         raise ValueError('config/identity writers must be quiesced explicitly')
-    data, config, destination = map(lambda p: Path(p).resolve(), (data, config, destination))
+    paths = tuple(map(Path, (data, config, destination)))
+    if any(p.is_symlink() for p in paths):
+        raise ValueError('symlink source/destination directory rejected')
+    data, config, destination = (p.resolve() for p in paths)
     if destination.is_relative_to(data) or destination.is_relative_to(config):
         raise ValueError('backup destination must be outside source storage')
     private_dir(destination)
-    with (destination / '.backup.lock').open('a') as lock:
-        os.chmod(lock.name, 0o600)
+    fd = os.open(destination / '.backup.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'r+') as lock:
+        metadata = os.fstat(lock.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077 or metadata.st_uid != os.geteuid():
+            raise ValueError('invalid private backup lock')
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         stage = Path(tempfile.mkdtemp(prefix='.pending-', dir=destination))
         try:
