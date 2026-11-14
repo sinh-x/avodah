@@ -15,8 +15,15 @@ services:
       SYNC_HOST: ${SYNC_HOST:-127.0.0.1}
       SYNC_PORT: ${SYNC_PORT:-9847}
       SYNC_ALLOWED_ORIGINS: ${SYNC_ALLOWED_ORIGINS:-}
+      PAIRING_CODE_FILE: ${PAIRING_CODE_FILE:-}
       JIRA_ENABLED: ${JIRA_ENABLED:-false}
       AGENT_API_URL: http://127.0.0.1:${AGENT_PORT:-9848}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --max-time 3 http://127.0.0.1:$$SYNC_PORT/ready >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -32,6 +39,12 @@ services:
     environment:
       WEB_HOST: ${WEB_HOST:-127.0.0.1}
       WEB_PORT: ${WEB_PORT:-8080}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/index.html && wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/sqlite3.wasm && wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/drift_worker.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     logging:
       driver: json-file

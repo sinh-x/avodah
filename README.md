@@ -26,6 +26,7 @@ scripts/XSS can access origin storage. Never put pairing/PA credentials in URLs.
 (cd mcp && dart test)
 (cd packages/avodah_core && dart pub get && dart test)
 (cd phone && flutter pub get && flutter test)
+sh tool/fetch-web-assets.sh
 (cd phone && flutter build web --release --base-href /avodah/)
 ```
 

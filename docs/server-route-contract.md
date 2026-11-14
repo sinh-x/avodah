@@ -41,9 +41,10 @@ Enrollment:300s, one in-flight operation/node,32 pending/in-flight challenges,
 5 failed proofs,10 starts/minute/socket source and100 global; no trust in XFF.
 The loopback proxy shares the source budget unless a future reviewed gateway
 identity contract is added. Bodies stream-limited to8KiB (deltas5MiB),3s idle
-bound. Codes go to a private controlling `/dev/tty`, never Docker logs. A detached
-container without a private operator console cannot enroll: operator must arrange
-private foreground console access; no public code retrieval fallback is supplied.
+bound. Codes go only to operator-selected PAIRING_CODE_FILE in a0700 private
+directory with a0600 file (umask077), never Docker logs or TTY collectors. Without
+this private channel enrollment fails closed. Operator reads the most recent
+challenge privately; never publish the file or include it in backup artifacts.
 Browser interactive WS is intentionally unavailable; tokens never belong in URLs.
 
 ## Executed isolated evidence

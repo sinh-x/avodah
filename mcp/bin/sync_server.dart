@@ -67,6 +67,7 @@ Future<void> main(List<String> args) async {
   final handler = SyncHttpHandler(
       sync: sync,
       pairing: pairing,
+      jiraConfigured: jiraEnabled,
       agentApiUrl:
           Platform.environment['AGENT_API_URL'] ?? 'http://127.0.0.1:9848');
   final server = await HttpServer.bind(host, port,

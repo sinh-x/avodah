@@ -65,9 +65,10 @@ startup/migration replay. Validate existing worklog push state before enabling.
 5. Render Compose with the chosen private env file without dumping secrets.
    Build with SOURCE_REVISION set to the checked full Git commit. Inspect image
    IDs before authorized replacement; never prune rollback images/resources.
-6. Set explicit live Jira opt-in and trusted origin. Arrange **private foreground
-   operator console** for enrollment: codes go to /dev/tty, not shared logs. A
-   detached container without that console fails enrollment closed.
+6. Set explicit live Jira opt-in and trusted origin. Arrange PAIRING_CODE_FILE
+   in a private0700 operator-selected directory with a0600 file (umask077).
+   Operator reads the current human code privately, never via logs/TTY collectors.
+   Without that explicit private channel enrollment fails closed.
 7. Replace only the existing instance under its owner. Check loopback listeners,
    health, missing/invalid/revoked rejection, exact bundle/image and safe rollback.
    DFC-004 alone authorizes route containment removal. Browser/Android acceptance

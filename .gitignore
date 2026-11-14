@@ -64,3 +64,8 @@ docker-compose.override.yml
 .direnv/
 .claude/todos.md
 phone/releases/
+
+# Verified generated browser inputs and Python test cache
+phone/web/sqlite3.wasm
+phone/web/drift_worker.js
+__pycache__/

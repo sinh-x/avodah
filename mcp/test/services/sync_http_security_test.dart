@@ -219,6 +219,16 @@ void main() {
     }
   });
 
+  test('health distinguishes core readiness and optional PA denial', () async {
+    expect((await send('GET', '/health')).statusCode, 200);
+    expect((await send('GET', '/ready')).statusCode, 200);
+    final deps = await send('GET', '/dependencies');
+    expect(deps.body, contains('auth-unavailable'));
+    expect(deps.body, contains('disabled'));
+    expect(deps.body, isNot(contains(token)));
+    expect((await send('GET', '/ready')).statusCode, 200);
+  });
+
   test('native WS works, invalid never connects, active revoke closes',
       () async {
     final wsBase = base.replaceFirst('http:', 'ws:');

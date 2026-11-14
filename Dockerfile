@@ -40,7 +40,7 @@ FROM debian:bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
-        ca-certificates \
+        ca-certificates curl \
     && ln -s /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 /usr/lib/x86_64-linux-gnu/libsqlite3.so \
     && rm -rf /var/lib/apt/lists/*
 
@@ -64,4 +64,6 @@ LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 
 # Informational only under host networking; SYNC_PORT changes the process.
 EXPOSE 9847
-ENTRYPOINT ["/app/sync_server"]
+# New container-created secrets/data are private; existing mounts need metadata review.
+COPY tool/sync-entrypoint.sh /app/sync-entrypoint.sh
+ENTRYPOINT ["/bin/sh", "/app/sync-entrypoint.sh"]

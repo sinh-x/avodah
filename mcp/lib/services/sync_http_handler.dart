@@ -14,11 +14,13 @@ class SyncHttpHandler {
   final String agentApiUrl;
   final SyncRequestPolicy policy;
   final DateTime started = DateTime.now();
+  final bool jiraConfigured;
 
   SyncHttpHandler(
       {required this.sync,
       required this.pairing,
       required this.agentApiUrl,
+      this.jiraConfigured = false,
       SyncRequestPolicy? policy})
       : policy = policy ?? sync.policy;
 
@@ -74,6 +76,44 @@ class SyncHttpHandler {
       }
       if ((path == '/' || path == '/health') && request.method == 'GET') {
         jsonResponse(request, 200, {'status': 'ok', 'service': 'avodah-sync'});
+        return;
+      }
+      if (path == '/ready' && request.method == 'GET') {
+        try {
+          await sync.db
+              .customSelect('SELECT count(*) FROM settings')
+              .get()
+              .timeout(const Duration(seconds: 2));
+          jsonResponse(request, 200, {'crdt': 'ready'});
+        } catch (_) {
+          jsonResponse(request, 503, {'crdt': 'not-ready'});
+        }
+        return;
+      }
+      if (path == '/dependencies' && request.method == 'GET') {
+        final client = http.Client();
+        var pa = 'unavailable';
+        try {
+          final response = await client
+              .get(Uri.parse('$agentApiUrl/api/health'))
+              .timeout(const Duration(seconds: 2));
+          pa = response.statusCode == 401 || response.statusCode == 403
+              ? 'auth-unavailable'
+              : response.statusCode == 200
+                  ? 'reachable'
+                  : 'degraded';
+        } catch (_) {
+        } finally {
+          client.close();
+        }
+        jsonResponse(request, 200, {
+          'pa': pa,
+          'jira': !jiraConfigured
+              ? 'disabled'
+              : sync.jiraService == null
+                  ? 'configured-unavailable'
+                  : 'configured-unverified'
+        });
         return;
       }
       jsonResponse(request, 404, {'error': 'Not found'});

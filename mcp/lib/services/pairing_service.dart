@@ -68,6 +68,7 @@ class PairingService {
   DateTime? _window;
   final Map<String, List<WebSocket>> _sockets = {};
   final Set<String> _busy = {};
+  final Set<String> _revoked = {};
 
   PairingService(
       {required this.db,
@@ -77,12 +78,25 @@ class PairingService {
         now = now ?? DateTime.now;
 
   static void _deliverPrivately(String code) {
-    // /dev/tty is the private foreground operator console, not stdout/stderr.
-    final tty = File('/dev/tty').openSync(mode: FileMode.writeOnly);
+    // Docker can collect /dev/tty output too. Require an explicitly selected
+    // private operator channel, never stdout/stderr or container TTY logs.
+    final path = Platform.environment['PAIRING_CODE_FILE'];
+    if (path == null) throw StateError('Private enrollment channel required');
+    final file = File(path);
+    if (file.parent.statSync().mode & 0x3f != 0 ||
+        FileSystemEntity.typeSync(path, followLinks: false) ==
+            FileSystemEntityType.link) {
+      throw StateError('Private enrollment channel required');
+    }
+    final handle = file.openSync(mode: FileMode.writeOnly);
     try {
-      tty.writeStringSync('Avodah pairing code (valid 5 minutes): $code\n');
+      if (file.statSync().mode & 0x3f != 0) {
+        throw StateError('Enrollment file must be private');
+      }
+      handle.writeStringSync('$code\n');
+      handle.flushSync();
     } finally {
-      tty.closeSync();
+      handle.closeSync();
     }
   }
 
@@ -182,17 +196,21 @@ class PairingService {
     }
     _busy.add(nodeId);
     try {
-      return await _confirmPairing(nodeId: nodeId,
-        phonePubKeyBase64: phonePubKeyBase64, hmacProofBase64: hmacProofBase64,
-        origin: origin);
+      return await _confirmPairing(
+          nodeId: nodeId,
+          phonePubKeyBase64: phonePubKeyBase64,
+          hmacProofBase64: hmacProofBase64,
+          origin: origin);
     } finally {
       _busy.remove(nodeId);
     }
   }
 
-  Future<Map<String, dynamic>> _confirmPairing({required String nodeId,
-    required String phonePubKeyBase64, required String hmacProofBase64,
-    String? origin}) async {
+  Future<Map<String, dynamic>> _confirmPairing(
+      {required String nodeId,
+      required String phonePubKeyBase64,
+      required String hmacProofBase64,
+      String? origin}) async {
     // Remove before the first await: concurrent confirmations cannot replay.
     final state = _handshakes.remove(nodeId);
     if (state == null || !now().isBefore(state.expiresAt)) {
@@ -246,6 +264,7 @@ class PairingService {
         );
 
     _handshakes.remove(nodeId);
+    _revoked.remove(nodeId);
 
     stderr.writeln('Device paired successfully: $nodeId');
 
@@ -256,7 +275,9 @@ class PairingService {
   ///
   /// Returns true if the token is valid for this device.
   Future<bool> verifyPairToken(String nodeId, String tokenBase64) async {
-    if (!validNode(nodeId) || tokenBase64.length != 44) return false;
+    if (_revoked.contains(nodeId) ||
+        !validNode(nodeId) ||
+        tokenBase64.length != 44) return false;
     final device = await (db.select(db.pairedDevices)
           ..where((d) => d.id.equals(nodeId)))
         .getSingleOrNull();
@@ -270,7 +291,8 @@ class PairingService {
     // Derive expected token: HMAC-SHA256(pairingKey, "avodah-sync-v1")
     final expectedToken = await generateSyncVerifyCode(pairingKey);
 
-    return verifySyncCode(expectedToken, tokenBase64);
+    return !_revoked.contains(nodeId) &&
+        verifySyncCode(expectedToken, tokenBase64);
   }
 
   /// Returns the stored pairing for a device, or null if not paired.
@@ -281,6 +303,7 @@ class PairingService {
 
   /// Revokes pairing for a device.
   Future<void> revokePairing(String nodeId) async {
+    _revoked.add(nodeId);
     for (final socket in _sockets.remove(nodeId) ?? <WebSocket>[]) {
       socket.close(WebSocketStatus.policyViolation, 'Pairing revoked');
     }

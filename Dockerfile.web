@@ -32,8 +32,7 @@ WORKDIR /app/phone
 RUN flutter pub get
 
 # Download Drift WASM files into web/ (versions must match pubspec.lock)
-RUN curl --fail --location -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
-    && curl --fail --location -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
+RUN sh /app/tool/fetch-web-assets.sh
 
 # Build Flutter web release.
 # --base-href=/avodah/ matches the drgnfly-caddy mount path so Uri.base in the

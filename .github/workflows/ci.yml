@@ -31,6 +31,18 @@ jobs:
           dart pub get
           dart test
 
+      - name: Core, phone and private recovery tests
+        run: |
+          (cd packages/avodah_core && dart pub get && dart test)
+          (cd phone && flutter pub get && flutter test)
+          python3 -m unittest discover -s tool -p test_private_backup.py
+          docker compose config --quiet
+
+      - name: Build authenticated browser delivery
+        run: |
+          sh tool/fetch-web-assets.sh
+          (cd phone && flutter build web --release --base-href /avodah/)
+
       - name: Build Linux (debug)
         run: |
           sudo apt-get update -y
