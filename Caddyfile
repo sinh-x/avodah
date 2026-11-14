@@ -9,7 +9,7 @@
 # which strips the /avodah prefix before forwarding to localhost:8080.
 # This Caddy only serves the Flutter web bundle; API and WebSocket routes
 # are handled only through drgnfly-caddy → authenticated sync_server (9847).
-http://{$WEB_HOST:127.0.0.1}:{$WEB_PORT:8080} {
+http://:{$WEB_PORT:8080} {
     # A site hostname is not a listener bind restriction in Caddy.
     bind {$WEB_HOST:127.0.0.1}
 

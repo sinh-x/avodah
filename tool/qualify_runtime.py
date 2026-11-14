@@ -158,8 +158,12 @@ http://127.0.0.1:19999 {
             assert request('/avodah/api/sync/status',headers={'Origin':'https://hostile.invalid'})[0] == 403
             report['wasm_isolation_origin'] = True
             if args.browser:
-                browser = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
-                    str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
+                try:
+                    browser = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
+                        str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
+                except subprocess.CalledProcessError as error:
+                    Path('/tmp/avo121-browser-debug.log').write_bytes(error.stderr)
+                    raise
                 credentials = browser.pop('credentials')
                 report['browser'] = browser
                 auth = {'X-Av-Node-Id':credentials['node'],'X-Av-Pair-Token':credentials['token']}
