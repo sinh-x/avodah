@@ -8,7 +8,7 @@ if (!/^https:\/\/localhost:\d+$/.test(origin) || !codeFile.includes('avo121-qual
 await mkdir(profile, {recursive:true, mode:0o700});
 const chrome = spawn(process.env.CHROME_EXECUTABLE || 'google-chrome', [
   '--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-gpu',
-  '--enable-unsafe-swiftshader','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1',
+  '--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1',
   `--user-data-dir=${profile}`,`--ignore-certificate-errors-spki-list=${spki}`,
   '--no-first-run','--no-default-browser-check','--enable-automation',
   '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost', 'about:blank',

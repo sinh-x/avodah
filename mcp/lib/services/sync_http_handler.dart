@@ -265,9 +265,17 @@ class SyncHttpHandler {
       downstream
           .asyncMap((data) => forward(peer, data))
           .listen((_) {}, onDone: peer.close, onError: (_) => peer.close());
-    } catch (_) {
+    } catch (error) {
       await upstream?.close();
-      jsonResponse(r, 502, {'error': 'PA WebSocket unavailable'});
+      final status = error is WebSocketException ? error.httpStatusCode : null;
+      if (status == 401 || status == 403) {
+        jsonResponse(r, status!, {
+          'error': 'PA WebSocket permission denied',
+          'code': 'PA_FORBIDDEN'
+        });
+      } else {
+        jsonResponse(r, 502, {'error': 'PA WebSocket unavailable'});
+      }
     } finally {
       transport.close(force: true);
     }

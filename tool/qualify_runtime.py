@@ -22,6 +22,7 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
+PHASE = 'setup'
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -31,6 +32,7 @@ def docker(*args, **kwargs):
     return run(['docker', *args], **kwargs).strip()
 
 def main():
+    global PHASE
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--sync-image', required=True)
     p.add_argument('--web-image', required=True)
@@ -90,10 +92,20 @@ def main():
             value = docker('exec',ident,'curl','--noproxy','*','--silent','--max-time','3',
                            '-o','/dev/null','-w','%{http_code}',url)
             assert int(value) == expected
+        def wait_probe(ident, url):
+            end=time.monotonic()+20
+            while True:
+                try:
+                    probe(ident,url)
+                    return
+                except (AssertionError,subprocess.CalledProcessError):
+                    if time.monotonic()>end: raise AssertionError('Fixture process readiness deadline exceeded')
+                    time.sleep(.2)
         try:
             # --internal suppresses host port publication on this Docker host.
             # Use a private bridge with no outbound masquerading and no DNS;
             # only synthetic local endpoints/configuration are supplied.
+            PHASE = 'container-startup'
             network = docker('network','create','--opt',
                              'com.docker.network.bridge.enable_ip_masquerade=false',name)
             anchor = launch('namespace',args.sync_image,[
@@ -165,6 +177,7 @@ http://127.0.0.1:19999 {
             assert dependencies == {'pa':'auth-unavailable','jira':'disabled'}, 'Dependency status mismatch'
             report['optional_dependency_denial_core_ready'] = True
             if args.health_faults:
+                PHASE = 'health-faults'
                 lock=sqlite3.connect(root/'data/avodah.db')
                 try:
                     lock.execute('BEGIN EXCLUSIVE')
@@ -199,6 +212,7 @@ http://127.0.0.1:19999 {
                     stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
                 assert result.returncode != 0, f'Backend {backend} reachable on nonloopback'
             report['loopback_peer_negatives'] = True
+            PHASE = 'https-security-asset-probes'
             for path,methods in {'/api/config/categories':['GET'],
                 '/api/config/category-chips':['GET','POST','DELETE'],
                 '/api/sync/deltas':['GET','POST'], '/api/test':['GET','POST','PUT','PATCH','DELETE']}.items():
@@ -212,6 +226,7 @@ http://127.0.0.1:19999 {
             assert request('/avodah/api/sync/status',headers={'Origin':'https://hostile.invalid'})[0] == 403
             report['wasm_isolation_origin'] = True
             if args.browser:
+                PHASE = 'browser-enrollment'
                 try:
                     browser = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
                         str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
@@ -219,6 +234,7 @@ http://127.0.0.1:19999 {
                     Path('/tmp/avo121-browser-debug.log').write_bytes(error.stderr)
                     raise
                 credentials = browser.pop('credentials')
+                PHASE = 'browser-restart'
                 restarted = json.loads(run(['node',str(ROOT/'tool/qualify_browser.mjs'),origin,
                     str(root/'config/pairing/code'),str(root/'profile'),spki],timeout=110))
                 recovered = restarted.pop('credentials')
@@ -234,6 +250,16 @@ http://127.0.0.1:19999 {
                 auth = {'X-Av-Node-Id':credentials['node'],'X-Av-Pair-Token':credentials['token']}
                 assert request('/avodah/api/sync/pair',headers=auth)[0] == 200
                 assert request('/avodah/api/test',headers=auth)[0] == 403
+                stamp=f'{int(time.time()*1000)}-0-{credentials["node"]}'
+                types=['task','worklog','timer','project','dailyPlan','dayPlanTask','categoryChip']
+                deltas=[{'type':kind,'id':'active-timer' if kind=='timer' else f'restored-{kind}',
+                    'fields':{field:{'v':time.strftime('%Y-%m-%d',time.gmtime()) if field=='date' else 'synthetic-restored','t':stamp}
+                    for field in ['title','taskTitle','name','date','category','label']}} for kind in types]
+                payload={'node':credentials['node'],'deltas':deltas}
+                assert json.loads(request('/avodah/api/sync/deltas','POST',headers=auth,body=payload)[1])['merged']==7
+                snapshot=json.loads(request('/avodah/api/sync/deltas',headers=auth)[1])['deltas']
+                semantic=lambda docs:{(d['type'],d['id']):d['fields'] for d in docs}
+                PHASE = 'backup-restore'
                 # Quiesce only the synthetic server, then qualify restored identity/auth.
                 docker('stop','--time','5',sync)
                 spec = importlib.util.spec_from_file_location('backup',ROOT/'tool/private_backup.py')
@@ -244,35 +270,36 @@ http://127.0.0.1:19999 {
                 restored = root/'restored'
                 recovery.restore(generation,restored,schema)
                 assert (restored/'node-id').read_text() == 'synthetic-server'
+                PHASE = 'restored-startup'
                 clone = launch('restore',args.sync_image,['--network','none',
                     '--user',f'{os.getuid()}:{os.getgid()}',
                     '-v',f'{restored}:/data','-v',f'{restored}:/config',
                     '-e','XDG_STATE_HOME=/data/state','-e','HOME=/tmp',
                     '-e','SYNC_PORT=19847','-e','JIRA_ENABLED=false'])
-                time.sleep(1)
+                wait_probe(clone,'http://127.0.0.1:19847/ready')
                 def restored_request(path, method='GET', body=None):
                     config = f'url = "http://127.0.0.1:19847{path}"\nrequest = "{method}"\nheader = "X-Av-Node-Id: {credentials["node"]}"\nheader = "X-Av-Pair-Token: {credentials["token"]}"\nheader = "Content-Type: application/json"\nfail\nsilent\nmax-time = 3\n'
                     if body is not None: config += 'data = '+json.dumps(json.dumps(body))+'\n'
                     return json.loads(docker('exec','-i',clone,'curl','--noproxy','*','--config','-',input=config.encode()))
                 assert restored_request('/api/sync/pair')['paired'] is True
-                stamp=f'{int(time.time()*1000)}-0-{credentials["node"]}'
-                types=['task','worklog','timer','project','dailyPlan','dayPlanTask','categoryChip']
-                deltas=[{'type':kind,'id':'active-timer' if kind=='timer' else f'restored-{kind}',
-                    'fields':{field:{'v':'synthetic-restored','t':stamp}
-                    for field in ['title','taskTitle','name','date','category','label']}} for kind in types]
-                payload={'node':credentials['node'],'deltas':deltas}
+                preserved=restored_request('/api/sync/deltas')['deltas']
+                assert semantic(preserved)==semantic(snapshot), 'Restored document fields differ from original snapshot'
+                report['preserved_snapshot_documents']=len(snapshot)
+                report['snapshot_database_bytes']=(generation/'avodah.db').stat().st_size
                 assert restored_request('/api/sync/deltas','POST',payload)['merged']==7
                 pulled=restored_request('/api/sync/deltas')['deltas']
                 assert set(types).issubset({d['type'] for d in pulled})
                 assert restored_request('/api/sync/deltas','POST',payload)['merged']==7
                 assert len(restored_request('/api/sync/deltas')['deltas'])==len(pulled)
-                docker('stop','--time','5',clone);docker('start',clone);time.sleep(.5)
+                docker('stop','--time','5',clone);docker('start',clone)
+                wait_probe(clone,'http://127.0.0.1:19847/ready')
                 assert restored_request('/api/sync/pair')['paired'] is True
                 assert len(restored_request('/api/sync/deltas')['deltas'])==len(pulled)
                 report['isolated_restore_authenticated'] = True
                 report['isolated_restore_seven_family_push_pull_replay_restart'] = True
                 report['restore_seconds'] = round(time.monotonic()-start,3)
-                docker('start',sync);time.sleep(.5)
+                docker('start',sync)
+                wait_probe(sync,'http://127.0.0.1:19847/ready')
                 assert request('/avodah/api/sync/pair','DELETE',headers=auth)[0] == 200
                 assert request('/avodah/api/config/categories',headers=auth)[0] == 403
                 report['revoked_https_denied'] = True
@@ -303,6 +330,18 @@ if __name__ == '__main__':
     try: main()
     except Exception as error:
         # No command stderr/stdout, profile contents, codes or credentials in logs.
-        print(json.dumps({'passed':False,'error_type':type(error).__name__,
-                          'message':str(error) if isinstance(error, (AssertionError, urllib.error.URLError)) else 'Fixture failed; inspect test stage privately'}))
+        diagnostic={'passed':False,'phase':PHASE,'error_type':type(error).__name__,
+                    'message':str(error) if isinstance(error, (AssertionError, urllib.error.URLError)) else 'Fixture failed; inspect test stage privately'}
+        if isinstance(error,subprocess.CalledProcessError):
+            diagnostic['child_tool']=str(error.cmd[0])
+            diagnostic['child_exit_code']=error.returncode
+            # Only known non-sensitive test messages, never command stdout,
+            # browser storage, arbitrary upstream errors or credential values.
+            text=(error.stderr or b'').decode(errors='replace')
+            for known in ['Chrome startup timeout','Chrome exited','Flutter did not initialize',
+                          'Pairing code field unavailable','Browser did not persist pairing',
+                          'Reloaded app did not reach its home navigation','Browser fixture evaluation failed',
+                          'Authenticated HTTPS/isolation check failed','375px document overflow']:
+                if known in text: diagnostic['message']=known;break
+        print(json.dumps(diagnostic))
         raise SystemExit(1)

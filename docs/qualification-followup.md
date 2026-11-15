@@ -37,7 +37,10 @@ production rollout permission. No production mounts/services are used by tests.
   receive413 and upstream failures remain bounded502, never fallback HTML.
 - Duplicate/malformed credential headers fail closed. Revocation fences late WS
   tracking and every proxied frame as well as new handshakes; timed-out upstream
-  WS attempts close their own HTTP transport.
+  WS attempts close their own HTTP transport. Native WS upstream401/403 is
+  preserved as independent PA denial, and the phone reports permission denied
+  rather than offline. Failed-channel cleanup has a deadline instead of hanging
+  forever before surfacing that error.
 - Pull captures watermark before asynchronous table extraction, so a concurrent
   write cannot be skipped. Merge batches run in serialized SQLite transactions;
   partial failure retains received watermark. Streamed mutations re-check device

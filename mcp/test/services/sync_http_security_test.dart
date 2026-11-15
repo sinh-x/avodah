@@ -50,6 +50,7 @@ void main() {
   late HttpServer server, upstream;
   late String base, token, code;
   late int calls;
+  var denyWs = 0;
   late DateTime now;
   final client = http.Client();
 
@@ -73,10 +74,16 @@ void main() {
         config: AvoConfig(),
         policy: _ObservedPolicy());
     calls = 0;
+    denyWs = 0;
     upstream = await HttpServer.bind('127.0.0.1', 0);
     upstream.listen((r) async {
       calls++;
       if (WebSocketTransformer.isUpgradeRequest(r)) {
+        if (denyWs != 0) {
+          r.response.statusCode = denyWs;
+          await r.response.close();
+          return;
+        }
         final ws = await WebSocketTransformer.upgrade(r);
         ws.listen(ws.add);
       } else {
@@ -411,6 +418,18 @@ void main() {
     expect(deps.body, isNot(contains(token)));
     expect((await send('GET', '/ready')).statusCode, 200);
   });
+
+  for (final status in [401, 403]) {
+    test('native WS preserves independent PA denial $status', () async {
+      denyWs = status;
+      await expectLater(
+          WebSocket.connect('${base.replaceFirst('http:', 'ws:')}/ws/session',
+              headers: auth()),
+          throwsA(isA<WebSocketException>().having(
+              (e) => e.httpStatusCode, 'upstream denial status', status)));
+      expect(calls, 1);
+    });
+  }
 
   test('native WS works, invalid never connects, active revoke closes',
       () async {
