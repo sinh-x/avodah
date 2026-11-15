@@ -15,6 +15,15 @@ Each browser profile/server base has an independent random stable node ID. Every
 request re-reads the active credential, including REST providers and other tabs.
 Storage failure is not remembered success. Local CRDT remains independent of auth.
 
+Before confirming a code, both transports durably stage a server/node-scoped
+pending credential, which no normal consumer uses. If storage is denied, no
+confirmation is sent. If a successful confirmation response is lost or active
+storage later fails, reload offers **Finish pairing verification**: authenticated
+GET `/api/sync/pair` verifies that exact saved credential, then activates it only
+after durable storage succeeds. No new node/pairing is created for recovery.
+Explicit403 clears a rejected pending candidate; offline/502 retains it privately
+for retry. Local Forget clears active and pending state but never local CRDT.
+
 Settings distinguishes confirmed remote Revoke from Forget locally (which warns
 that server trust can remain). Network failure cannot report confirmed revoke.
 PA403 remains a PA feature denial, not PAIRING_REQUIRED. Sync403 requires pairing;

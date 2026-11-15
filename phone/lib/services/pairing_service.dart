@@ -96,18 +96,15 @@ class PhonePairingService {
         final json = jsonDecode(body) as Map<String, dynamic>;
         return PairingStatus.fromJson(json);
       } else {
-        debugPrint(
-          '[PhonePairing] Status check failed: HTTP ${response.statusCode} — $body',
+        throw StateError(
+          'Pairing status unavailable (HTTP ${response.statusCode})',
         );
-        // Treat non-200 as needs pairing (server might not have pairing endpoints yet)
-        return PairingStatus(needsPairing: true);
       }
     } catch (e) {
-      debugPrint('[PhonePairing] Status check error: $e');
-      // Network error — DON'T assume needs pairing. Transient network
-      // failures (Android doze, Tailscale blip) should not trigger the
-      // pairing screen. The 403 on /api/sync/deltas is the real signal.
-      return PairingStatus(needsPairing: false);
+      // Network/TLS/status failure is not evidence of pairing loss. Propagate
+      // so the pairing screen can handle a native certificate challenge and
+      // background sync reports offline instead of opening an enrollment modal.
+      rethrow;
     }
   }
 
@@ -164,58 +161,58 @@ class PhonePairingService {
       'hmacProof': base64Encode(hmacProof),
     });
 
-    final response = await _cryptoClient.post(
-      'api/sync/pair/confirm',
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    );
-    final responseBody = await _readResponseBody(response);
-
-    if (response.statusCode != 200) {
-      return PairingResult(
-        success: false,
-        error: 'HTTP ${response.statusCode}',
-      );
-    }
-
-    final json = jsonDecode(responseBody) as Map<String, dynamic>;
-    final success = json['success'] as bool? ?? false;
-    if (!success) {
-      return PairingResult(
-        success: false,
-        error: json['error'] as String? ?? 'Unknown error',
-      );
-    }
-
-    // Derive shared secret and pairing key
     final sharedSecret = await deriveSharedSecret(keyPair, serverPubKeyBytes);
     final pairingKey = await derivePairingKey(sharedSecret);
-
-    // Generate and store the pairing token: HMAC-SHA256(pairingKey, "avodah-sync-v1")
     final syncToken = await generateSyncVerifyCode(pairingKey);
-
-    // Store the pairing token and server pubkey
-    // Persist server binding before credential activation. If storage fails,
-    // attempt exact-device rollback; never claim remembered pairing.
+    // Stage one durable, server-scoped recovery record BEFORE the server can
+    // accept confirmation. It is not an active credential until verified.
     try {
-      await _cryptoClient.storeServerPubKey(serverPubKeyBytes);
-      await _cryptoClient.persistPairingToken(syncToken);
-      _pairingToken = syncToken;
+      await _cryptoClient.stagePairing(syncToken, serverPubKeyBytes);
     } catch (_) {
-      _cryptoClient.setPairingToken(syncToken);
-      try {
-        await _cryptoClient.delete('api/sync/pair');
-      } catch (_) {}
-      await _cryptoClient.clearPairingToken();
       return PairingResult(
         success: false,
         error:
-            'Credential storage failed. Verification needed; local data preserved.',
+            'Credential storage unavailable. Pairing was not confirmed; local records are preserved.',
       );
     }
-
-    debugPrint('[PhonePairing] Pairing confirmed and persisted. Token stored.');
-    return PairingResult(success: true);
+    try {
+      final response = await _cryptoClient.post(
+        'api/sync/pair/confirm',
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+      final responseBody = await _readResponseBody(response);
+      if (response.statusCode == 403 || response.statusCode == 400) {
+        await _cryptoClient.clearPendingPairing();
+        return PairingResult(
+          success: false,
+          error: 'Code or challenge rejected. Restart pairing.',
+        );
+      }
+      if (response.statusCode != 200 ||
+          (jsonDecode(responseBody) as Map)['success'] != true) {
+        return PairingResult(
+          success: false,
+          error: 'Verification needed; retry saved pairing verification.',
+        );
+      }
+      if (!await _cryptoClient.recoverPendingPairing()) {
+        return PairingResult(
+          success: false,
+          error: 'Pairing could not be verified. Restart pairing.',
+        );
+      }
+      _pairingToken = _cryptoClient.pairingToken;
+      return PairingResult(success: true);
+    } catch (_) {
+      // The server might have accepted a lost response. Keep the exact derived
+      // credential privately so reload/retry can verify instead of orphaning it.
+      return PairingResult(
+        success: false,
+        error:
+            'Verification needed. Saved pairing recovery is available; local records are preserved.',
+      );
+    }
   }
 
   /// Revokes the current pairing.

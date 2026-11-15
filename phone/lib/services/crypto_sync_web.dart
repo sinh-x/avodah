@@ -13,6 +13,46 @@ class CryptoSyncService {
   String? _transientToken;
   String get serverScope => normalizeServerScope(baseUrl);
   bool get hasLegacyPairing => false;
+  bool get hasPendingPairing =>
+      web.window.localStorage.getItem('$_key.pending') != null;
+  Future<void> stagePairing(String token, List<int> serverPubKey) async {
+    final value = jsonEncode({
+      'token': token,
+      'server': base64Encode(serverPubKey),
+      'node': nodeId,
+    });
+    web.window.localStorage.setItem('$_key.pending', value);
+    if (web.window.localStorage.getItem('$_key.pending') != value)
+      throw StateError('Credential storage failed');
+  }
+
+  Future<void> clearPendingPairing() async =>
+      web.window.localStorage.removeItem('$_key.pending');
+  Future<bool> recoverPendingPairing() async {
+    final value = web.window.localStorage.getItem('$_key.pending');
+    if (value == null) throw StateError('No pending pairing');
+    final record = jsonDecode(value) as Map;
+    if (record['node'] != nodeId)
+      throw StateError('Pending device identity differs');
+    final token = record['token'] as String;
+    final response = await _send(
+      'GET',
+      'api/sync/pair',
+      tokenOverride: token,
+    ).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 403) {
+      await clearPendingPairing();
+      return false;
+    }
+    final body = jsonDecode(utf8.decode(response.bytes)) as Map;
+    if (response.statusCode != 200 || body['paired'] != true)
+      throw StateError('Pairing verification unavailable');
+    web.window.localStorage.setItem('$_key.server', record['server'] as String);
+    await persistPairingToken(token);
+    await clearPendingPairing();
+    return true;
+  }
+
   Future<void> migrateLegacyPairing() async =>
       throw UnsupportedError('Legacy migration is native-only');
 
@@ -49,6 +89,7 @@ class CryptoSyncService {
 
   Future<void> clearPairingToken() async {
     _transientToken = null;
+    await clearPendingPairing();
     web.window.localStorage.removeItem('$_key.token');
   }
 
@@ -89,6 +130,7 @@ class CryptoSyncService {
     Map<String, String>? queryParams,
     Map<String, String>? headers,
     String? body,
+    String? tokenOverride,
   }) async {
     final base = baseUrl.replaceFirst(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/$path').replace(queryParameters: queryParams);
@@ -101,7 +143,7 @@ class CryptoSyncService {
     final h = web.Headers();
     headers?.forEach((name, value) => h.set(name, value));
     h.set('X-Av-Node-Id', nodeId);
-    final token = pairingToken;
+    final token = tokenOverride ?? pairingToken;
     if (token != null) h.set('X-Av-Pair-Token', token);
     final response = await web.window
         .fetch(

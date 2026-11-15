@@ -14,7 +14,12 @@ production rollout permission. No production mounts/services are used by tests.
 - Native certificate fingerprinting uses the reviewed crypto package SHA256,
   rather than the incorrect hand-rolled implementation. wss URL migration no
   longer downgrades TLS. Browser storage-failure rollback can use an ephemeral
-  in-memory credential without first writing the failing storage again.
+  in-memory credential without first writing the failing storage again. Further
+  confirmation-loss coverage now stages one durable, inactive credential before
+  confirmation, then verifies exact server acceptance before activation. Reload
+  recovers a lost response without creating a new pairing; storage denial before
+  staging sends no confirmation at all. Confirmed rejection clears the candidate,
+  while network/activation-storage failure retains it privately for exact retry.
 - Static Caddy admin is off, removing its competing :2019 listener. Actual peer
   container probes also caught that a site hostname alone does not restrict
   Caddy's socket bind: an explicit `bind {$WEB_HOST:127.0.0.1}` now does so.

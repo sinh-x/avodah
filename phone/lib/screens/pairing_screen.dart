@@ -44,6 +44,7 @@ class _PairingScreenState extends State<PairingScreen> {
   /// Pairing state machine states.
   static const _kStateLoading = 'loading';
   static const _kStateLegacy = 'legacy';
+  static const _kStateVerify = 'verify';
   static const _kStateEnterPasscode = 'enter_passcode';
   static const _kStatePairing = 'pairing';
   static const _kStateError = 'error';
@@ -91,6 +92,10 @@ class _PairingScreenState extends State<PairingScreen> {
       return;
     }
     if (!mounted) return;
+    if (widget.args.cryptoClient.hasPendingPairing) {
+      setState(() => _state = _kStateVerify);
+      return;
+    }
     if (widget.args.cryptoClient.hasLegacyPairing) {
       setState(() => _state = _kStateLegacy);
       return;
@@ -100,7 +105,7 @@ class _PairingScreenState extends State<PairingScreen> {
     PairingStatus? status;
     try {
       status = await _pairingService.checkPairingStatus();
-    } on Exception catch (e) {
+    } catch (e) {
       // Check if there's a pending cert fingerprint
       final pendingFingerprint = widget.args.cryptoClient
           .checkPendingCertFingerprint();
@@ -157,6 +162,30 @@ class _PairingScreenState extends State<PairingScreen> {
         _state = _kStateError;
         _errorMessage = 'Failed to start pairing: $e';
       });
+    }
+  }
+
+  Future<void> _recoverPendingPairing() async {
+    setState(() => _state = _kStatePairing);
+    try {
+      final paired = await widget.args.cryptoClient.recoverPendingPairing();
+      if (!mounted) return;
+      if (paired) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+      setState(() {
+        _state = _kStateError;
+        _errorMessage =
+            'Saved pairing was not accepted. Restart the human-code flow; local records are preserved.';
+      });
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Verification is unavailable. The pending credential is retained privately; retry when online.';
+        });
     }
   }
 
@@ -244,6 +273,33 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Widget _buildBody() {
     switch (_state) {
+      case _kStateVerify:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Finish pairing verification',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              Text(widget.args.cryptoClient.serverScope),
+              const SizedBox(height: 16),
+              const Text(
+                'A previous confirmation may have reached this server. Verify the saved pairing without changing your node identity or local records.',
+              ),
+              FilledButton(
+                onPressed: _recoverPendingPairing,
+                child: const Text('Verify saved pairing'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
       case _kStateLegacy:
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),

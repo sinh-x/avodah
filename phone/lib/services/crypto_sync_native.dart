@@ -19,6 +19,8 @@ class CryptoSyncService {
   String? _pendingFingerprint;
   Completer<bool>? _certApprovalCompleter;
   bool _hasLegacyPairing = false;
+  bool _hasPendingPairing = false;
+  String get _pendingKey => 'avodah_pending_pairing:$_scope';
 
   static const legacyTokenKey = 'avodah_pairing_token';
   static const legacyBindingKey = 'avodah_legacy_pairing_bound_to';
@@ -49,12 +51,14 @@ class CryptoSyncService {
   String? get pairingToken => _pairingToken;
   bool get isPaired => _pairingToken?.isNotEmpty ?? false;
   bool get hasLegacyPairing => _hasLegacyPairing;
+  bool get hasPendingPairing => _hasPendingPairing;
   String get serverScope => _scope;
   void setPairingToken(String? token) => _pairingToken = token;
 
   Future<void> loadPersistedState() async {
     _pairingToken = await _storage.read(key: _tokenKey);
     _approvedFingerprint = await _storage.read(key: _certKey);
+    _hasPendingPairing = await _storage.read(key: _pendingKey) != null;
     final legacy = await _storage.read(key: legacyTokenKey);
     final boundTo = await _storage.read(key: legacyBindingKey);
     _hasLegacyPairing =
@@ -77,12 +81,58 @@ class CryptoSyncService {
       throw StateError('Pairing migration requires trusted HTTPS');
     }
     final legacy = (await _storage.read(key: legacyTokenKey))!;
+    if (!await _verifyCandidateToken(legacy)) {
+      throw StateError('Saved pairing was rejected');
+    }
+    // Binding is durable before activation; retain the original for retry.
+    await _storage.write(key: legacyBindingKey, value: _scope);
+    final pub = await _storage.read(key: 'avodah_server_pub_key');
+    if (pub != null) await _storage.write(key: _serverKey, value: pub);
+    await persistPairingToken(legacy);
+    _hasLegacyPairing = false;
+  }
+
+  Future<void> stagePairing(String token, List<int> serverPubKey) async {
+    final record = jsonEncode({
+      'token': token,
+      'server': base64Encode(serverPubKey),
+      'node': nodeId,
+    });
+    await _storage.write(key: _pendingKey, value: record);
+    if (await _storage.read(key: _pendingKey) != record)
+      throw StateError('Credential storage failed');
+    _hasPendingPairing = true;
+  }
+
+  Future<void> clearPendingPairing() async {
+    await _storage.delete(key: _pendingKey);
+    _hasPendingPairing = false;
+  }
+
+  Future<bool> recoverPendingPairing() async {
+    final value = await _storage.read(key: _pendingKey);
+    if (value == null) throw StateError('No pending pairing');
+    final record = jsonDecode(value) as Map;
+    if (record['node'] != nodeId)
+      throw StateError('Pending device identity differs');
+    final token = record['token'] as String;
+    if (!await _verifyCandidateToken(token)) {
+      await clearPendingPairing();
+      return false;
+    }
+    await _storage.write(key: _serverKey, value: record['server'] as String);
+    await persistPairingToken(token);
+    await clearPendingPairing();
+    return true;
+  }
+
+  Future<bool> _verifyCandidateToken(String token) async {
     final request = await _client
         .getUrl(_buildUri('api/sync/pair'))
         .timeout(const Duration(seconds: 10));
     request.followRedirects = false;
     request.headers.set('X-Av-Node-Id', nodeId);
-    request.headers.set('X-Av-Pair-Token', legacy);
+    request.headers.set('X-Av-Pair-Token', token);
     final response = await request.close().timeout(const Duration(seconds: 10));
     final bytes = <int>[];
     await for (final chunk in response.timeout(const Duration(seconds: 10))) {
@@ -90,21 +140,14 @@ class CryptoSyncService {
         throw StateError('Invalid pairing verification');
       bytes.addAll(chunk);
     }
+    if (response.statusCode == 403) return false;
     if (response.statusCode != 200 ||
         (jsonDecode(utf8.decode(bytes)) as Map)['paired'] != true) {
       throw StateError(
         'Saved pairing not verified. Update the server first or retry when online.',
       );
     }
-    // Binding is durable before activation. On any failure retain the original
-    // credential for retry, bound to this explicitly confirmed destination.
-    await _storage.write(key: legacyBindingKey, value: _scope);
-    final pub = await _storage.read(key: 'avodah_server_pub_key');
-    if (pub != null) await _storage.write(key: _serverKey, value: pub);
-    await persistPairingToken(legacy);
-    // Retain the old secret privately for an old-app rollback. The binding
-    // prevents this app importing it into another server or after local Forget.
-    _hasLegacyPairing = false;
+    return true;
   }
 
   Future<void> persistPairingToken(String token) async {
@@ -119,6 +162,7 @@ class CryptoSyncService {
     if (await _storage.read(key: legacyBindingKey) == _scope) {
       await _storage.delete(key: legacyTokenKey);
     }
+    await clearPendingPairing();
     await _storage.delete(key: _tokenKey);
     _pairingToken = null;
     _hasLegacyPairing = false;
