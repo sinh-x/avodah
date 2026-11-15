@@ -254,7 +254,8 @@ http://127.0.0.1:19999 {
                 types=['task','worklog','timer','project','dailyPlan','dayPlanTask','categoryChip']
                 deltas=[{'type':kind,'id':'active-timer' if kind=='timer' else f'restored-{kind}',
                     'fields':{field:{'v':time.strftime('%Y-%m-%d',time.gmtime()) if field=='date' else 'synthetic-restored','t':stamp}
-                    for field in ['title','taskTitle','name','date','category','label']}} for kind in types]
+                    for field in ['title','taskTitle','name','date','category','label']} |
+                    ({'sortOrder':{'v':0,'t':stamp}} if kind=='categoryChip' else {})} for kind in types]
                 payload={'node':credentials['node'],'deltas':deltas}
                 assert json.loads(request('/avodah/api/sync/deltas','POST',headers=auth,body=payload)[1])['merged']==7
                 snapshot=json.loads(request('/avodah/api/sync/deltas',headers=auth)[1])['deltas']
