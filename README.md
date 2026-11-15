@@ -1,137 +1,50 @@
 # Avodah (עבודה)
 
-> Work as worship. A local-first, P2P productivity app.
+Local-first task management, daily planning and time tracking, with a Dart CLI,
+MCP tools and Flutter Android/browser client.
 
-## Overview
+## Current architecture
 
-Avodah is a Flutter-based task management and time tracking application inspired by [Super Productivity](https://github.com/johannesjo/super-productivity). It's designed to be:
+- `packages/avodah_core`: shared CRDT documents and Drift/SQLite schema.
+- `mcp`: CLI (`bin/avo.dart`), MCP (`bin/server.dart`), authenticated HTTP sync
+  (`bin/sync_server.dart`). One sync server per data directory.
+- `phone`: Flutter local SQLite client; seven-family two-way CRDT over paired
+  HTTPS. Browser credentials persist per origin/deployment; native TLS remains
+  platform-specific. Browser interactive sessions are explicitly unavailable.
+- Shared HTTPS `/avodah` gateway routes API/native WS through sync9847; static
+  assets go to web8080. PA9848 has independent authorization; pairing grants no
+  PA approval. Both backend listener defaults are loopback-only.
 
-- **Local-first**: All data lives on your devices, works fully offline
-- **P2P Sync**: Devices sync directly using CRDTs, no central server required
-- **Cross-platform**: Android and Linux desktop (iOS, Windows, macOS planned)
-- **Privacy-focused**: No analytics, no telemetry, your data stays yours
+No Isar, mDNS discovery or transport E2E-encryption claim is made for this delivery.
+TLS protects the network; device tokens authenticate requests. Browser same-origin
+scripts/XSS can access origin storage. Never put pairing/PA credentials in URLs.
 
-## Architecture
+## Development (from repository root)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Flutter Application                       │
-├─────────────────────────────────────────────────────────────────┤
-│  UI Layer (Widgets) → State Management (Riverpod)               │
-│           ↓                                                      │
-│  CRDT Document Layer (automatic conflict resolution)            │
-│           ↓                                                      │
-│  Storage (Isar) ←→ Sync Layer (P2P) ←→ Crypto (E2E)            │
-└─────────────────────────────────────────────────────────────────┘
-                               ↓
-              Network Layer (mDNS discovery, WebSocket, Relay)
-```
-
-## Features
-
-### Core (Phase 1)
-- [ ] Task management with projects and tags
-- [ ] Time tracking with start/stop timer
-- [ ] Worklog history
-- [ ] Offline-first with local persistence
-- [ ] CRDT-based data model
-
-### Sync (Phase 1)
-- [ ] P2P device discovery (mDNS)
-- [ ] Direct sync over local network
-- [ ] End-to-end encryption
-- [ ] Device pairing flow
-
-### Advanced (Phase 2+)
-- [ ] Pomodoro timer
-- [ ] Recurring tasks
-- [ ] Jira/GitHub integration
-- [ ] Calendar integration
-- [ ] iOS/Windows/macOS support
-
-## Tech Stack
-
-- **Framework**: Flutter 3.x
-- **State Management**: Riverpod
-- **Local Database**: Isar
-- **CRDT**: Dart-native CRDT or Yjs via FFI
-- **Networking**: WebSocket, mDNS/DNS-SD
-- **Encryption**: libsodium / cryptography
-
-## Getting Started
-
-### Prerequisites
-
-- Flutter SDK 3.x
-- Android SDK (for Android)
-- Linux development tools (for Linux desktop)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/sinh-x/avodah.git
-cd avodah
-
-# CLI (primary interface)
-cd mcp && dart pub get
-dart run mcp/bin/avo.dart --help
-
-# Phone viewer (Flutter web + Android)
-cd phone && flutter pub get
-cd phone && flutter build web --release
+```sh
+(cd mcp && dart pub get && dart run bin/avo.dart --help)
+(cd mcp && dart test)
+(cd packages/avodah_core && dart pub get && dart test)
+(cd phone && flutter pub get && flutter test)
+sh tool/fetch-web-assets.sh
+(cd phone && flutter build web --release --base-href /avodah/)
 ```
 
-## Project Structure
+Use isolated disposable data for native server tests via AVODAH_DATA_DIR and
+AVODAH_CONFIG_DIR; do not start a second writer on existing/live data. Browser
+pairing requires trusted same-origin HTTPS and an explicit exact-origin server
+allowlist, not disabled authentication. See [deployment](DOCKER.md),
+[route contract](docs/server-route-contract.md), [browser](docs/browser-sync.md),
+[operations/recovery](docs/operations.md), and [qualification](docs/qualification.md).
 
-```
-avodah/
-├── packages/avodah_core/   # Shared core (CRDT, documents, Drift database)
-├── mcp/                    # CLI + MCP server (pure Dart)
-│   ├── bin/                # Entry points (avo.dart, server.dart)
-│   ├── lib/cli/            # CLI command classes
-│   ├── lib/services/       # Business logic
-│   └── lib/tools/          # MCP server tool handlers
-├── phone/                  # Flutter viewer app (web + Android)
-│   ├── android/            # Android build
-│   └── web/                # Web build template
-└── docs/                   # Design specs
-```
+Jira is genuinely off in clean checkouts; intended live enablement is explicit
+private operator opt-in, never a real push as a test. Gateway/host/service changes
+and real Android/human acceptance require their own authorization.
 
-## Development
+## Releases
 
-See `.kiro/specs/sp-flutter-migration/` for detailed:
-- `requirements.md` - User stories and acceptance criteria
-- `design.md` - Technical architecture and component design
-- `tasks.md` - Implementation tasks
+See [CHANGELOG.md](CHANGELOG.md). Version strings and labels do not establish
+source/image identity. Record exact clean commit, dependency/build inputs, image
+IDs/digests and installed web checksums before a reversible authorized upgrade.
 
-## Inspiration
-
-- [Super Productivity](https://github.com/johannesjo/super-productivity) - Original Angular/Electron app
-- [Anytype](https://anytype.io) - Local-first, P2P architecture
-
-## Name
-
-**Avodah** (עבודה) is a Hebrew word meaning "work," "service," and "worship." In Jewish tradition, it represents the idea that work itself can be a form of divine service—transforming everyday tasks into something meaningful.
-
-## Versioning
-
-Avodah follows [Semantic Versioning](https://semver.org/). See [CHANGELOG.md](CHANGELOG.md) for release notes.
-
-| Version | Milestone |
-|---------|-----------|
-| **0.x.y** | Pre-stable — core features being built and tested |
-| **0.1.0** | CLI time tracking, task management, Jira 2-way sync, daily planning, MCP server |
-| **0.2.0** | Next capability area (e.g., full Jira coverage, GitHub integration) |
-| **1.0.0** | Fully functional CLI + MCP integration for AI-assisted usage |
-| **2.0.0** | Flutter UI with Linux & Android |
-
-**Pre-1.0 convention:** minor bumps (0.x.0) for new capability areas or breaking changes; patch bumps (0.x.y) for bug fixes and polish within a capability.
-
-## License
-
-MIT
-
----
-
-*Work as worship.*
+MIT. Work as worship.

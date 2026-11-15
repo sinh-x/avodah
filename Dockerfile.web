@@ -12,43 +12,43 @@
 # ──────────────────────────────────────────────────────────────
 # Stage 1: Build — Flutter web assets
 # ──────────────────────────────────────────────────────────────
-FROM ghcr.io/cirruslabs/flutter:stable AS builder
+FROM ghcr.io/cirruslabs/flutter:3.38.9@sha256:96171a9d81137ecb995621ffcfcd64ce777d3408c83aba6417d20048dbfca091 AS builder
 
 WORKDIR /app
 
 # Allow Flutter to run as root inside Docker
 ENV CI=true
 
-# Copy entire repo to /app (needed because phone/ depends on ../packages/avodah_core)
-COPY . .
+# Only application/build inputs; static Caddy changes must not rebuild Flutter.
+COPY packages/avodah_core/ packages/avodah_core/
+COPY phone/ phone/
+COPY tool/fetch-web-assets.sh tool/fetch-web-assets.sh
 
 # Enable web support
-RUN flutter config --enable-web || true
+RUN flutter config --enable-web
 
 # Work in phone/ directory for building
 WORKDIR /app/phone
 
-# Enable web platform for this project (phone/ was Android-only)
-RUN flutter create . --platforms web --project-name avodah_viewer --org com.sinhx 2>/dev/null || true
-
 # Resolve dependencies
-RUN flutter pub get
+RUN flutter pub get --enforce-lockfile
 
 # Download Drift WASM files into web/ (versions must match pubspec.lock)
-RUN curl -L -o web/sqlite3.wasm https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-2.9.4/sqlite3.wasm \
-    && curl -L -o web/drift_worker.js https://github.com/simolus3/drift/releases/download/drift-2.31.0/drift_worker.js
+RUN sh /app/tool/fetch-web-assets.sh
 
 # Build Flutter web release.
 # --base-href=/avodah/ matches the drgnfly-caddy mount path so Uri.base in the
 # running app reflects the real URL (used by loadServerUrl on web). Flutter's
 # own asset URLs then become /avodah/... which drgnfly-caddy rewrites back to
 # / before reaching this container's Caddy file_server.
-RUN flutter build web --release --base-href=/avodah/
+RUN flutter build web --release --no-web-resources-cdn --base-href=/avodah/
 
 # ──────────────────────────────────────────────────────────────
 # Stage 2: Serve — Caddy static file server
 # ──────────────────────────────────────────────────────────────
-FROM caddy:2-alpine
+FROM caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 
 # Copy Caddyfile configuration
 COPY Caddyfile /etc/caddy/Caddyfile

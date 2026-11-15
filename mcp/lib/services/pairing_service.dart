@@ -42,6 +42,7 @@ class _PairingState {
   final List<int> serverPrivateKey; // ephemeral X25519 private key
   final List<int> serverPublicKey; // ephemeral X25519 public key
   final DateTime expiresAt;
+  int failures = 0;
 
   _PairingState({
     required this.passcode,
@@ -60,7 +61,70 @@ class PairingService {
   /// In-memory pairing handshakes keyed by nodeId.
   final Map<String, _PairingState> _handshakes = {};
 
-  PairingService({required this.db});
+  /// Private operator code delivery; never write codes to container logs.
+  final void Function(String code) deliverCode;
+  final DateTime Function() now;
+  final Map<String, int> _starts = {};
+  DateTime? _window;
+  final Map<String, List<WebSocket>> _sockets = {};
+  final Set<String> _busy = {};
+  final Set<String> _revoked = {};
+
+  PairingService(
+      {required this.db,
+      void Function(String)? deliverCode,
+      DateTime Function()? now})
+      : deliverCode = deliverCode ?? _deliverPrivately,
+        now = now ?? DateTime.now;
+
+  static void _deliverPrivately(String code) {
+    // Docker can collect /dev/tty output too. Require an explicitly selected
+    // private operator channel, never stdout/stderr or container TTY logs.
+    final path = Platform.environment['PAIRING_CODE_FILE'];
+    if (path == null) throw StateError('Private enrollment channel required');
+    final file = File(path);
+    if (file.parent.statSync().mode & 0x3f != 0 ||
+        FileSystemEntity.typeSync(path, followLinks: false) ==
+            FileSystemEntityType.link) {
+      throw StateError('Private enrollment channel required');
+    }
+    final handle = file.openSync(mode: FileMode.append);
+    try {
+      if (file.statSync().mode & 0x3f != 0 ||
+          file.statSync().type != FileSystemEntityType.file) {
+        throw StateError('Enrollment file must be private');
+      }
+      handle.truncateSync(0);
+      handle.setPositionSync(0);
+      handle.writeStringSync('$code\n');
+      handle.flushSync();
+    } finally {
+      handle.closeSync();
+    }
+  }
+
+  void trackSocket(String nodeId, WebSocket socket) {
+    if (_revoked.contains(nodeId)) {
+      socket.close(WebSocketStatus.policyViolation, 'Pairing revoked');
+      return;
+    }
+    _sockets.putIfAbsent(nodeId, () => []).add(socket);
+    socket.done.whenComplete(() => _sockets[nodeId]?.remove(socket));
+  }
+
+  bool admitStart(String source) {
+    if (_window == null || now().difference(_window!).inMinutes >= 1) {
+      _window = now();
+      _starts.clear();
+    }
+    final total = _starts.values.fold(0, (a, b) => a + b);
+    if (total >= 100 || (_starts[source] ?? 0) >= 10) return false;
+    _starts[source] = (_starts[source] ?? 0) + 1;
+    return true;
+  }
+
+  static bool validNode(String node) =>
+      RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$').hasMatch(node);
 
   /// GET /api/sync/status
   ///
@@ -79,8 +143,26 @@ class PairingService {
   /// sent to the phone. The user must manually key it in on the phone
   /// for multi-level authentication.
   Future<Map<String, dynamic>> startPairing(String nodeId) async {
+    _handshakes.removeWhere((_, state) => !now().isBefore(state.expiresAt));
+    if (_busy.contains(nodeId) || _handshakes.length + _busy.length >= 32) {
+      throw StateError('Enrollment unavailable');
+    }
+    _busy.add(nodeId);
+    try {
+      return await _startPairing(nodeId);
+    } finally {
+      _busy.remove(nodeId);
+    }
+  }
+
+  Future<Map<String, dynamic>> _startPairing(String nodeId) async {
     // Clean up expired handshakes
-    _handshakes.removeWhere((_, state) => state.isExpired);
+    _handshakes.removeWhere((_, state) => !now().isBefore(state.expiresAt));
+    if (!validNode(nodeId) ||
+        _handshakes.length >= 32 ||
+        await getPairedDevice(nodeId) != null) {
+      throw StateError('Enrollment unavailable');
+    }
 
     final passcode = generateSixDigitCode();
     final keyPair = await generateKeyPair();
@@ -89,16 +171,16 @@ class PairingService {
       passcode: passcode,
       serverPrivateKey: keyPair.privateKey,
       serverPublicKey: keyPair.publicKey,
-      expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+      expiresAt: now().add(const Duration(minutes: 5)),
     );
     _handshakes[nodeId] = state;
 
-    // Log passcode to console — the ONLY place it is shown
-    stderr.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    stderr.writeln('  PAIRING CODE: $passcode');
-    stderr.writeln('  Enter this code on your phone to pair.');
-    stderr.writeln('  Valid for 5 minutes.');
-    stderr.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    try {
+      deliverCode(passcode);
+    } catch (_) {
+      _handshakes.remove(nodeId);
+      throw StateError('Private operator console unavailable');
+    }
 
     return {
       'serverPubKey': base64Encode(keyPair.publicKey),
@@ -116,17 +198,53 @@ class PairingService {
     required String hmacProofBase64,
     String? origin,
   }) async {
-    final state = _handshakes[nodeId];
-    if (state == null || state.isExpired) {
-      return {'success': false, 'error': 'Pairing timeout — restart from phone.'};
+    if (_busy.contains(nodeId)) {
+      return {'success': false, 'error': 'Enrollment busy'};
+    }
+    _busy.add(nodeId);
+    try {
+      return await _confirmPairing(
+          nodeId: nodeId,
+          phonePubKeyBase64: phonePubKeyBase64,
+          hmacProofBase64: hmacProofBase64,
+          origin: origin);
+    } finally {
+      _busy.remove(nodeId);
+    }
+  }
+
+  Future<Map<String, dynamic>> _confirmPairing(
+      {required String nodeId,
+      required String phonePubKeyBase64,
+      required String hmacProofBase64,
+      String? origin}) async {
+    // Remove before the first await: concurrent confirmations cannot replay.
+    final state = _handshakes.remove(nodeId);
+    if (state == null || !now().isBefore(state.expiresAt)) {
+      return {
+        'success': false,
+        'error': 'Pairing timeout — restart from phone.'
+      };
     }
 
-    final phonePubKey = base64Decode(phonePubKeyBase64);
-    final hmacProof = base64Decode(hmacProofBase64);
+    late List<int> phonePubKey;
+    late Uint8List hmacProof;
+    try {
+      phonePubKey = base64Decode(phonePubKeyBase64);
+      hmacProof = base64Decode(hmacProofBase64);
+      if (phonePubKey.length != 32 || hmacProof.length != 32) {
+        throw const FormatException();
+      }
+    } catch (_) {
+      if (++state.failures < 5) _handshakes[nodeId] = state;
+      return {'success': false, 'error': 'Invalid pairing proof.'};
+    }
 
     // Verify HMAC: HMAC-SHA256(passcode, phonePubKey)
-    final expectedHmac = await _computeHmacPasscode(state.passcode, phonePubKey);
+    final expectedHmac =
+        await _computeHmacPasscode(state.passcode, phonePubKey);
     if (!_constantTimeEquals(hmacProof, expectedHmac)) {
+      if (++state.failures < 5) _handshakes[nodeId] = state;
       return {'success': false, 'error': 'Invalid pairing proof.'};
     }
 
@@ -153,6 +271,7 @@ class PairingService {
         );
 
     _handshakes.remove(nodeId);
+    _revoked.remove(nodeId);
 
     stderr.writeln('Device paired successfully: $nodeId');
 
@@ -163,6 +282,9 @@ class PairingService {
   ///
   /// Returns true if the token is valid for this device.
   Future<bool> verifyPairToken(String nodeId, String tokenBase64) async {
+    if (_revoked.contains(nodeId) ||
+        !validNode(nodeId) ||
+        tokenBase64.length != 44) return false;
     final device = await (db.select(db.pairedDevices)
           ..where((d) => d.id.equals(nodeId)))
         .getSingleOrNull();
@@ -176,7 +298,8 @@ class PairingService {
     // Derive expected token: HMAC-SHA256(pairingKey, "avodah-sync-v1")
     final expectedToken = await generateSyncVerifyCode(pairingKey);
 
-    return verifySyncCode(expectedToken, tokenBase64);
+    return !_revoked.contains(nodeId) &&
+        verifySyncCode(expectedToken, tokenBase64);
   }
 
   /// Returns the stored pairing for a device, or null if not paired.
@@ -187,8 +310,11 @@ class PairingService {
 
   /// Revokes pairing for a device.
   Future<void> revokePairing(String nodeId) async {
-    await (db.delete(db.pairedDevices)..where((d) => d.id.equals(nodeId)))
-        .go();
+    _revoked.add(nodeId);
+    for (final socket in _sockets.remove(nodeId) ?? <WebSocket>[]) {
+      socket.close(WebSocketStatus.policyViolation, 'Pairing revoked');
+    }
+    await (db.delete(db.pairedDevices)..where((d) => d.id.equals(nodeId))).go();
     stderr.writeln('Pairing revoked for device: $nodeId');
   }
 

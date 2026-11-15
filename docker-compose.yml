@@ -3,39 +3,49 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     network_mode: host
     volumes:
-      # Config dir (read-write — config.json is mutated by chip save API)
       - ${AVODAH_CONFIG:-~/.config/avodah}:/config
-      # Data dir (read-write — SQLite database)
       - ${AVODAH_DATA:-~/.local/share/avodah}:/data
     environment:
-      - AVODAH_DATA_DIR=/data
-      - AVODAH_CONFIG_DIR=/config
-      # Host networking exposes the listener on the host; keep it loopback-only.
-      - SYNC_HOST=${SYNC_HOST:-127.0.0.1}
-      - SYNC_PORT=${SYNC_PORT:-9847}
-      - JIRA_ENABLED=${JIRA_ENABLED:-false}
-      # Agent API URL — proxied to pa serve (same host, port 9848)
-      - AGENT_API_URL=http://localhost:${AGENT_PORT:-9848}
+      AVODAH_DATA_DIR: /data
+      AVODAH_CONFIG_DIR: /config
+      SYNC_HOST: ${SYNC_HOST:-127.0.0.1}
+      SYNC_PORT: ${SYNC_PORT:-9847}
+      SYNC_ALLOWED_ORIGINS: ${SYNC_ALLOWED_ORIGINS:-}
+      PAIRING_CODE_FILE: ${PAIRING_CODE_FILE:-}
+      JIRA_ENABLED: ${JIRA_ENABLED:-false}
+      AGENT_API_URL: http://127.0.0.1:${AGENT_PORT:-9848}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --max-time 3 http://127.0.0.1:$$SYNC_PORT/ready >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
 
   avodah-web:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     network_mode: host
-    ports:
-      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
-    volumes:
-      # Mount Caddyfile from repo (avoids rebuilding image for config changes)
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     environment:
-      - WEB_PORT=${WEB_PORT:-8080}
-      - SYNC_SERVER_HOST=localhost
-      - SYNC_SERVER_PORT=${SYNC_PORT:-9847}
-      - AGENT_API_HOST=localhost
-      - AGENT_API_PORT=${AGENT_PORT:-9848}
-    depends_on:
-      - avodah-sync
+      WEB_HOST: ${WEB_HOST:-127.0.0.1}
+      WEB_PORT: ${WEB_PORT:-8080}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/index.html && wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/sqlite3.wasm && wget -q -T 1 -O /dev/null http://127.0.0.1:$$WEB_PORT/drift_worker.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

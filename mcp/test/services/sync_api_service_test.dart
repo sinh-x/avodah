@@ -349,6 +349,56 @@ void main() {
     });
   });
 
+  test(
+      'concurrent paired batches preserve independent fields on the same document',
+      () async {
+    final stamp = clock.now().pack();
+    await Future.wait([
+      syncApi.mergePushBatch(remoteNode: 'browser-a', deltas: [
+        {
+          'type': 'task',
+          'id': 'concurrent',
+          'fields': {
+            'title': {'v': 'from A', 't': stamp}
+          }
+        }
+      ]),
+      syncApi.mergePushBatch(remoteNode: 'browser-b', deltas: [
+        {
+          'type': 'task',
+          'id': 'concurrent',
+          'fields': {
+            'description': {'v': 'from B', 't': stamp}
+          }
+        }
+      ]),
+    ]);
+    final row = await (db.select(db.tasks)
+          ..where((t) => t.id.equals('concurrent')))
+        .getSingle();
+    expect(row.title, 'from A');
+    expect(row.description, 'from B');
+  });
+
+  test('partial batch does not advance an acknowledged receive watermark',
+      () async {
+    final stamp = clock.now().pack();
+    await syncApi.setWatermark('browser', stamp);
+    final result = await syncApi.mergePushBatch(remoteNode: 'browser', deltas: [
+      {
+        'type': 'task',
+        'id': 'partial',
+        'fields': {
+          'title': {'v': 'retained', 't': stamp}
+        }
+      },
+      {'type': 'unknown', 'id': 'invalid', 'fields': {}}
+    ]);
+    expect(result.merged, 1);
+    expect(result.errors, hasLength(1));
+    expect(await syncApi.getWatermark('browser'), stamp);
+  });
+
   group('watermark tracking', () {
     test('getWatermark returns "0" when no watermark stored', () async {
       final wm = await syncApi.getWatermark('phone-1');
@@ -613,8 +663,8 @@ void main() {
     });
 
     test('returns null when timer is not running', () async {
-      final staleTs =
-          DateTime.now().millisecondsSinceEpoch - (avoStaleTimerMinutes + 1) * 60 * 1000;
+      final staleTs = DateTime.now().millisecondsSinceEpoch -
+          (avoStaleTimerMinutes + 1) * 60 * 1000;
       await syncApi.setWatermark(
         'phone-old',
         '1000-0-phone-old',
@@ -629,8 +679,8 @@ void main() {
     test('emits warning when timer is running and sync is stale', () async {
       await timerService.start(taskTitle: 'Running task');
 
-      final staleTs =
-          DateTime.now().millisecondsSinceEpoch - (avoStaleTimerMinutes + 1) * 60 * 1000;
+      final staleTs = DateTime.now().millisecondsSinceEpoch -
+          (avoStaleTimerMinutes + 1) * 60 * 1000;
       await syncApi.setWatermark(
         'phone-old',
         '1000-0-phone-old',

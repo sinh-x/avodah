@@ -24,7 +24,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:web_socket_channel/io.dart';
+import 'ws_connect.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/ws_session_event.dart';
@@ -88,22 +88,28 @@ class WsSessionClient {
   }) async {
     final base = wsBaseUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/ws/session');
-    final channel = IOWebSocketChannel.connect(uri, headers: headers);
+    final channel = connectNativeSession(uri, headers);
     try {
       await channel.ready.timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw TimeoutException(
-              'WebSocket handshake to $uri timed out after 10s');
+            'WebSocket handshake to $uri timed out after 10s',
+          );
         },
       );
     } catch (e) {
       // Close the socket before rethrowing so we don't leak a half-open
       // channel on failure paths (Mn5).
       try {
-        await channel.sink.close();
+        await channel.sink.close().timeout(const Duration(seconds: 1));
       } catch (_) {
         // Best-effort — ignore errors during cleanup.
+      }
+      if (isSessionPermissionDenied(e)) {
+        throw WsSessionConnectException(
+          'PA permission denied. Pairing does not grant PA session authorization.',
+        );
       }
       if (e is TimeoutException) {
         throw WsSessionConnectException(
@@ -148,8 +154,13 @@ class WsSessionClient {
   /// Send a `resume` message with an existing opencode session id.
   ///
   /// [team] and [mode] are optional, forwarded the same as [start].
-  void resume(String sessionId, String prompt,
-      {String? model, String? team, String? mode}) {
+  void resume(
+    String sessionId,
+    String prompt, {
+    String? model,
+    String? team,
+    String? mode,
+  }) {
     _send({
       'type': 'resume',
       'sessionId': sessionId,

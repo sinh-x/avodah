@@ -26,14 +26,9 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:avodah_core/avodah_core.dart';
 import 'crypto_sync_service.dart';
-
-/// Storage keys for pairing data.
-const _kPairingTokenKey = 'avodah_pairing_token';
-const _kServerPubKeyKey = 'avodah_server_pub_key';
 
 /// Result of a pairing status check.
 class PairingStatus {
@@ -64,7 +59,6 @@ class PairingResult {
 /// pairing with the sync server.
 class PhonePairingService {
   final CryptoSyncService _cryptoClient;
-  final FlutterSecureStorage _secureStorage;
 
   /// The node ID for this phone (used as the pairing ID on the server).
   final String nodeId;
@@ -75,9 +69,7 @@ class PhonePairingService {
   PhonePairingService({
     required CryptoSyncService cryptoClient,
     required this.nodeId,
-    FlutterSecureStorage? secureStorage,
-  })  : _cryptoClient = cryptoClient,
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _cryptoClient = cryptoClient;
 
   /// Returns true if a pairing token is persisted.
   bool get isPaired => _pairingToken != null && _pairingToken!.isNotEmpty;
@@ -87,7 +79,8 @@ class PhonePairingService {
 
   /// Loads persisted pairing state from secure storage.
   Future<void> loadPersistedState() async {
-    _pairingToken = await _secureStorage.read(key: _kPairingTokenKey);
+    await _cryptoClient.loadPersistedState();
+    _pairingToken = _cryptoClient.pairingToken;
     debugPrint('[PhonePairing] Loaded — isPaired: $isPaired');
   }
 
@@ -103,16 +96,15 @@ class PhonePairingService {
         final json = jsonDecode(body) as Map<String, dynamic>;
         return PairingStatus.fromJson(json);
       } else {
-        debugPrint('[PhonePairing] Status check failed: HTTP ${response.statusCode} — $body');
-        // Treat non-200 as needs pairing (server might not have pairing endpoints yet)
-        return PairingStatus(needsPairing: true);
+        throw StateError(
+          'Pairing status unavailable (HTTP ${response.statusCode})',
+        );
       }
     } catch (e) {
-      debugPrint('[PhonePairing] Status check error: $e');
-      // Network error — DON'T assume needs pairing. Transient network
-      // failures (Android doze, Tailscale blip) should not trigger the
-      // pairing screen. The 403 on /api/sync/deltas is the real signal.
-      return PairingStatus(needsPairing: false);
+      // Network/TLS/status failure is not evidence of pairing loss. Propagate
+      // so the pairing screen can handle a native certificate challenge and
+      // background sync reports offline instead of opening an enrollment modal.
+      rethrow;
     }
   }
 
@@ -133,7 +125,9 @@ class PhonePairingService {
     );
     final responseBody = await _readResponseBody(response);
     if (response.statusCode != 200) {
-      throw Exception('Pairing start failed: HTTP ${response.statusCode} — $responseBody');
+      throw Exception(
+        'Pairing start failed: HTTP ${response.statusCode} — $responseBody',
+      );
     }
     return jsonDecode(responseBody) as Map<String, dynamic>;
   }
@@ -167,47 +161,58 @@ class PhonePairingService {
       'hmacProof': base64Encode(hmacProof),
     });
 
-    final response = await _cryptoClient.post(
-      'api/sync/pair/confirm',
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    );
-    final responseBody = await _readResponseBody(response);
-
-    if (response.statusCode != 200) {
-      return PairingResult(success: false, error: 'HTTP ${response.statusCode}');
-    }
-
-    final json = jsonDecode(responseBody) as Map<String, dynamic>;
-    final success = json['success'] as bool? ?? false;
-    if (!success) {
-      return PairingResult(
-        success: false,
-        error: json['error'] as String? ?? 'Unknown error',
-      );
-    }
-
-    // Derive shared secret and pairing key
     final sharedSecret = await deriveSharedSecret(keyPair, serverPubKeyBytes);
     final pairingKey = await derivePairingKey(sharedSecret);
-
-    // Generate and store the pairing token: HMAC-SHA256(pairingKey, "avodah-sync-v1")
     final syncToken = await generateSyncVerifyCode(pairingKey);
-
-    // Store the pairing token and server pubkey
-    await _secureStorage.write(key: _kPairingTokenKey, value: syncToken);
-    await _secureStorage.write(
-      key: _kServerPubKeyKey,
-      value: base64Encode(serverPubKeyBytes),
-    );
-    _pairingToken = syncToken;
-    _cryptoClient.setPairingToken(syncToken);
-
-    // Also store the server pubkey in CryptoSyncService for replay protection
-    await _cryptoClient.storeServerPubKey(serverPubKeyBytes);
-
-    debugPrint('[PhonePairing] Pairing confirmed and persisted. Token stored.');
-    return PairingResult(success: true);
+    // Stage one durable, server-scoped recovery record BEFORE the server can
+    // accept confirmation. It is not an active credential until verified.
+    try {
+      await _cryptoClient.stagePairing(syncToken, serverPubKeyBytes);
+    } catch (_) {
+      return PairingResult(
+        success: false,
+        error:
+            'Credential storage unavailable. Pairing was not confirmed; local records are preserved.',
+      );
+    }
+    try {
+      final response = await _cryptoClient.post(
+        'api/sync/pair/confirm',
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      );
+      final responseBody = await _readResponseBody(response);
+      if (response.statusCode == 403 || response.statusCode == 400) {
+        await _cryptoClient.clearPendingPairing();
+        return PairingResult(
+          success: false,
+          error: 'Code or challenge rejected. Restart pairing.',
+        );
+      }
+      if (response.statusCode != 200 ||
+          (jsonDecode(responseBody) as Map)['success'] != true) {
+        return PairingResult(
+          success: false,
+          error: 'Verification needed; retry saved pairing verification.',
+        );
+      }
+      if (!await _cryptoClient.recoverPendingPairing()) {
+        return PairingResult(
+          success: false,
+          error: 'Pairing could not be verified. Restart pairing.',
+        );
+      }
+      _pairingToken = _cryptoClient.pairingToken;
+      return PairingResult(success: true);
+    } catch (_) {
+      // The server might have accepted a lost response. Keep the exact derived
+      // credential privately so reload/retry can verify instead of orphaning it.
+      return PairingResult(
+        success: false,
+        error:
+            'Verification needed. Saved pairing recovery is available; local records are preserved.',
+      );
+    }
   }
 
   /// Revokes the current pairing.
@@ -215,23 +220,28 @@ class PhonePairingService {
   /// DELETE /api/sync/pair
   /// Clears local pairing state and notifies the server.
   Future<void> revokePairing() async {
-    try {
-      await _cryptoClient.delete('api/sync/pair');
-    } catch (e) {
-      debugPrint('[PhonePairing] Revoke request failed (non-fatal): $e');
+    final response = await _cryptoClient.delete('api/sync/pair');
+    await _readResponseBody(response);
+    if (response.statusCode != 200) {
+      throw StateError(
+        'Remote revoke not confirmed (HTTP ${response.statusCode})',
+      );
     }
+    await forgetLocally();
+  }
+
+  Future<void> forgetLocally() async {
+    await _cryptoClient.clearPairingToken();
     _pairingToken = null;
-    _cryptoClient.setPairingToken(null);
-    await _secureStorage.delete(key: _kPairingTokenKey);
-    await _secureStorage.delete(key: _kServerPubKeyKey);
-    debugPrint('[PhonePairing] Pairing revoked locally.');
   }
 
   /// Computes HMAC-SHA256(passcode, phonePubKey) for pairing proof.
   ///
   /// Uses passcode as the HMAC secret key and phonePubKey as the message.
   Future<Uint8List> _computePasscodeProof(
-      String passcode, List<int> phonePubKey) async {
+    String passcode,
+    List<int> phonePubKey,
+  ) async {
     final hmac = Hmac.sha256();
     final secretKey = SecretKey(utf8.encode(passcode));
     final mac = await hmac.calculateMac(
@@ -241,7 +251,10 @@ class PhonePairingService {
     return Uint8List.fromList(mac.bytes);
   }
 
-  Future<String> _readResponseBody(HttpClientResponse response) async {
-    return utf8.decoder.bind(response).join();
+  Future<String> _readResponseBody(Stream<List<int>> response) async {
+    return utf8.decoder
+        .bind(response)
+        .join()
+        .timeout(const Duration(seconds: 10));
   }
 }

@@ -13,7 +13,7 @@
 # ──────────────────────────────────────────────────────────────
 # Stage 1: Build — compile Dart to native binary
 # ──────────────────────────────────────────────────────────────
-FROM dart:stable AS builder
+FROM dart:3.10.8-sdk@sha256:a2a76f3bc4d52ce15005a980cbb87db13d156b7cad2d2e686f97a977c3cf77cf AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY mcp/ mcp/
 
 # Resolve dependencies
 WORKDIR /app/mcp
-RUN dart pub get
+RUN dart pub get --enforce-lockfile
 
 # Compile to native binary (no Dart VM needed at runtime)
 RUN dart compile exe bin/sync_server.dart -o /app/sync_server
@@ -33,14 +33,14 @@ RUN dart compile exe bin/sync_server.dart -o /app/sync_server
 # ──────────────────────────────────────────────────────────────
 # Stage 2: Runtime — minimal Debian image with SQLite3
 # ──────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 
 # Install SQLite3 shared library (required by sqlite3 Dart package)
 # ca-certificates: needed for HTTPS connections (Jira API)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
-        ca-certificates \
+        ca-certificates curl \
     && ln -s /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 /usr/lib/x86_64-linux-gnu/libsqlite3.so \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,11 +57,13 @@ RUN mkdir -p /data /config
 ENV AVODAH_DATA_DIR=/data
 ENV AVODAH_CONFIG_DIR=/config
 ENV JIRA_ENABLED=false
-ENV AGENT_API_URL=http://host.docker.internal:9848
+ENV AGENT_API_URL=http://127.0.0.1:9848
+ENV SYNC_HOST=127.0.0.1
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 
-# Sync server port (container always listens on 9847;
-# host-side port is configurable via SYNC_PORT in docker-compose)
+# Informational only under host networking; SYNC_PORT changes the process.
 EXPOSE 9847
-
-# Run sync-only server on fixed container port 9847
-CMD ["/app/sync_server", "--port", "9847"]
+# New container-created secrets/data are private; existing mounts need metadata review.
+COPY tool/sync-entrypoint.sh /app/sync-entrypoint.sh
+ENTRYPOINT ["/bin/sh", "/app/sync-entrypoint.sh"]

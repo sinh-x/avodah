@@ -25,10 +25,7 @@ class PairingScreenArgs {
   final CryptoSyncService cryptoClient;
   final String nodeId;
 
-  const PairingScreenArgs({
-    required this.cryptoClient,
-    required this.nodeId,
-  });
+  const PairingScreenArgs({required this.cryptoClient, required this.nodeId});
 }
 
 /// Pairing screen widget.
@@ -46,6 +43,8 @@ class _PairingScreenState extends State<PairingScreen> {
 
   /// Pairing state machine states.
   static const _kStateLoading = 'loading';
+  static const _kStateLegacy = 'legacy';
+  static const _kStateVerify = 'verify';
   static const _kStateEnterPasscode = 'enter_passcode';
   static const _kStatePairing = 'pairing';
   static const _kStateError = 'error';
@@ -81,15 +80,35 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Future<void> _startPairingFlow() async {
     setState(() => _state = _kStateLoading);
+    try {
+      await widget.args.cryptoClient.loadPersistedState();
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Credential storage is unavailable. Local records are preserved; enable storage and retry.';
+        });
+      return;
+    }
+    if (!mounted) return;
+    if (widget.args.cryptoClient.hasPendingPairing) {
+      setState(() => _state = _kStateVerify);
+      return;
+    }
+    if (widget.args.cryptoClient.hasLegacyPairing) {
+      setState(() => _state = _kStateLegacy);
+      return;
+    }
 
     // First check status to get the fingerprint
     PairingStatus? status;
     try {
       status = await _pairingService.checkPairingStatus();
-    } on Exception catch (e) {
+    } catch (e) {
       // Check if there's a pending cert fingerprint
-      final pendingFingerprint =
-          widget.args.cryptoClient.checkPendingCertFingerprint();
+      final pendingFingerprint = widget.args.cryptoClient
+          .checkPendingCertFingerprint();
       if (pendingFingerprint != null) {
         // Show cert approval dialog
         if (!mounted) return;
@@ -104,7 +123,8 @@ class _PairingScreenState extends State<PairingScreen> {
           widget.args.cryptoClient.rejectCert();
           setState(() {
             _state = _kStateError;
-            _errorMessage = 'Certificate not approved. Pairing requires TLS verification.';
+            _errorMessage =
+                'Certificate not approved. Pairing requires TLS verification.';
           });
           return;
         }
@@ -121,16 +141,8 @@ class _PairingScreenState extends State<PairingScreen> {
 
     if (!mounted) return;
 
-    if (!status.needsPairing) {
-      // Server thinks it's paired but we got here (likely 403 — phone lost
-      // its token). Revoke the stale pairing so we can re-pair cleanly.
-      debugPrint('[PairingScreen] Server paired but phone token missing — revoking stale pairing');
-      try {
-        await _pairingService.revokePairing();
-      } catch (e) {
-        debugPrint('[PairingScreen] Revoke failed (non-fatal): $e');
-      }
-    }
+    // Global status describes the server, not this device. Other enrolled
+    // devices must never suppress enrollment or trigger a revoke here.
 
     // Store fingerprint if provided
     _serverFingerprint = status.serverFingerprint;
@@ -150,6 +162,55 @@ class _PairingScreenState extends State<PairingScreen> {
         _state = _kStateError;
         _errorMessage = 'Failed to start pairing: $e';
       });
+    }
+  }
+
+  Future<void> _recoverPendingPairing() async {
+    setState(() => _state = _kStatePairing);
+    try {
+      final paired = await widget.args.cryptoClient.recoverPendingPairing();
+      if (!mounted) return;
+      if (paired) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+      setState(() {
+        _state = _kStateError;
+        _errorMessage =
+            'Saved pairing was not accepted. Restart the human-code flow; local records are preserved.';
+      });
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Verification is unavailable. The pending credential is retained privately; retry when online.';
+        });
+    }
+  }
+
+  Future<void> _migrateLegacyPairing() async {
+    setState(() => _state = _kStatePairing);
+    try {
+      await widget.args.cryptoClient.migrateLegacyPairing();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      final pending = widget.args.cryptoClient.checkPendingCertFingerprint();
+      if (pending != null && mounted) {
+        final approved = await _showCertApprovalDialog(pending);
+        if (approved) {
+          await widget.args.cryptoClient.approveCert(pending);
+          if (mounted) setState(() => _state = _kStateLegacy);
+          return;
+        }
+        widget.args.cryptoClient.rejectCert();
+      }
+      if (mounted)
+        setState(() {
+          _state = _kStateError;
+          _errorMessage =
+              'Saved pairing was not migrated. Confirm this is your original server, update the server first, or retry when online. Local data and the saved credential are preserved.';
+        });
     }
   }
 
@@ -212,6 +273,63 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Widget _buildBody() {
     switch (_state) {
+      case _kStateVerify:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Finish pairing verification',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              Text(widget.args.cryptoClient.serverScope),
+              const SizedBox(height: 16),
+              const Text(
+                'A previous confirmation may have reached this server. Verify the saved pairing without changing your node identity or local records.',
+              ),
+              FilledButton(
+                onPressed: _recoverPendingPairing,
+                child: const Text('Verify saved pairing'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
+      case _kStateLegacy:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Use existing phone pairing?',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              Text(widget.args.cryptoClient.serverScope),
+              const SizedBox(height: 16),
+              const Text(
+                'Your saved pairing predates server-scoped storage. Continue only if this is your original trusted server. The saved credential will be sent only to this server for verification. Local records and node identity are kept.',
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _migrateLegacyPairing,
+                child: const Text(
+                  'Confirm original server and use saved pairing',
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
       case _kStateLoading:
         return const Center(
           child: Column(
@@ -318,7 +436,7 @@ class _PairingScreenState extends State<PairingScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Enter the 6-digit code shown on your\nserver console to pair this device.',
+            'Enter the private operator code within 5 minutes. Local data is preserved.',
             style: TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
@@ -357,6 +475,7 @@ class _PairingScreenState extends State<PairingScreen> {
                   ),
                   decoration: const InputDecoration(
                     counterText: '',
+                    labelText: 'Six-digit pairing code',
                     hintText: '------',
                     hintStyle: TextStyle(
                       fontSize: 32,
@@ -386,8 +505,11 @@ class _PairingScreenState extends State<PairingScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.verified_user_outlined,
-                          size: 16, color: Colors.grey),
+                      const Icon(
+                        Icons.verified_user_outlined,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'TLS Certificate Fingerprint',

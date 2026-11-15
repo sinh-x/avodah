@@ -29,7 +29,8 @@ phone/.dart_tool/
 # Project files not needed in Docker build context
 completions/
 docs/
-tool/
+tool/*
+!tool/fetch-web-assets.sh
 flake.lock
 flake.nix
 *.nix
@@ -39,6 +40,13 @@ DOCKER.md
 
 # Docker files for sync server
 Dockerfile
+
+.git
+**/.dart_tool/
+**/build/
+**/__pycache__/
+.env*
+docker-compose.override.yml
 
 # Keep:
 #   phone/          — the Flutter web app source

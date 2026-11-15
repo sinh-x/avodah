@@ -63,6 +63,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   Timer? _syncTimer;
   bool _syncInProgress = false;
   bool _pairingInProgress = false;
+  bool _pairingPrompted = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -101,7 +102,10 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final phoneDb = kIsWeb ? null : await openPhoneLocalDatabase();
 
     // Node ID + HLC clock
-    final nodeId = await CrdtSyncService.getOrCreateNodeId();
+    final httpBaseUrl = await SettingsScreen.loadServerUrl();
+    final nodeId = await CrdtSyncService.getOrCreateNodeId(
+      scope: kIsWeb ? httpBaseUrl : null,
+    );
     final clock = HybridLogicalClock(nodeId: nodeId);
 
     // Dashboard reads from local DB
@@ -123,21 +127,12 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       debugPrint('[Init] Worklog category backfill skipped: $e');
     }
 
-    // Load stored server URL (already HTTP format)
-    final httpBaseUrl = await SettingsScreen.loadServerUrl();
-
-    // TLS-capable HTTP client with certificate verification.
-    // dart:io HttpClient is not available on web — skip CryptoSyncService
-    // entirely. On web, the browser handles TLS natively, and the Caddy
-    // reverse proxy makes cert pinning unnecessary.
-    CryptoSyncService? cryptoSyncService;
-    if (!kIsWeb) {
-      cryptoSyncService = CryptoSyncService(
-        baseUrl: httpBaseUrl,
-        nodeId: nodeId,
-      );
-      await cryptoSyncService.loadPersistedState();
-    }
+    // Conditional transport preserves native TLS and browser trusted HTTPS.
+    final cryptoSyncService = CryptoSyncService(
+      baseUrl: httpBaseUrl,
+      nodeId: nodeId,
+    );
+    await cryptoSyncService.loadPersistedState();
 
     // CRDT sync service with TLS + pairing integration
     final crdtSyncService = CrdtSyncService(
@@ -152,7 +147,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
 
     // Agent workflow API — inject pairing credentials for authenticated proxy
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
-      ..pairingToken = cryptoSyncService?.pairingToken
+      ..pairingTokenProvider = (() => cryptoSyncService.pairingToken)
       ..nodeId = nodeId;
     final captureSyncService = phoneDb == null
         ? null
@@ -536,7 +531,8 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   /// Called when sync reports needsPairing:true or HTTP 403.
   Future<void> _onNeedsPairing() async {
     // Guard against re-entrant calls from the periodic sync timer
-    if (_pairingInProgress) return;
+    if (_pairingInProgress || _pairingPrompted) return;
+    _pairingPrompted = true;
     if (!mounted) return;
     final crypto = _cryptoSyncService;
     final crdt = _crdtSyncService;
@@ -547,7 +543,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       // Handle pending cert approval if any
       await _handlePendingCertApproval();
 
-      final nodeId = await CrdtSyncService.getOrCreateNodeId();
+      final nodeId = crypto.nodeId;
       if (!mounted) return;
 
       final nav = _navigatorKey.currentState;
@@ -891,7 +887,16 @@ class _HomeShellState extends State<_HomeShell> {
                 ),
               ],
             ),
-            body: SessionScreen(apiClient: widget.apiClient),
+            body: kIsWeb
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Interactive sessions are not available in this browser delivery.',
+                      ),
+                    ),
+                  )
+                : SessionScreen(apiClient: widget.apiClient),
           ),
           Scaffold(
             appBar: AppBar(

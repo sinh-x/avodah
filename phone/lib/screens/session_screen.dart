@@ -153,8 +153,8 @@ class _SessionScreenState extends State<SessionScreen> {
     return WsSessionClient.connect(
       wsBase,
       headers: {
-        if (widget.apiClient.pairingToken != null)
-          'X-Av-Pair-Token': widget.apiClient.pairingToken!,
+        if (widget.apiClient.activePairingToken != null)
+          'X-Av-Pair-Token': widget.apiClient.activePairingToken!,
         if (widget.apiClient.nodeId != null)
           'X-Av-Node-Id': widget.apiClient.nodeId!,
       },

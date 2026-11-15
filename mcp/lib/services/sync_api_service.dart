@@ -22,6 +22,7 @@ import '../config/avo_config.dart';
 import '../config/paths.dart';
 import 'jira_service.dart';
 import 'pairing_service.dart';
+import 'sync_request_policy.dart';
 
 /// Stale timer threshold in minutes.
 const int avoStaleTimerMinutes = 10;
@@ -44,6 +45,8 @@ class SyncDocType {
   static const String dayPlanTask = 'dayPlanTask';
   static const String categoryChip = 'categoryChip';
 }
+
+class _PairingRevoked implements Exception {}
 
 /// Handles CRDT delta sync HTTP requests.
 class SyncApiService {
@@ -68,6 +71,7 @@ class SyncApiService {
 
   /// Optional pairing service for device authentication.
   final PairingService? pairingService;
+  final SyncRequestPolicy policy;
 
   SyncApiService({
     required this.db,
@@ -77,11 +81,14 @@ class SyncApiService {
     this.config,
     this.paths,
     this.pairingService,
-  });
+    SyncRequestPolicy? policy,
+  }) : policy = policy ?? SyncRequestPolicy();
 
   /// Tracks the current remote node ID during mergePushBatch for
   /// reconciliation logic.
   String? _remoteNodeId;
+  Future<void> _jiraPush = Future<void>.value();
+  Future<void> get pendingJiraPush => _jiraPush;
 
   /// Tracks reconciliation details for user notification on completion.
   bool _didReconcile = false;
@@ -115,8 +122,7 @@ class SyncApiService {
 
       final origin = device.origin;
       if (origin == null || origin.isEmpty) {
-        stderr.writeln(
-            'Sync: skipping phone ${device.id} — no origin stored');
+        stderr.writeln('Sync: skipping phone ${device.id} — no origin stored');
         continue;
       }
 
@@ -136,21 +142,19 @@ class SyncApiService {
 
         final client = http.Client();
         try {
-          final response = await client
-              .get(
-                uri,
-                headers: {
-                  'X-Av-Node-Id': clock.nodeId,
-                  'X-Av-Pair-Token': token,
-                  'Content-Type': 'application/json',
-                },
-              )
-              .timeout(const Duration(seconds: 5));
+          final response = await client.get(
+            uri,
+            headers: {
+              'X-Av-Node-Id': clock.nodeId,
+              'X-Av-Pair-Token': token,
+              'Content-Type': 'application/json',
+            },
+          ).timeout(const Duration(seconds: 5));
 
           if (response.statusCode == 200) {
-            final body =
-                jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true))
-                    as Map<String, dynamic>;
+            final body = jsonDecode(
+                    utf8.decode(response.bodyBytes, allowMalformed: true))
+                as Map<String, dynamic>;
             final deltasJson = (body['deltas'] as List<dynamic>? ?? [])
                 .cast<Map<String, dynamic>>();
 
@@ -191,43 +195,14 @@ class SyncApiService {
       return false;
     }
 
-    // Set CORS headers (restricted to paired origin after pairing is established)
-    await _setCorsHeaders(request);
-
-    if (method == 'OPTIONS') {
-      request.response
-        ..statusCode = HttpStatus.ok
-        ..close();
-      return true;
-    }
-
-    // Auth check for /api/sync/deltas — requires valid X-Av-Pair-Token
-    if (path == '/api/sync/deltas') {
-      final nodeId = request.headers.value('X-Av-Node-Id');
-      final token = request.headers.value('X-Av-Pair-Token');
-
-      if (nodeId == null || token == null) {
-        _jsonResponse(request, HttpStatus.forbidden,
-            {'error': 'Missing X-Av-Node-Id or X-Av-Pair-Token header'});
-        return true;
-      }
-
-      if (pairingService == null) {
-        _jsonResponse(request, HttpStatus.internalServerError,
-            {'error': 'Pairing service not configured'});
-        return true;
-      }
-
-      final isValid = await pairingService!.verifyPairToken(nodeId, token);
-      if (!isValid) {
-        _jsonResponse(request, HttpStatus.forbidden,
-            {'error': 'Invalid or expired pairing token'});
-        return true;
-      }
-
-      // Update lastSeen for the paired device
-      await _updateLastSeen(nodeId);
-    }
+    if (!policy.checkOrigin(request)) return true;
+    final methods = path == '/api/config/categories'
+        ? {'GET'}
+        : path == '/api/config/category-chips'
+            ? {'GET', 'POST', 'DELETE'}
+            : {'GET', 'POST'};
+    if (policy.preflight(request, methods)) return true;
+    if (!await policy.authenticate(request, pairingService)) return true;
 
     try {
       if (path == '/api/config/categories') {
@@ -256,10 +231,15 @@ class SyncApiService {
         _jsonResponse(request, HttpStatus.methodNotAllowed,
             {'error': 'Method not allowed'});
       }
-    } catch (e, stack) {
-      stderr.writeln('Sync API error: $e\n$stack');
-      _jsonResponse(
-          request, HttpStatus.internalServerError, {'error': e.toString()});
+    } catch (e) {
+      if (e is _PairingRevoked) {
+        _jsonResponse(request, 403,
+            {'error': 'Pairing required', 'code': 'PAIRING_REQUIRED'});
+      } else {
+        _jsonResponse(request, e is HttpException ? 413 : 400, {
+          'error': e is HttpException ? 'Body too large' : 'Invalid request'
+        });
+      }
     }
 
     return true;
@@ -273,10 +253,10 @@ class SyncApiService {
     final sinceParam = request.uri.queryParameters['since'];
     final since = _parseWatermark(sinceParam);
 
-    final deltas = await extractDeltas(since);
-
-    // Current clock state as the new watermark
+    // Capture before asynchronous table reads. A concurrent write occurring
+    // after a table was read must remain newer than this response watermark.
     final watermark = clock.now().pack();
+    final deltas = await extractDeltas(since);
 
     _jsonResponse(request, HttpStatus.ok, {
       'deltas': deltas,
@@ -304,33 +284,24 @@ class SyncApiService {
       return;
     }
 
-    // Read raw bytes first, then decode with allowMalformed to handle
-    // any non-UTF-8 data in CRDT field values from the phone.
-    final bytes = await request.fold<List<int>>([], (a, b) => a..addAll(b));
-
-    if (bytes.length > avoMaxPushDeltaBodyBytes) {
-      _jsonResponse(request, HttpStatus.requestEntityTooLarge, {
-        'error':
-            'Body too large: ${bytes.length}B exceeds max ${avoMaxPushDeltaBodyBytes}B',
-      });
-      return;
-    }
-
-    final body = utf8.decode(bytes, allowMalformed: true);
-    final json = jsonDecode(body) as Map<String, dynamic>;
+    final json = await readJsonBody(request, avoMaxPushDeltaBodyBytes);
 
     final remoteNode = json['node'] as String?;
     final deltasJson =
         (json['deltas'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 
-    if (remoteNode == null || remoteNode.isEmpty) {
+    if (remoteNode == null ||
+        remoteNode.isEmpty ||
+        remoteNode != request.headers.value('X-Av-Node-Id')) {
       _jsonResponse(
           request, HttpStatus.badRequest, {'error': 'Missing "node" field'});
       return;
     }
 
-    final result =
-        await mergePushBatch(remoteNode: remoteNode, deltas: deltasJson);
+    final result = await mergePushBatch(
+        remoteNode: remoteNode,
+        deltas: deltasJson,
+        pairToken: request.headers.value('X-Av-Pair-Token'));
 
     _jsonResponse(request, HttpStatus.ok, {
       'merged': result.merged,
@@ -438,13 +409,7 @@ class SyncApiService {
       return;
     }
 
-    final body = await utf8.decoder.bind(request).join();
-    if (body.isEmpty) {
-      _jsonResponse(
-          request, HttpStatus.badRequest, {'error': 'Request body is empty'});
-      return;
-    }
-    final json = jsonDecode(body) as Map<String, dynamic>;
+    final json = await readJsonBody(request, 8192);
 
     final action = json['action'] as String?;
     final category = json['category'] as String?;
@@ -462,73 +427,17 @@ class SyncApiService {
       return;
     }
 
-    if (action == 'add') {
-      // Find existing chip by category+label to check if it already exists
-      final existingChips = await db.select(db.categoryChips).get();
-      CategoryChip? existing;
-      for (final row in existingChips) {
-        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
-        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-          existing = row;
-          break;
-        }
-      }
-
-      if (existing != null) {
-        _jsonResponse(request, HttpStatus.ok, {
-          'success': true,
-          'action': 'already_exists',
-          'category': category,
-          'chip': chip,
-        });
-      } else {
-        // Create new CRDT document and upsert
-        final doc = CategoryChipDocument.create(
-          clock: clock,
-          category: category,
-          label: chip,
-          sortOrder: 0,
-        );
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
-        _jsonResponse(request, HttpStatus.ok, {
-          'success': true,
-          'action': 'added',
-          'category': category,
-          'chip': chip,
-        });
-      }
-    } else if (action == 'remove') {
-      // Soft-delete via CRDT _deleted field
-      final existingChips = await db.select(db.categoryChips).get();
-      CategoryChip? existing;
-      for (final row in existingChips) {
-        final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
-        if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-          existing = row;
-          break;
-        }
-      }
-
-      if (existing != null) {
-        final doc =
-            CategoryChipDocument.fromDrift(chip: existing, clock: clock);
-        doc.delete();
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
-      }
-      _jsonResponse(request, HttpStatus.ok, {
-        'success': true,
-        'action': 'removed',
-        'category': category,
-        'chip': chip,
-      });
-    } else {
-      _jsonResponse(request, HttpStatus.badRequest,
-          {'error': 'Invalid action. Use "add" or "remove"'});
+    if (action != 'add' && action != 'remove') {
+      _jsonResponse(
+          request, 400, {'error': 'Invalid action. Use "add" or "remove"'});
+      return;
     }
+    final result = await db.transaction(() async {
+      await _ensureStillPaired(request);
+      return _mutateChip(category, chip, add: action == 'add');
+    });
+    // Do not acknowledge a mutation before its transaction commits.
+    _jsonResponse(request, 200, result);
   }
 
   /// DELETE /api/config/category-chips?category=Working&chip=standup
@@ -544,24 +453,55 @@ class SyncApiService {
       return;
     }
 
-    // Find and soft-delete via CRDT _deleted field
-    final existingChips = await db.select(db.categoryChips).get();
-    for (final row in existingChips) {
+    final result = await db.transaction(() async {
+      await _ensureStillPaired(request);
+      return _mutateChip(category, chip, add: false);
+    });
+    _jsonResponse(request, 200, result);
+  }
+
+  Future<void> _ensureStillPaired(HttpRequest request) async {
+    // Null is only usable by an explicitly stubbed domain policy in unit tests;
+    // the public request guard always denies an unconfigured pairing service.
+    if (pairingService != null &&
+        !await pairingService!.verifyPairToken(
+            request.headers.value('X-Av-Node-Id') ?? '',
+            request.headers.value('X-Av-Pair-Token') ?? '')) {
+      throw _PairingRevoked();
+    }
+  }
+
+  Future<Map<String, dynamic>> _mutateChip(String category, String chip,
+      {required bool add}) async {
+    final rows = await db.select(db.categoryChips).get();
+    CategoryChipDocument? existing;
+    for (final row in rows) {
       final doc = CategoryChipDocument.fromDrift(chip: row, clock: clock);
       if (!doc.isDeleted && doc.category == category && doc.label == chip) {
-        doc.delete();
-        await db
-            .into(db.categoryChips)
-            .insertOnConflictUpdate(doc.toDriftCompanion());
+        existing = doc;
         break;
       }
     }
-
-    _jsonResponse(request, HttpStatus.ok, {
+    var action = add ? 'already_exists' : 'removed';
+    if (add && existing == null) {
+      final doc = CategoryChipDocument.create(
+          clock: clock, category: category, label: chip, sortOrder: 0);
+      await db
+          .into(db.categoryChips)
+          .insertOnConflictUpdate(doc.toDriftCompanion());
+      action = 'added';
+    } else if (!add && existing != null) {
+      existing.delete();
+      await db
+          .into(db.categoryChips)
+          .insertOnConflictUpdate(existing.toDriftCompanion());
+    }
+    return {
       'success': true,
+      'action': action,
       'category': category,
-      'chip': chip,
-    });
+      'chip': chip
+    };
   }
 
   /// Merges a batch of incoming CRDT deltas from [remoteNode] into the local DB.
@@ -571,36 +511,48 @@ class SyncApiService {
   Future<({int merged, List<String> errors, String watermark})> mergePushBatch({
     required String remoteNode,
     required List<Map<String, dynamic>> deltas,
+    String? pairToken,
   }) async {
-    var merged = 0;
-    final errors = <String>[];
-    _remoteNodeId = remoteNode;
-
-    for (final delta in deltas) {
-      try {
-        await mergeDelta(delta);
-        merged++;
-      } catch (e) {
-        errors.add('${delta['type']}/${delta['id']}: $e');
+    final result = await db.transaction(() async {
+      if (pairToken != null &&
+          (pairingService == null ||
+              !await pairingService!.verifyPairToken(remoteNode, pairToken))) {
+        throw _PairingRevoked();
+      }
+      var merged = 0;
+      final errors = <String>[];
+      _remoteNodeId = remoteNode;
+      for (final delta in deltas) {
+        try {
+          await mergeDelta(delta);
+          merged++;
+        } catch (_) {
+          errors.add('Invalid sync document');
+        }
+      }
+      final watermark = clock.now().pack();
+      if (merged > 0 && errors.isEmpty) {
+        await setWatermark(remoteNode, watermark, direction: 'received');
+      }
+      return (merged: merged, errors: errors, watermark: watermark);
+    });
+    // Notify only after commit. Concurrent read/merge/write batches must not
+    // overwrite independent fields from another paired device's stale snapshot.
+    if (result.merged > 0) {
+      onDeltasMerged?.call(result.merged);
+      if (jiraService != null) {
+        // Serialize scans/posts: concurrent sync batches must not both push
+        // the same still-unlinked worklog before its first POST commits.
+        _jiraPush = _jiraPush.then((_) async {
+          try {
+            await jiraService!.push();
+          } catch (_) {
+            stderr.writeln('Jira push after sync unavailable');
+          }
+        });
       }
     }
-
-    final watermark = clock.now().pack();
-
-    // Record the watermark of what we received from the remote node
-    // and propagate merged deltas to connected clients immediately.
-    if (merged > 0) {
-      await setWatermark(remoteNode, watermark, direction: 'received');
-      onDeltasMerged?.call(merged);
-      // Trigger Jira push for any newly merged worklogs (fire-and-forget).
-      jiraService?.push().then(
-            (_) {},
-            onError: (Object e) =>
-                stderr.writeln('Jira push after phone sync failed: $e'),
-          );
-    }
-
-    return (merged: merged, errors: errors, watermark: watermark);
+    return result;
   }
 
   /// Extracts all CRDT deltas modified after [since].
@@ -896,8 +848,7 @@ class SyncApiService {
   }
 
   /// Extracts the boolean value from a field in [state].
-  bool? _extractBoolField(
-      Map<String, CrdtFieldState> state, String fieldName) {
+  bool? _extractBoolField(Map<String, CrdtFieldState> state, String fieldName) {
     final field = state[fieldName];
     if (field == null) return null;
     final v = field.value;
@@ -1059,50 +1010,64 @@ class SyncApiService {
 
     // Tasks
     final tasks = await db.select(db.tasks).get();
-    counts['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['task'] =
+        tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['task'] = tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['task'] =
+          tasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Worklogs
     final worklogs = await db.select(db.worklogEntries).get();
-    counts['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['worklog'] =
+        worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['worklog'] = worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['worklog'] =
+          worklogs.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Timers
-    counts['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['timer'] =
+        timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['timer'] = timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['timer'] =
+          timers.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Projects
     final projects = await db.select(db.projects).get();
-    counts['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['project'] =
+        projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['project'] = projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['project'] =
+          projects.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Daily plans
     final dailyPlans = await db.select(db.dailyPlanEntries).get();
-    counts['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['dailyPlan'] = dailyPlans.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['dailyPlan'] = dailyPlans.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['dailyPlan'] = dailyPlans.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Day plan tasks
     final dayPlanTasks = await db.select(db.dayPlanTasks).get();
-    counts['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['dayPlanTask'] = dayPlanTasks.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['dayPlanTask'] = dayPlanTasks.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     // Category chips
     final categoryChips = await db.select(db.categoryChips).get();
-    counts['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
+    counts['categoryChip'] = categoryChips.fold(
+        0, (s, r) => s + _countAfter(r.crdtClock, zeroWatermark));
     if (phoneWatermark != '0') {
-      pendingDeltas['categoryChip'] = categoryChips.fold(0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
+      pendingDeltas['categoryChip'] = categoryChips.fold(
+          0, (s, r) => s + _countAfter(r.crdtClock, phoneSince));
     }
 
     return {
@@ -1132,8 +1097,7 @@ class SyncApiService {
     if (timeSinceLastSync < staleThresholdMs) return null;
 
     // Reuse desktopTimer already computed by syncDiagnostics
-    final desktopTimer =
-        diagnostics['desktopTimer'] as Map<String, dynamic>?;
+    final desktopTimer = diagnostics['desktopTimer'] as Map<String, dynamic>?;
     if (desktopTimer != null && desktopTimer['isRunning'] == true) {
       final minutes = timeSinceLastSync ~/ 60000;
       final startedAtMs = desktopTimer['startedAtMs'] as int?;
@@ -1177,58 +1141,5 @@ class SyncApiService {
     } catch (e) {
       stderr.writeln('Response write error (client likely disconnected): $e');
     }
-  }
-
-  // ============================================================
-  // Auth & CORS helpers
-  // ============================================================
-
-  /// Sets CORS headers for sync endpoints.
-  ///
-  /// After pairing is established, CORS is restricted to the paired device's origin.
-  /// Before pairing, a permissive CORS is set for the pairing endpoints.
-  ///
-  /// Returns the paired device's origin if known, otherwise null.
-  Future<String?> _setCorsHeaders(HttpRequest request) async {
-    final origin = request.headers.value('origin');
-
-    // If pairing service is available, check if we have a paired device
-    String? allowedOrigin;
-    if (pairingService != null && origin != null) {
-      // Try to look up the paired device by nodeId (from X-Av-Node-Id header)
-      final nodeId = request.headers.value('X-Av-Node-Id');
-      if (nodeId != null) {
-        final device = await pairingService!.getPairedDevice(nodeId);
-        if (device != null && device.origin != null) {
-          // If origin matches the stored origin (or is a sub-origin of it), allow it
-          if (origin == device.origin ||
-              origin.startsWith(
-                  device.origin!.replaceFirst(RegExp(r'^https?://'), ''))) {
-            allowedOrigin = origin;
-          }
-        }
-      }
-    }
-
-    // Default: allow the origin header value for pairing endpoints
-    // (After pairing, the phone sends the same origin it used during pairing)
-    allowedOrigin ??= origin ?? '*';
-
-    request.response.headers.add('Access-Control-Allow-Origin',
-        allowedOrigin == '*' ? '*' : allowedOrigin);
-    request.response.headers
-        .add('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    request.response.headers.add('Access-Control-Allow-Headers',
-        'Content-Type, X-Av-Pair-Token, X-Av-Node-Id');
-
-    return allowedOrigin == '*' ? null : allowedOrigin;
-  }
-
-  /// Updates the lastSeen timestamp for a paired device.
-  Future<void> _updateLastSeen(String nodeId) async {
-    await (db.update(db.pairedDevices)..where((d) => d.id.equals(nodeId)))
-        .write(PairedDevicesCompanion(
-      lastSeen: Value(DateTime.now().millisecondsSinceEpoch),
-    ));
   }
 }
