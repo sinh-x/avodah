@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'notification_store.dart';
+import 'notification_event_service.dart';
 
 typedef VerifyNotificationDevice = Future<bool> Function(
     String node, String token);
@@ -12,12 +13,15 @@ class NotificationApiService {
   final VerifyNotificationDevice verifyDevice;
   final String? sendToken;
   final bool pushEnabled;
+  final NotificationEventService _events;
 
   NotificationApiService(
       {required this.store,
       required this.verifyDevice,
       this.sendToken,
-      this.pushEnabled = false});
+      this.pushEnabled = false})
+      : _events =
+            NotificationEventService(store: store, verifyDevice: verifyDevice);
 
   static bool _equals(String a, String b) {
     final left = utf8.encode(a), right = utf8.encode(b);
@@ -33,6 +37,9 @@ class NotificationApiService {
     if (path != '/api/notifications' &&
         !path.startsWith('/api/notifications/')) {
       return false;
+    }
+    if (path == '/api/notifications/events/stream') {
+      return _events.handleRequest(request);
     }
     final response = request.response;
     // Auth is always required on actual requests, including same-origin web.

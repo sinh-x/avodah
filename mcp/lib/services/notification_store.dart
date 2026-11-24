@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:sqlite3/sqlite3.dart';
 
@@ -14,18 +15,20 @@ class NotificationProblem implements Exception {
 /// Synchronous transactions serialize revision checks and idempotent sends.
 class NotificationStore {
   final Database _db;
+  final _eventsChanged = StreamController<void>.broadcast();
+  Stream<void> get eventsChanged => _eventsChanged.stream;
 
   NotificationStore(String path) : _db = sqlite3.open(path) {
     final version = _db.select('PRAGMA user_version').first.values.first as int;
-    if (version > 2) {
+    if (version > 3) {
       _db.dispose();
       throw StateError('Unsupported notification database version');
     }
-    if (version < 2) {
+    if (version < 3) {
       // Preserve any existing database before applying schema changes.
       if (path != ':memory:' && File(path).lengthSync() > 0) {
         final backup =
-            '$path.before-v2-${DateTime.now().microsecondsSinceEpoch}';
+            '$path.before-v3-${DateTime.now().microsecondsSinceEpoch}';
         if (File(backup).existsSync())
           throw StateError('Backup already exists');
         _db.execute('VACUUM INTO ?', [backup]);
@@ -41,7 +44,7 @@ class NotificationStore {
           deleted INTEGER NOT NULL DEFAULT 0
         );
       ''');
-        _db.execute('''
+        if (version < 2) _db.execute('''
         CREATE TABLE push_device (
           slot INTEGER PRIMARY KEY CHECK(slot = 1),
           node TEXT NOT NULL, token TEXT NOT NULL UNIQUE
@@ -52,8 +55,14 @@ class NotificationStore {
           attempts INTEGER NOT NULL DEFAULT 0,
           next_attempt INTEGER NOT NULL DEFAULT 0
         );
-        PRAGMA user_version = 2;
       ''');
+        _db.execute('''
+          CREATE TABLE notification_events (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            notification_id TEXT NOT NULL UNIQUE
+          );
+          PRAGMA user_version = 3;
+        ''');
         _db.execute('COMMIT');
       } catch (_) {
         _db.execute('ROLLBACK');
@@ -121,8 +130,11 @@ class NotificationStore {
             'SELECT ?, node FROM push_device WHERE slot = 1',
             [id]);
       }
+      _db.execute(
+          'INSERT INTO notification_events (notification_id) VALUES (?)', [id]);
       final item = get(id);
       _db.execute('COMMIT');
+      _eventsChanged.add(null); // Signal only after durable commit.
       return (item: item, created: true);
     } catch (_) {
       _db.execute('ROLLBACK');
@@ -222,5 +234,23 @@ class NotificationStore {
           'UPDATE push_jobs SET state = ?, attempts = ?, next_attempt = ? WHERE id = ?',
           [state, attempts, nextAttempt, id]);
 
-  void close() => _db.dispose();
+  int get latestEventSequence => _db
+      .select(
+          'SELECT COALESCE(MAX(sequence), 0) AS sequence FROM notification_events')
+      .first['sequence'] as int;
+
+  /// Reference-only ordered replay. Deleted records are not announced.
+  List<Map<String, dynamic>> eventsAfter(int after, {int limit = 64}) => _db
+      .select(
+          'SELECT e.sequence AS cursor, e.notification_id AS id '
+          'FROM notification_events e JOIN notifications n ON n.id = e.notification_id '
+          'WHERE e.sequence > ? AND n.deleted = 0 ORDER BY e.sequence LIMIT ?',
+          [after, limit])
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList();
+
+  void close() {
+    _eventsChanged.close();
+    _db.dispose();
+  }
 }

@@ -205,7 +205,7 @@ void main() {
       final backups = dir
           .listSync()
           .whereType<File>()
-          .where((file) => file.path.contains('before-v2'))
+          .where((file) => file.path.contains('before-v3'))
           .toList();
       expect(backups, hasLength(1));
       final backup = sqlite3.open(backups.single.path, mode: OpenMode.readOnly);
