@@ -98,6 +98,13 @@ avodah/
 └── docs/                   # Design specs
 ```
 
+## Shared notifications
+
+Use `avo notify` to explicitly send to a shared Android/desktop-web inbox.
+Read/unread state, handled state and remarks are synchronized by the server;
+optional Android FCM alerts require operator configuration.
+See [setup, API contract and acceptance checklist](docs/notification-inbox.md).
+
 ## Development
 
 See `.kiro/specs/sp-flutter-migration/` for detailed:

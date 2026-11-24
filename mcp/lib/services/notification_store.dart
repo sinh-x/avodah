@@ -101,12 +101,12 @@ class NotificationStore {
       final rows = _db.select('SELECT * FROM notifications WHERE id = ?', [id]);
       if (rows.isNotEmpty) {
         final row = rows.first;
+        if (row['deleted'] == 1) {
+          throw NotificationProblem(410, 'Notification was explicitly deleted');
+        }
         if (row['title'] != title || row['body'] != body) {
           throw NotificationProblem(
               409, 'ID already used for different content');
-        }
-        if (row['deleted'] == 1) {
-          throw NotificationProblem(410, 'Notification was explicitly deleted');
         }
         _db.execute('COMMIT');
         return (item: _record(row), created: false);
@@ -145,10 +145,18 @@ class NotificationStore {
           [
             (read ?? current['read'] as bool) ? 1 : 0,
             (handled ?? current['handled'] as bool) ? 1 : 0,
-            remarks ?? current['remarks'],
+            delete ? '' : remarks ?? current['remarks'],
             delete ? 1 : 0,
             id,
           ]);
+      if (delete) {
+        _db.execute(
+            "UPDATE notifications SET title = '', body = '' WHERE id = ?",
+            [id]);
+        _db.execute(
+            "UPDATE push_jobs SET state = 'cancelled' WHERE id = ? AND state = 'queued'",
+            [id]);
+      }
       final item = delete ? <String, dynamic>{'deleted': true} : get(id);
       _db.execute('COMMIT');
       return item;

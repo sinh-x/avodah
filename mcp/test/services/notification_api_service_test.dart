@@ -5,6 +5,7 @@ import 'package:avodah_mcp/services/notification_api_service.dart';
 import 'package:avodah_mcp/services/notification_store.dart';
 import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   late NotificationStore store;
@@ -33,6 +34,7 @@ void main() {
     final api = NotificationApiService(
         store: store,
         sendToken: sendToken,
+        pushEnabled: true,
         verifyDevice: (node, token) async =>
             node == 'phone' && token == 'paired');
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -142,6 +144,78 @@ void main() {
         (await call('POST', '/api/notifications', headers: producer, body: []))
             .statusCode,
         400);
+  });
+
+  test('producer receipts cannot disclose consumer remarks or states',
+      () async {
+    await send();
+    store.update('test-1', 1, remarks: 'private operator remark', read: true);
+    final receipt = jsonDecode((await send()).body) as Map<String, dynamic>;
+    expect(receipt.keys.toSet(), {'id', 'created', 'delivery'});
+    expect(receipt.toString(), isNot(contains('private operator remark')));
+  });
+
+  test(
+      'push enrollment requires pairing and cannot be replaced by another device',
+      () async {
+    const path = '/api/notifications/push/device';
+    expect(
+        (await call('POST', path,
+                headers: producer, body: {'token': 'fcm-token'}))
+            .statusCode,
+        403);
+    expect(
+        (await call('POST', path,
+                headers: paired, body: {'token': 'fcm-token'}))
+            .statusCode,
+        200);
+    expect(store.device!['node'], 'phone');
+    expect((await call('GET', path, headers: paired)).body,
+        isNot(contains('fcm-token')));
+    expect(
+        (await call('POST', path,
+                headers: paired, body: {'token': 'bad token'}))
+            .statusCode,
+        400);
+    expect((await send()).statusCode, 201);
+    expect(store.delivery('test-1'), 'queued');
+    expect((await call('DELETE', path, headers: paired)).statusCode, 200);
+    expect(store.device, isNull);
+    expect(store.delivery('test-1'), 'cancelled');
+  });
+
+  test('version 1 migration backs up existing records before changing schema',
+      () async {
+    final dir =
+        await Directory.systemTemp.createTemp('avo-notification-migration-');
+    final path = '${dir.path}/notifications.sqlite3';
+    try {
+      final old = sqlite3.open(path);
+      old.execute(
+          'CREATE TABLE notifications (id TEXT PRIMARY KEY, title TEXT NOT NULL, '
+          'body TEXT NOT NULL, created_at TEXT NOT NULL, revision INTEGER DEFAULT 1, '
+          'is_read INTEGER DEFAULT 0, handled INTEGER DEFAULT 0, remarks TEXT DEFAULT \'\', '
+          'deleted INTEGER DEFAULT 0); PRAGMA user_version = 1;');
+      old.execute(
+          "INSERT INTO notifications (id, title, body, created_at) VALUES ('old', 'Title', 'Body', '2026')");
+      old.dispose();
+      final migrated = NotificationStore(path);
+      expect(migrated.get('old')['body'], 'Body');
+      migrated.close();
+      final backups = dir
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.path.contains('before-v2'))
+          .toList();
+      expect(backups, hasLength(1));
+      final backup = sqlite3.open(backups.single.path, mode: OpenMode.readOnly);
+      expect(backup.select('PRAGMA user_version').first.values.first, 1);
+      expect(backup.select('SELECT body FROM notifications').first['body'],
+          'Body');
+      backup.dispose();
+    } finally {
+      await dir.delete(recursive: true);
+    }
   });
 
   test('bounded pagination and preflight', () async {

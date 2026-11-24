@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 
 import 'package:avodah_mcp/services/notification_push_service.dart';
 import 'package:avodah_mcp/services/notification_store.dart';
@@ -128,6 +130,49 @@ void main() {
     expect(store.get('id')['read'], false);
     expect(store.get('id')['handled'], false);
     worker.close();
+  });
+
+  test('disabling during pairing verification cancels before any send',
+      () async {
+    store.registerDevice('phone', 'token');
+    store.send('id', 'title', 'body', queuePush: true);
+    final gate = Completer<bool>();
+    final worker = NotificationPushService(
+        store: store,
+        send: (token, id) async {
+          fail('Disabled enrollment must not send');
+        },
+        isPaired: (node) => gate.future);
+    final flushing = worker.flush(now: 0);
+    store.removeDevice('phone');
+    gate.complete(true);
+    await flushing;
+    expect(store.delivery('id'), 'cancelled');
+    worker.close();
+  });
+
+  test('outbox and registration survive a process restart', () async {
+    final dir = await Directory.systemTemp.createTemp('avo-push-restart-');
+    try {
+      final path = '${dir.path}/notifications.sqlite3';
+      var disk = NotificationStore(path);
+      disk.registerDevice('phone', 'token');
+      disk.send('id', 'title', 'body', queuePush: true);
+      disk.close();
+      disk = NotificationStore(path);
+      expect(disk.device!['node'], 'phone');
+      expect(disk.dueJobs(0), hasLength(1));
+      final worker = NotificationPushService(
+          store: disk,
+          send: (token, id) async => PushResult.accepted,
+          isPaired: (node) async => true);
+      await worker.flush(now: 0);
+      expect(disk.delivery('id'), 'accepted-by-fcm');
+      worker.close();
+      disk.close();
+    } finally {
+      await dir.delete(recursive: true);
+    }
   });
 
   test('invalid token clears registration but never deletes inbox', () async {

@@ -135,11 +135,17 @@ class NotificationPushService {
           store.finishAttempt(id, 'cancelled', job['attempts'] as int, 0);
           continue;
         }
-        final result = await send(device['token'] as String, id);
+        // A delete/disable can interleave while checking pairing.
+        final currentDevice = store.device;
+        if (store.delivery(id) != 'queued' ||
+            currentDevice == null ||
+            currentDevice['node'] != node) continue;
+        final result = await send(currentDevice['token'] as String, id);
         if (_closed) break;
+        if (store.delivery(id) != 'queued') continue;
         final attempts = (job['attempts'] as int) + 1;
         if (result == PushResult.invalidToken) {
-          store.removeDevice(node, token: device['token'] as String);
+          store.removeDevice(node, token: currentDevice['token'] as String);
         }
         store.finishAttempt(
             id,

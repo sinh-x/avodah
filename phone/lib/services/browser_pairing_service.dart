@@ -8,30 +8,31 @@ import 'package:http/http.dart' as http;
 import 'agent_api_client.dart';
 
 /// Browser transport for the existing passcode/X25519 enrollment protocol.
-/// Uses the same secure-storage keys as Android; no send/PA credential required.
+/// Credentials are scoped to server/node; no send/PA credential required.
 class BrowserPairingService {
   final AgentApiClient api;
   final FlutterSecureStorage storage;
+  final http.Client? client;
   BrowserPairingService(
     this.api, {
     this.storage = const FlutterSecureStorage(),
+    this.client,
   });
+  String get _storageKey => 'browser-pair:${api.baseUrl}:${api.nodeId}';
 
   Future<void> restore() async {
-    api.pairingToken = await storage.read(key: 'avodah_pairing_token');
+    api.pairingToken = await storage.read(key: _storageKey);
   }
 
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,
   ) async {
-    final response = await http
-        .post(
-          Uri.parse('${api.baseUrl}$path'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 10));
+    final response = await (client?.post ?? http.post)(
+      Uri.parse('${api.baseUrl}$path'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw AgentApiException(response.statusCode, 'Device pairing failed');
     }
@@ -59,7 +60,7 @@ class BrowserPairingService {
     }
     final shared = await deriveSharedSecret(keys, serverPublicKey);
     final token = await generateSyncVerifyCode(await derivePairingKey(shared));
-    await storage.write(key: 'avodah_pairing_token', value: token);
+    await storage.write(key: _storageKey, value: token);
     api.pairingToken = token;
   }
 }

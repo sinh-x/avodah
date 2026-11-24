@@ -241,6 +241,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
         apiClient: api, pushClient: _notificationPush,
       )));
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// Check for share intent that started the app (cold start).
