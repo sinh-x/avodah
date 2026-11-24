@@ -41,12 +41,12 @@ class SettingsScreen extends StatefulWidget {
   /// Auto-migrates legacy `ws://` URLs to `http://` (Phase 9 removed WebSocket).
   /// On web, defaults to the page's own origin (same-origin requests go through
   /// the Caddy reverse proxy) instead of the hardcoded Tailscale IP.
-  static Future<String> loadServerUrl() async {
+  static Future<String> loadServerUrl({String? fallbackUrl}) async {
     final prefs = await SharedPreferences.getInstance();
     // On web, Uri.base comes from <base href> in index.html (set at build time
     // via --base-href). It already includes the reverse-proxy mount path, so
     // same-origin API calls go through the correct Caddy route.
-    final defaultUrl = kIsWeb ? Uri.base.toString() : kDefaultServerUrl;
+    final defaultUrl = kIsWeb ? Uri.base.toString() : fallbackUrl ?? kDefaultServerUrl;
     var storedUrl = prefs.getString(kServerUrlKey);
     // On web, migrate any stored URL that's missing the app's mount path
     // (e.g. from an older build that used Uri.base.origin).

@@ -22,6 +22,17 @@ void main() {
       expect(prefs.getString(kServerUrlKey), kDefaultServerUrl);
     });
 
+    test(
+      'isolated trial persists a safe fallback instead of the live default',
+      () async {
+        final url = await SettingsScreen.loadServerUrl(
+          fallbackUrl: 'https://127.0.0.1:9847',
+        );
+        expect(url, 'https://127.0.0.1:9847');
+        expect(await SettingsScreen.loadServerUrl(), url);
+      },
+    );
+
     test('returns stored URL when set', () async {
       SharedPreferences.setMockInitialValues({
         kServerUrlKey: 'https://example.tail10c2c6.ts.net/avodah',

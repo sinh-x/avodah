@@ -130,7 +130,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     }
 
     // Load stored server URL (already HTTP format)
-    final httpBaseUrl = await SettingsScreen.loadServerUrl();
+    final nativeTrial = NotificationPushClient.supported && await NativeNotificationClient.isTrialBuild();
+    // A fresh isolated trial must never default to the operator's live server.
+    final httpBaseUrl = await SettingsScreen.loadServerUrl(
+      fallbackUrl: nativeTrial ? 'https://127.0.0.1:9847' : null,
+    );
 
     // TLS-capable HTTP client with certificate verification.
     // dart:io HttpClient is not available on web — skip CryptoSyncService
@@ -203,7 +207,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     });
 
     if (NotificationPushClient.supported) {
-      final NotificationAlertsClient push = await NativeNotificationClient.isTrialBuild()
+      final NotificationAlertsClient push = nativeTrial
           ? NativeNotificationClient(api: apiClient, openItem: (id) => _openNotificationInbox(id))
           : NotificationPushClient(api: apiClient, openInbox: _openNotificationInbox);
       setState(() => _notificationPush = push);

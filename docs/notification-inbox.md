@@ -87,6 +87,12 @@ not secure erasure of SQLite free pages or prior backups. Apply your backup
 retention policy separately. Offset pagination is not a snapshot: concurrent
 inserts may shift pages; refresh to reconcile.
 
+## Firebase-free native trial
+
+An isolated Avodah-native foreground-listener trial is available without a
+Firebase account or extra app. See [build, service limits and device acceptance](native-notification-trial.md).
+It does not replace the FCM baseline until the overnight trial is accepted.
+
 ## Optional Android FCM setup
 
 Operator/provider setup and installed-device acceptance are separate from local
@@ -145,9 +151,9 @@ CRDT/pairing database and the separate `notifications.sqlite3`; retain any
 SQLite journal/WAL files when copying a stopped store. Verify a restore on a
 non-live copy first. Never test against the operator's real database.
 
-The notification store has independent schema version 2 and uses full SQLite
+The notification store has independent schema version 3 and uses full SQLite
 synchronous writes and transactions. An existing older notification database is
-backed up with `VACUUM INTO` to a unique `.before-v2-<timestamp>` path before
+backed up with `VACUUM INTO` to a unique `.before-v3-<timestamp>` path before
 transactional schema changes. A backup/migration failure aborts initialization;
 newer schema versions are rejected. The CRDT database schema is unchanged.
 To roll back, stop the server, preserve the current data separately, restore the
