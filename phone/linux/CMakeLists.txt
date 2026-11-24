@@ -74,6 +74,21 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# secure_storage 1.x vendors json.hpp with legacy literal-operator spacing.
+# Keep that third-party Clang deprecation visible, but non-fatal. Preserve
+# -Werror for the application and every other plugin diagnostic; upgrading the
+# storage major version here would introduce unrelated credential migrations.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+   TARGET flutter_secure_storage_linux_plugin)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-Wno-error=deprecated-literal-operator"
+    HAS_NONFATAL_LEGACY_LITERAL_WARNING)
+  if(HAS_NONFATAL_LEGACY_LITERAL_WARNING)
+    target_compile_options(flutter_secure_storage_linux_plugin PRIVATE
+      -Wno-error=deprecated-literal-operator)
+  endif()
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

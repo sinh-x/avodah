@@ -5,6 +5,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Isolated opt-in trial: cannot overwrite the normal app or its local data.
+val nativeNotificationTrial = System.getenv("AVODAH_NOTIFICATION_TRIAL") == "true"
+
+// The native trial never consumes Firebase configuration.
+if (!nativeNotificationTrial && file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.sinh_x.avodah_viewer"
     compileSdk = 36
@@ -21,6 +29,8 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.sinh_x.avodah_viewer"
+        if (nativeNotificationTrial) applicationIdSuffix = ".notification_trial"
+        manifestPlaceholders["appLabel"] = if (nativeNotificationTrial) "Avodah notification trial" else "avodah_viewer"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -36,6 +46,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
 
 flutter {

@@ -36,6 +36,7 @@ dependencies:
 
   # Cryptography (for avodah_core pairing)
   cryptography: ^2.7.0
+  googleapis_auth: ^2.3.7
 
 dev_dependencies:
   test: ^1.24.0
