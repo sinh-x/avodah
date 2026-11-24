@@ -29,6 +29,7 @@ import 'package:args/command_runner.dart';
 import 'package:avodah_core/avodah_core.dart' show HybridLogicalClock, avodahVersion, avodahBuildNumber;
 import 'package:avodah_mcp/cli/commands.dart';
 import 'package:avodah_mcp/cli/session_commands.dart';
+import 'package:avodah_mcp/cli/notification_commands.dart';
 import 'package:avodah_mcp/cli/sync_commands.dart';
 import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
@@ -45,6 +46,17 @@ Future<void> main(List<String> args) async {
   // Handle --version / -v before any initialization
   if (args.contains('--version') || args.contains('-v')) {
     print('avodah (עבודה) $avodahVersion+$avodahBuildNumber');
+    return;
+  }
+
+  // Notification producers need no access to the local worklog database.
+  if (args.isNotEmpty && args.first == 'notify') {
+    try {
+      await (CommandRunner<void>('avo', 'Avodah')..addCommand(NotifyCommand())).run(args);
+    } on UsageException catch (e) {
+      stderr.writeln(e);
+      exitCode = 64;
+    }
     return;
   }
 
@@ -111,7 +123,8 @@ Future<void> main(List<String> args) async {
       ..addCommand(JiraCommand(jiraService, paths))
       ..addCommand(DbCommand(db: db, clock: clock, paths: paths))
       ..addCommand(ConfigCommand(avoConfig, paths))
-      ..addCommand(SyncCommand(db: db, clock: clock));
+      ..addCommand(SyncCommand(db: db, clock: clock))
+      ..addCommand(NotifyCommand());
 
     // Session command group — wire all subcommands with a shared SessionService.
     // Subcommands are added lazily here (not in SessionCommand's constructor)

@@ -28,6 +28,8 @@ import 'package:avodah_mcp/config/avo_config.dart';
 import 'package:avodah_mcp/config/paths.dart';
 import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/pairing_service.dart';
+import 'package:avodah_mcp/services/notification_api_service.dart';
+import 'package:avodah_mcp/services/notification_store.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -167,6 +169,13 @@ Future<void> main(List<String> args) async {
     pairingService: pairingService,
   );
 
+  final notificationStore = NotificationStore('${paths.dataDir}/notifications.sqlite3');
+  final notificationApi = NotificationApiService(
+    store: notificationStore,
+    verifyDevice: pairingService.verifyPairToken,
+    sendToken: Platform.environment['AVODAH_NOTIFICATION_SEND_TOKEN'],
+  );
+
   // Pull deltas from paired phone devices on startup (non-blocking).
   syncApi.pullFromPhone().then((_) {
     final recon = syncApi.consumeReconciliationNotification();
@@ -196,6 +205,7 @@ Future<void> main(List<String> args) async {
   Future<void> shutdown() async {
     stderr.writeln('\nShutting down...');
     await server.close();
+    notificationStore.close();
     await db.close();
     exit(0);
   }
@@ -208,7 +218,7 @@ Future<void> main(List<String> args) async {
   // doesn't kill the entire server loop.
   server.listen(
     (request) => _handleRequest(
-        request, syncApi, pairingService, agentApiUrl, paths, port, jiraEnabled),
+        request, syncApi, pairingService, notificationApi, agentApiUrl, paths, port, jiraEnabled),
     onError: (Object error, StackTrace stack) {
       lastError = error.toString();
       stderr.writeln('Server socket error (continuing): $error');
@@ -225,6 +235,7 @@ Future<void> _handleRequest(
   HttpRequest request,
   SyncApiService syncApi,
   PairingService pairingService,
+  NotificationApiService notificationApi,
   String agentApiUrl,
   AvodahPaths paths,
   int port,
@@ -264,6 +275,9 @@ Future<void> _handleRequest(
       await _handlePairRevoke(request, pairingService);
       return;
     }
+
+    // Local notification API must never fall through to the PA proxy.
+    if (await notificationApi.handleRequest(request)) return;
 
     // Sync API handles its own paths (e.g. /api/sync/deltas)
     final syncHandled = await syncApi.handleRequest(request);
