@@ -7,6 +7,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'screens/dashboard_screen.dart';
+import 'screens/notification_inbox_screen.dart';
+import 'services/browser_pairing_service.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -154,6 +156,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     final apiClient = AgentApiClient(baseUrl: httpBaseUrl)
       ..pairingToken = cryptoSyncService?.pairingToken
       ..nodeId = nodeId;
+    if (kIsWeb) await BrowserPairingService(apiClient).restore();
     final captureSyncService = phoneDb == null
         ? null
         : CaptureSyncService(db: phoneDb, apiClient: apiClient);
@@ -936,6 +939,14 @@ class _HomeShellState extends State<_HomeShell> {
             body: TeamBrowserScreen(teamProvider: widget.teamBrowserProvider),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        heroTag: 'notification-inbox',
+        tooltip: 'Notifications',
+        onPressed: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => NotificationInboxScreen(apiClient: widget.apiClient),
+        )),
+        child: const Icon(Icons.notifications_outlined),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

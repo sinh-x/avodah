@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../models/activity_event.dart';
+import '../models/inbox_notification.dart';
 import '../models/agent_team.dart';
 import '../models/bulletin.dart';
 import '../models/create_idea_payload.dart';
@@ -63,6 +64,31 @@ class AgentApiClient {
     // Remove trailing slash if present
     final base = httpUrl.endsWith('/') ? httpUrl.substring(0, httpUrl.length - 1) : httpUrl;
     return AgentApiClient(baseUrl: base);
+  }
+
+  // --- Shared notifications (not the agent review queue) ---
+
+  Future<({List<InboxNotification> items, int? nextOffset})> listNotifications({int offset = 0}) async {
+    final result = await _get('/api/notifications?offset=$offset');
+    return (items: (result['items'] as List).map((item) =>
+        InboxNotification.fromJson(item as Map<String, dynamic>)).toList(),
+        nextOffset: result['nextOffset'] as int?);
+  }
+
+  Future<InboxNotification> updateNotification(InboxNotification item,
+      {bool? read, bool? handled, String? remarks}) async {
+    final result = await _patch('/api/notifications/${Uri.encodeComponent(item.id)}', body: {
+      'revision': item.revision,
+      if (read != null) 'read': read,
+      if (handled != null) 'handled': handled,
+      if (remarks != null) 'remarks': remarks,
+    });
+    return InboxNotification.fromJson(result['item'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteNotification(InboxNotification item) async {
+    await _delete('/api/notifications/${Uri.encodeComponent(item.id)}',
+        body: {'revision': item.revision});
   }
 
   // --- Inbox ---
