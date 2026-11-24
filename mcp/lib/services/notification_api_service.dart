@@ -11,9 +11,13 @@ class NotificationApiService {
   final NotificationStore store;
   final VerifyNotificationDevice verifyDevice;
   final String? sendToken;
+  final bool pushEnabled;
 
   NotificationApiService(
-      {required this.store, required this.verifyDevice, this.sendToken});
+      {required this.store,
+      required this.verifyDevice,
+      this.sendToken,
+      this.pushEnabled = false});
 
   static bool _equals(String a, String b) {
     final left = utf8.encode(a), right = utf8.encode(b);
@@ -68,7 +72,30 @@ class NotificationApiService {
           throw NotificationProblem(403, 'Valid device pairing required');
         }
       }
-      if (path == '/api/notifications' && request.method == 'GET') {
+      if (path == '/api/notifications/push/device') {
+        final node = request.headers.value('X-Av-Node-Id')!;
+        if (request.method == 'POST') {
+          if (!pushEnabled)
+            throw NotificationProblem(503, 'FCM not configured on server');
+          final body = await _body(request);
+          _keys(body, {'token'});
+          final token = _text(body, 'token', 4096);
+          if (token.contains(RegExp(r'\s')))
+            throw NotificationProblem(400, 'Invalid device token');
+          store.registerDevice(node, token);
+          reply(200, {'enabled': true});
+        } else if (request.method == 'DELETE') {
+          store.removeDevice(node);
+          reply(200, {'enabled': false});
+        } else if (request.method == 'GET') {
+          reply(200, {
+            'configured': pushEnabled,
+            'enabled': store.device?['node'] == node
+          });
+        } else {
+          throw NotificationProblem(405, 'Method not allowed');
+        }
+      } else if (path == '/api/notifications' && request.method == 'GET') {
         final offset =
             int.tryParse(request.uri.queryParameters['offset'] ?? '0');
         if (offset == null || offset < 0)
@@ -86,11 +113,12 @@ class NotificationApiService {
           throw NotificationProblem(400, 'Invalid notification ID');
         }
         final result = store.send(
-            id, _text(body, 'title', 200), _text(body, 'body', 16000));
+            id, _text(body, 'title', 200), _text(body, 'body', 16000),
+            queuePush: pushEnabled);
         reply(result.created ? 201 : 200, {
-          'item': result.item,
+          'id': id,
           'created': result.created,
-          'delivery': 'not-configured'
+          'delivery': pushEnabled ? store.delivery(id) : 'not-configured'
         });
       } else if (path.startsWith('/api/notifications/') &&
           path.substring('/api/notifications/'.length).isNotEmpty &&

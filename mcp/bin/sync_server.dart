@@ -30,6 +30,7 @@ import 'package:avodah_mcp/services/jira_service.dart';
 import 'package:avodah_mcp/services/pairing_service.dart';
 import 'package:avodah_mcp/services/notification_api_service.dart';
 import 'package:avodah_mcp/services/notification_store.dart';
+import 'package:avodah_mcp/services/notification_push_service.dart';
 import 'package:avodah_mcp/services/sync_api_service.dart';
 import 'package:avodah_mcp/storage/database_opener.dart';
 import 'package:args/args.dart';
@@ -170,10 +171,20 @@ Future<void> main(List<String> args) async {
   );
 
   final notificationStore = NotificationStore('${paths.dataDir}/notifications.sqlite3');
+  final fcmConfigured = (Platform.environment['AVODAH_FCM_PROJECT_ID'] ?? '').isNotEmpty &&
+      (Platform.environment['GOOGLE_APPLICATION_CREDENTIALS'] ?? '').isNotEmpty;
+  final fcm = fcmConfigured ? FcmNotificationSender.fromEnvironment() : null;
+  final pushService = fcm == null ? null : NotificationPushService(
+    store: notificationStore,
+    send: fcm.send,
+    isPaired: (node) async => (await pairingService.listPairedDevices()).any((d) => d.id == node),
+  );
+  pushService?.start();
   final notificationApi = NotificationApiService(
     store: notificationStore,
     verifyDevice: pairingService.verifyPairToken,
     sendToken: Platform.environment['AVODAH_NOTIFICATION_SEND_TOKEN'],
+    pushEnabled: fcmConfigured,
   );
 
   // Pull deltas from paired phone devices on startup (non-blocking).
@@ -205,6 +216,8 @@ Future<void> main(List<String> args) async {
   Future<void> shutdown() async {
     stderr.writeln('\nShutting down...');
     await server.close();
+    pushService?.close();
+    fcm?.close();
     notificationStore.close();
     await db.close();
     exit(0);

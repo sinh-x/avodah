@@ -86,6 +86,16 @@ class AgentApiClient {
     return InboxNotification.fromJson(result['item'] as Map<String, dynamic>);
   }
 
+  Future<Map<String, dynamic>> notificationPushStatus() => _get('/api/notifications/push/device');
+
+  Future<void> enrollNotificationPush(String token) async {
+    await _post('/api/notifications/push/device', body: {'token': token});
+  }
+
+  Future<void> disableNotificationPush() async {
+    await _delete('/api/notifications/push/device');
+  }
+
   Future<void> deleteNotification(InboxNotification item) async {
     await _delete('/api/notifications/${Uri.encodeComponent(item.id)}',
         body: {'revision': item.revision});

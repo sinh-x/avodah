@@ -6,10 +6,16 @@ import 'package:flutter/material.dart';
 import '../models/inbox_notification.dart';
 import '../services/agent_api_client.dart';
 import '../services/browser_pairing_service.dart';
+import '../services/notification_push_client.dart';
 
 class NotificationInboxScreen extends StatefulWidget {
   final AgentApiClient apiClient;
-  const NotificationInboxScreen({super.key, required this.apiClient});
+  final NotificationPushClient? pushClient;
+  const NotificationInboxScreen({
+    super.key,
+    required this.apiClient,
+    this.pushClient,
+  });
 
   @override
   State<NotificationInboxScreen> createState() =>
@@ -278,6 +284,39 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
     ),
     body: Column(
       children: [
+        if (widget.pushClient != null)
+          ListenableBuilder(
+            listenable: widget.pushClient!,
+            builder: (context, _) {
+              final push = widget.pushClient!;
+              return Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    Text(
+                      push.enabled
+                          ? 'Android alerts opted in'
+                          : 'Android alerts not enabled',
+                    ),
+                    if (push.error != null) Text(push.error!),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: push.busy ? null : push.enable,
+                          child: const Text('Enable / reconnect alerts'),
+                        ),
+                        TextButton(
+                          onPressed: push.busy ? null : push.disable,
+                          child: const Text('Disable alerts'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         if (_loading) const LinearProgressIndicator(),
         if (_error != null)
           Padding(

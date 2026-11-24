@@ -9,6 +9,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/notification_inbox_screen.dart';
 import 'services/browser_pairing_service.dart';
+import 'services/notification_push_client.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -55,6 +56,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   CrdtSyncService? _crdtSyncService;
   CryptoSyncService? _cryptoSyncService;
   AgentApiClient? _apiClient;
+  NotificationPushClient? _notificationPush;
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
   TeamBrowserProvider? _teamBrowserProvider;
@@ -198,6 +200,14 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       _displaySettings = displaySettings;
     });
 
+    if (NotificationPushClient.supported) {
+      final push = NotificationPushClient(api: apiClient, openInbox: _openNotificationInbox);
+      setState(() => _notificationPush = push);
+      unawaited(push.restore().catchError((Object _) {
+        debugPrint('[Notifications] Push restore unavailable');
+      }));
+    }
+
     // Initial pull + dashboard render
     await _syncAndRefresh();
     // Sync pending captures to PA (offline queue — P2)
@@ -219,6 +229,17 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _syncAndRefresh();
       _syncCaptures();
+    });
+  }
+
+  void _openNotificationInbox() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final api = _apiClient;
+      final nav = _navigatorKey.currentState;
+      if (!mounted || api == null || nav == null) return;
+      nav.push(MaterialPageRoute(builder: (_) => NotificationInboxScreen(
+        apiClient: api, pushClient: _notificationPush,
+      )));
     });
   }
 
@@ -598,6 +619,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     _teamBrowserProvider?.dispose();
     _deploymentProvider?.dispose();
     _reviewProvider?.dispose();
+    _notificationPush?.dispose();
     _apiClient?.dispose();
     _crdtSyncService?.dispose();
     _cryptoSyncService?.dispose();
@@ -687,6 +709,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
                   crdtSyncService: _crdtSyncService,
                   displaySettings: _displaySettings,
                   captureSyncService: _captureSyncService,
+                  notificationPush: _notificationPush,
                 ),
         );
       },
@@ -713,6 +736,7 @@ class _HomeShell extends StatefulWidget {
   final CrdtSyncService? crdtSyncService;
   final DisplaySettingsService? displaySettings;
   final CaptureSyncService? captureSyncService;
+  final NotificationPushClient? notificationPush;
 
   const _HomeShell({
     required this.dashboardProvider,
@@ -727,6 +751,7 @@ class _HomeShell extends StatefulWidget {
     this.crdtSyncService,
     this.displaySettings,
     this.captureSyncService,
+    this.notificationPush,
   });
 
   @override
@@ -944,7 +969,7 @@ class _HomeShellState extends State<_HomeShell> {
         heroTag: 'notification-inbox',
         tooltip: 'Notifications',
         onPressed: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => NotificationInboxScreen(apiClient: widget.apiClient),
+          builder: (_) => NotificationInboxScreen(apiClient: widget.apiClient, pushClient: widget.notificationPush),
         )),
         child: const Icon(Icons.notifications_outlined),
       ),

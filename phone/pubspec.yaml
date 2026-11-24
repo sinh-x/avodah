@@ -35,6 +35,8 @@ dependencies:
 
   # Share intent receiver (for Android share-to-capture, P1)
   receive_sharing_intent: ^1.1.2
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
 
 dependency_overrides:
   # 2.3.0 pulls in jni/jni_flutter which requires NDK 28 (not available in Nix env)
