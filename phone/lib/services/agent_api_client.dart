@@ -75,6 +75,11 @@ class AgentApiClient {
         nextOffset: result['nextOffset'] as int?);
   }
 
+  Future<InboxNotification> getNotification(String id) async {
+    final result = await _get('/api/notifications/${Uri.encodeComponent(id)}');
+    return InboxNotification.fromJson(result['item'] as Map<String, dynamic>);
+  }
+
   Future<InboxNotification> updateNotification(InboxNotification item,
       {bool? read, bool? handled, String? remarks}) async {
     final result = await _patch('/api/notifications/${Uri.encodeComponent(item.id)}', body: {

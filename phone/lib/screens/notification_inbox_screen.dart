@@ -6,15 +6,17 @@ import 'package:flutter/material.dart';
 import '../models/inbox_notification.dart';
 import '../services/agent_api_client.dart';
 import '../services/browser_pairing_service.dart';
-import '../services/notification_push_client.dart';
+import '../services/notification_alerts_client.dart';
 
 class NotificationInboxScreen extends StatefulWidget {
   final AgentApiClient apiClient;
-  final NotificationPushClient? pushClient;
+  final NotificationAlertsClient? pushClient;
+  final String? initialNotificationId;
   const NotificationInboxScreen({
     super.key,
     required this.apiClient,
     this.pushClient,
+    this.initialNotificationId,
   });
 
   @override
@@ -27,7 +29,7 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
   List<InboxNotification> _items = [];
   int? _nextOffset;
   String? _error;
-  bool _loading = false, _editing = false;
+  bool _loading = false, _editing = false, _initialOpened = false;
   Timer? _timer;
 
   @override
@@ -83,6 +85,25 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+    if (mounted &&
+        _error == null &&
+        !_initialOpened &&
+        widget.initialNotificationId != null) {
+      _initialOpened = true;
+      try {
+        final item = await widget.apiClient.getNotification(
+          widget.initialNotificationId!,
+        );
+        if (mounted) await _details(item);
+      } catch (_) {
+        if (mounted) {
+          setState(
+            () => _error =
+                'The selected notification is unavailable. Connect and check pairing, or it may have been deleted.',
+          );
+        }
+      }
     }
   }
 
@@ -293,11 +314,7 @@ class _NotificationInboxScreenState extends State<NotificationInboxScreen>
                 padding: const EdgeInsets.all(8),
                 child: Column(
                   children: [
-                    Text(
-                      push.enabled
-                          ? 'Android alerts opted in'
-                          : 'Android alerts not enabled',
-                    ),
+                    Text(push.description),
                     if (push.error != null) Text(push.error!),
                     Wrap(
                       spacing: 8,

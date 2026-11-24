@@ -10,6 +10,8 @@ import 'screens/dashboard_screen.dart';
 import 'screens/notification_inbox_screen.dart';
 import 'services/browser_pairing_service.dart';
 import 'services/notification_push_client.dart';
+import 'services/notification_alerts_client.dart';
+import 'services/native_notification_client.dart';
 import 'screens/deployment_screen.dart';
 import 'screens/kanban_board_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -56,7 +58,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
   CrdtSyncService? _crdtSyncService;
   CryptoSyncService? _cryptoSyncService;
   AgentApiClient? _apiClient;
-  NotificationPushClient? _notificationPush;
+  NotificationAlertsClient? _notificationPush;
   ReviewProvider? _reviewProvider;
   DeploymentProvider? _deploymentProvider;
   TeamBrowserProvider? _teamBrowserProvider;
@@ -201,7 +203,9 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     });
 
     if (NotificationPushClient.supported) {
-      final push = NotificationPushClient(api: apiClient, openInbox: _openNotificationInbox);
+      final NotificationAlertsClient push = await NativeNotificationClient.isTrialBuild()
+          ? NativeNotificationClient(api: apiClient, openItem: (id) => _openNotificationInbox(id))
+          : NotificationPushClient(api: apiClient, openInbox: _openNotificationInbox);
       setState(() => _notificationPush = push);
       unawaited(push.restore().catchError((Object _) {
         debugPrint('[Notifications] Push restore unavailable');
@@ -232,13 +236,13 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     });
   }
 
-  void _openNotificationInbox() {
+  void _openNotificationInbox([String? notificationId]) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final api = _apiClient;
       final nav = _navigatorKey.currentState;
       if (!mounted || api == null || nav == null) return;
       nav.push(MaterialPageRoute(builder: (_) => NotificationInboxScreen(
-        apiClient: api, pushClient: _notificationPush,
+        apiClient: api, pushClient: _notificationPush, initialNotificationId: notificationId,
       )));
     });
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -737,7 +741,7 @@ class _HomeShell extends StatefulWidget {
   final CrdtSyncService? crdtSyncService;
   final DisplaySettingsService? displaySettings;
   final CaptureSyncService? captureSyncService;
-  final NotificationPushClient? notificationPush;
+  final NotificationAlertsClient? notificationPush;
 
   const _HomeShell({
     required this.dashboardProvider,

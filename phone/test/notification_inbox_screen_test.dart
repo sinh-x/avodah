@@ -11,6 +11,7 @@ void main() {
   late Map<String, dynamic> item;
   late bool offline;
   late bool conflict;
+  late bool detailDenied;
   late List<http.Request> requests;
   late AgentApiClient api;
   setUp(() {
@@ -26,6 +27,7 @@ void main() {
     };
     offline = false;
     conflict = false;
+    detailDenied = false;
     requests = [];
     api =
         AgentApiClient(
@@ -33,6 +35,13 @@ void main() {
             client: MockClient((request) async {
               requests.add(request);
               if (offline) throw Exception('offline');
+              if (request.method == 'GET' &&
+                  request.url.path == '/api/notifications/n-1') {
+                if (detailDenied) {
+                  return http.Response('{"error":"Access revoked"}', 403);
+                }
+                return http.Response(jsonEncode({'item': item}), 200);
+              }
               if (request.method == 'PATCH') {
                 if (conflict) return http.Response('{"error":"Changed"}', 409);
                 final body = jsonDecode(request.body) as Map<String, dynamic>;
@@ -55,9 +64,14 @@ void main() {
   });
   tearDown(() => api.dispose());
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {String? selected}) async {
     await tester.pumpWidget(
-      MaterialApp(home: NotificationInboxScreen(apiClient: api)),
+      MaterialApp(
+        home: NotificationInboxScreen(
+          apiClient: api,
+          initialNotificationId: selected,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -66,6 +80,37 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
   }
+
+  testWidgets(
+    'notification tap fetches exact item from configured origin with pairing',
+    (tester) async {
+      await open(tester, selected: 'n-1');
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        requests.last.url.toString(),
+        'https://example.test/api/notifications/n-1',
+      );
+      expect(requests.last.headers['X-Av-Pair-Token'], 'device-token');
+      expect(item['read'], false);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      await close(tester);
+    },
+  );
+
+  testWidgets('tap does not show private details when item access is denied', (
+    tester,
+  ) async {
+    detailDenied = true;
+    await open(tester, selected: 'n-1');
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(
+      find.textContaining('selected notification is unavailable'),
+      findsOneWidget,
+    );
+    expect(item['read'], false);
+    await close(tester);
+  });
 
   testWidgets('shares read/handled independently with paired auth', (
     tester,

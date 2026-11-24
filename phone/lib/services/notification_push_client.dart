@@ -6,15 +6,24 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_api_client.dart';
+import 'notification_alerts_client.dart';
 
 /// Android-only, explicit opt-in. Native Firebase options come from the
 /// operator's google-services.json, including when Android starts without Dart.
-class NotificationPushClient extends ChangeNotifier {
+class NotificationPushClient extends NotificationAlertsClient {
   final AgentApiClient api;
   final VoidCallback openInbox;
   NotificationPushClient({required this.api, required this.openInbox});
-  bool enabled = false, busy = false;
+  @override
+  bool enabled = false;
+  @override
+  bool busy = false;
+  @override
   String? error;
+  @override
+  String get description => enabled
+      ? 'Android FCM alerts opted in'
+      : 'Android FCM alerts not enabled';
   bool _initialized = false, _disposed = false;
   StreamSubscription<String>? _tokens;
   StreamSubscription<RemoteMessage>? _opened, _foreground;
@@ -46,6 +55,7 @@ class NotificationPushClient extends ChangeNotifier {
   }
 
   /// Restore only a previous explicit opt-in; do not prompt on startup.
+  @override
   Future<void> restore() async {
     if (!supported || busy) return;
     final prefs = await SharedPreferences.getInstance();
@@ -54,6 +64,7 @@ class NotificationPushClient extends ChangeNotifier {
     await _enable(requestPermission: false);
   }
 
+  @override
   Future<void> enable() => _enable(requestPermission: true);
 
   Future<void> _enable({required bool requestPermission}) async {
@@ -90,6 +101,7 @@ class NotificationPushClient extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> disable() async {
     if (busy) return;
     busy = true;
