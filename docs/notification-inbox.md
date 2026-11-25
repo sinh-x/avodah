@@ -1,7 +1,7 @@
 # Shared notification inbox (AVO-126)
 
-Avodah supports explicit computer-to-inbox sending and one opted-in Android
-push target. The Android app and desktop **web viewer** read the same server
+Avodah supports explicit computer-to-inbox sending and user-enabled native
+Android notification listeners. The Android app and desktop **web viewer** read the same server
 records. This inbox is separate from Agent Review and has no PA approval,
 prompt/reply, agent-resume, broadcast or automatic workflow behavior.
 
@@ -26,10 +26,14 @@ This uses the existing passcode/X25519 enrollment protocol, not a producer or PA
 credential. Browser credentials are scoped to the server and node in secure
 storage; use a trusted browser/profile and protect the origin from scripts/XSS.
 Android uses its existing pairing. Revoking that pairing blocks inbox access and
-suppresses future queued pushes. An already in-flight/accepted push cannot be
-recalled.
+closes its native stream on the next authorization check. An alert already shown
+on the phone cannot be recalled.
 
 ## Explicit sender
+
+For Docker, use the maintained [Compose notification setup](../DOCKER.md#notification-delivery-avo-126)
+to pass the producer credential to `avodah-sync` and retain the notification store
+for native streaming. No separate notification container is needed.
 
 Provision a random `AVODAH_NOTIFICATION_SEND_TOKEN` of at least 32 characters
 in the sync server environment and in the sender's secret environment. This
@@ -48,7 +52,7 @@ dart run bin/avo.dart notify --id 5b12b35e-c4cf-4f53-a263-f3d3290af782 \
 Use a new random opaque ID for a new message. Reuse exactly the same ID, title
 and body after a timeout or uncertain result. Matching retries never create
 another record/job; different content with the same ID is rejected. Do not
-encode private context in IDs: the ID is sent through FCM. The CLI accepts HTTPS
+encode private context in IDs: the ID is sent through the native event stream. The CLI accepts HTTPS
 or loopback HTTP, refuses redirects, reports JSON receipts and returns nonzero
 on failure. `avo notify` never opens the local worklog database. Agents may use
 this explicit command or the narrow HTTP API, not background workflow hooks.
@@ -57,7 +61,10 @@ this explicit command or the narrow HTTP API, not background workflow hooks.
 
 All bodies/responses are JSON. Requests are limited to 70,000 bytes. All actual
 requests require credentials; OPTIONS is unauthenticated CORS preflight.
-Notification routes are handled locally before the PA reverse proxy.
+Notification routes are handled locally before the PA reverse proxy. The legacy
+`/push/device` endpoints and FCM outbox remain server compatibility APIs; the main
+Android app no longer enrolls with them. Native alerts use the paired SSE stream
+documented in [the listener guide](native-notification-trial.md#stream-and-recovery-contract).
 
 | Method and path | Credential | Body / response |
 | --- | --- | --- |
@@ -87,61 +94,41 @@ not secure erasure of SQLite free pages or prior backups. Apply your backup
 retention policy separately. Offset pagination is not a snapshot: concurrent
 inserts may shift pages; refresh to reconcile.
 
-## Firebase-free native trial
+## Native Android alerts
 
-An isolated Avodah-native foreground-listener trial is available without a
-Firebase account or extra app. See [build, service limits and device acceptance](native-notification-trial.md).
-It does not replace the FCM baseline until the overnight trial is accepted.
+The main app (`com.sinh_x.avodah_viewer`) now uses Avodah's native foreground
+listener. No Firebase account, SDK, Google Play services or extra app is required.
+The separate `.notification_trial` package remains available for isolated tests;
+its different identity and loopback default do not change main-app settings.
+See [build, service limits and device acceptance](native-notification-trial.md).
 
-## Optional Android FCM setup
+Build the main APK from `phone/` with `flutter pub get`, then `flutter build apk
+--release --target-platform android-arm64 --build-number <higher-build-number>`.
+Use a version code higher than the installed app and the same signing identity.
+Release Gradle currently uses debug signing; this is not production signing.
+Never uninstall, clear app data or force a downgrade to work around a mismatch.
 
-Operator/provider setup and installed-device acceptance are separate from local
-implementation. Without configuration the inbox still works; send receipts
-report `not-configured`. Do not treat a compiled APK as a verified push rollout.
+After an authorized update, open Notifications and choose **Enable / reconnect
+alerts** while the app is visible, granting Android notification permission when
+asked. Existing server settings and pairing are retained by an in-place upgrade;
+there is no automatic permission grant or listener startup. **Disable alerts**
+stops locally, including while the server is unreachable. The ongoing native
+status notification also offers **Stop**.
 
-1. Create/select an operator-owned Firebase project and register Android package
-   `com.sinh_x.avodah_viewer`. Download its `google-services.json` into
-   `phone/android/app/` (git-ignored). The Google Services Gradle plugin is applied
-   only when that file exists, so Android can initialize Firebase natively even
-   when Dart is not running. Do not put a service-account key in the APK.
-2. Enable FCM HTTP v1 and give a dedicated server service account the minimum
-   FCM send permission in that project. Mount its JSON key read-only outside the
-   checkout. Set `GOOGLE_APPLICATION_CREDENTIALS` to that path and
-   `AVODAH_FCM_PROJECT_ID` to the project ID in the sync server environment.
-   OAuth tokens are minted/refreshed with only the `firebase.messaging` scope.
-   Keep credentials and `notifications.sqlite3` private to the server user.
-3. Build the APK from `phone/` with `flutter pub get` and
-   `flutter build apk --debug` (or your separately provisioned release signing).
-   Current release Gradle configuration uses debug signing; do not mistake this
-   for production signing. Install only with operator authorization. Use an
-   Android device with Google Play services, pair it, open Notifications, then
-   choose **Enable / reconnect alerts** and grant notification permission.
-   Initialization/registration is disabled by default; no permission prompt or
-   FCM enrollment happens on a fresh unopted-in startup.
-4. Only one phone can be enrolled. The same paired node may rotate its token;
-   another node must wait for the owner to disable enrollment. After reinstall
-   or lost-device revocation, a queued send clears the revoked registration;
-   the new phone can then enroll. **Disable alerts** removes server registration
-   first; an offline disable reports failure rather than claiming success.
-   Reconnect and retry. Re-enable to repair registration/permission errors.
+The listener maintains an authenticated HTTPS event stream over the existing
+private route. Tailscale must remain connected when that route requires it.
+Alerts show generic Avodah text; only an opaque record reference is streamed.
+Tapping fetches the exact item from the authenticated inbox. Initial enable does
+not announce old history; reconnect can replay missed references. Force-stop,
+process death, reboot and Android service timeouts require reopening and enabling
+again. Doze/OEM restrictions and network loss can delay or suppress alerts. There
+is no overnight/battery reliability claim until measured on the actual phone.
 
-Push messages contain only generic Avodah text and the opaque record ID. They
-use a high-priority notification payload so Android can show an alert while
-backgrounded/locked without a long-running Avodah connection. Tapping opens the
-inbox; opening it fetches authenticated content. Foreground use relies on the
-inbox refresh, not a separate local system alert. Android force-stop requires
-manually reopening the app; permission denial, Doze/OEM restrictions and network
-conditions can delay or suppress delivery.
-
-The durable outbox retries transient/network/429/5xx failures up to five attempts
-with increasing delay, across server restarts. A typed FCM UNREGISTERED error
-removes the matching stale token. Permanent failures stop retries; the inbox is
-still retained. Enrollment does not replay old records that had no device at
-send time. Retrying the original producer request returns `delivery` as
-`not-configured`, `no-device`, `queued`, `accepted-by-fcm`, `failed` or `cancelled`.
-`accepted-by-fcm` means provider acceptance, **not phone delivery**. Process
-failure after provider acceptance but before persistence can resend an alert;
-Android uses the record ID as its notification tag to replace duplicates.
+The sender receipt's legacy `delivery` field still describes the unused provider
+outbox, not native streaming. `not-configured` is expected in this deployment and
+is neither native-alert success nor failure. Keep `AVODAH_FCM_PROJECT_ID` and
+`GOOGLE_APPLICATION_CREDENTIALS` unset; no FCM setup is needed. A connected stream
+or accepted inbox record does not prove Android alert presentation.
 
 ## Backup, rollout and rollback
 
@@ -158,13 +145,12 @@ transactional schema changes. A backup/migration failure aborts initialization;
 newer schema versions are rejected. The CRDT database schema is unchanged.
 To roll back, stop the server, preserve the current data separately, restore the
 matching pre-rollout backup and previous binary/APK, and remove the new producer
-and Firebase environment settings. Disable/revoke enrollment before discarding
-a phone. Do not overwrite newer inbox records without an explicit data decision.
+settings. Stop the native listener and revoke pairing before discarding a phone. Do not overwrite newer inbox records without an explicit data decision.
 
 Serve behind the existing authenticated-device/TLS deployment boundary. Local
 implementation does not certify gateway/security readiness (AVO-121/DFC-004).
 Use restrictive file permissions, a private bind/reverse proxy, and request/rate
-limits at the gateway. No deployment, Firebase provisioning or device changes
+limits at the gateway. No deployment or device changes
 are implied by this guide.
 
 ## Operator acceptance checklist (not yet performed)
@@ -179,13 +165,12 @@ are implied by this guide.
   device; verify the other device refreshes. Race edits and verify 409 behavior.
 - Disconnect; verify stale/offline feedback and retained remark drafts. Reconnect
   and verify convergence without silently queued writes.
-- Test denied Android permission, invalid/stale token, server restart, revoked
-  pairing and provider failure. Confirm records remain accessible when push
-  fails. Disable alerts and verify no further queued delivery.
+- Test denied Android permission, expired pairing, server restart, revoked
+  pairing and private-route interruption. Confirm records remain accessible when
+  alerts fail. Disable alerts and verify no further delivery while stopped.
 - Explicitly delete a record; confirm removal on both devices and no resurrection
   on producer retry. Smoke-test Agent Review, sessions, timers and share capture.
 
-Reference contracts: [FCM Flutter reception](https://firebase.google.com/docs/cloud-messaging/flutter/receive)
-and [HTTP v1 authorization](https://firebase.google.com/docs/cloud-messaging/auth-server).
+Reference contract: [native listener stream and recovery](native-notification-trial.md#stream-and-recovery-contract).
 This shares enrollment/delivery boundaries with AVO-120 but implements none of
 its prompt/response/approval-intent APIs and does not change that ticket.

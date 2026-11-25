@@ -8,11 +8,6 @@ plugins {
 // Isolated opt-in trial: cannot overwrite the normal app or its local data.
 val nativeNotificationTrial = System.getenv("AVODAH_NOTIFICATION_TRIAL") == "true"
 
-// The native trial never consumes Firebase configuration.
-if (!nativeNotificationTrial && file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
-}
-
 android {
     namespace = "com.sinh_x.avodah_viewer"
     compileSdk = 36

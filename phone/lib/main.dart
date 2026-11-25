@@ -9,7 +9,6 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/notification_inbox_screen.dart';
 import 'services/browser_pairing_service.dart';
-import 'services/notification_push_client.dart';
 import 'services/notification_alerts_client.dart';
 import 'services/native_notification_client.dart';
 import 'screens/deployment_screen.dart';
@@ -130,7 +129,7 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
     }
 
     // Load stored server URL (already HTTP format)
-    final nativeTrial = NotificationPushClient.supported && await NativeNotificationClient.isTrialBuild();
+    final nativeTrial = await NativeNotificationClient.isTrialBuild();
     // A fresh isolated trial must never default to the operator's live server.
     final httpBaseUrl = await SettingsScreen.loadServerUrl(
       fallbackUrl: nativeTrial ? 'https://127.0.0.1:9847' : null,
@@ -206,10 +205,11 @@ class _AvodahViewerAppState extends State<AvodahViewerApp>
       _displaySettings = displaySettings;
     });
 
-    if (NotificationPushClient.supported) {
-      final NotificationAlertsClient push = nativeTrial
-          ? NativeNotificationClient(api: apiClient, openItem: (id) => _openNotificationInbox(id))
-          : NotificationPushClient(api: apiClient, openInbox: _openNotificationInbox);
+    if (NativeNotificationClient.supported) {
+      final NotificationAlertsClient push = NativeNotificationClient(
+        api: apiClient,
+        openItem: (id) => _openNotificationInbox(id),
+      );
       setState(() => _notificationPush = push);
       unawaited(push.restore().catchError((Object _) {
         debugPrint('[Notifications] Push restore unavailable');

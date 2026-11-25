@@ -59,9 +59,9 @@ ENV AVODAH_CONFIG_DIR=/config
 ENV JIRA_ENABLED=false
 ENV AGENT_API_URL=http://host.docker.internal:9848
 
-# Sync server port (container always listens on 9847;
-# host-side port is configurable via SYNC_PORT in docker-compose)
+# Default listener port (metadata only, not a host port mapping).
+# Compose uses host networking and passes SYNC_PORT through --port.
 EXPOSE 9847
 
-# Run sync-only server on fixed container port 9847
+# Standalone default; Compose overrides this command for a custom SYNC_PORT.
 CMD ["/app/sync_server", "--port", "9847"]

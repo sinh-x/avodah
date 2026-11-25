@@ -1,7 +1,7 @@
 name: avodah_viewer
 description: Read-only daily plan viewer for Avodah
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0+2002
 
 environment:
   sdk: ^3.10.8
@@ -36,8 +36,6 @@ dependencies:
   # Share intent receiver (for Android share-to-capture, P1)
   # 1.9.0 requires SDK 37 and fails with the current Kotlin/Gradle setup.
   receive_sharing_intent: 1.8.1
-  firebase_core: ^3.15.2
-  firebase_messaging: ^15.2.10
 
 dependency_overrides:
   # 2.3.0 pulls in jni/jni_flutter which requires NDK 28 (not available in Nix env)

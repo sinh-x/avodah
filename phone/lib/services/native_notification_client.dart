@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'agent_api_client.dart';
 import 'notification_alerts_client.dart';
 
-/// The trial's network connection lives in a native Android foreground service,
+/// The network connection lives in a native Android foreground service,
 /// not a Flutter timer/isolate. Credentials are handed over in memory only.
 class NativeNotificationClient extends NotificationAlertsClient
     with WidgetsBindingObserver {
@@ -23,7 +23,7 @@ class NativeNotificationClient extends NotificationAlertsClient
   String? error;
   @override
   String description =
-      'Firebase-free trial. Enable to show a persistent listener and Stop control.';
+      'Native alerts. Enable to show a persistent listener and Stop control.';
   bool _disposed = false;
 
   NativeNotificationClient({
@@ -37,8 +37,12 @@ class NativeNotificationClient extends NotificationAlertsClient
     });
   }
 
+  static bool get supported =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// The isolated package changes only its default server, not alert delivery.
   static Future<bool> isTrialBuild() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    if (!supported) return false;
     return await const MethodChannel(
           'avodah/native_notifications',
         ).invokeMethod<bool>('isTrial') ??
@@ -86,7 +90,7 @@ class NativeNotificationClient extends NotificationAlertsClient
       await _takeTap();
     } catch (_) {
       error =
-          'Native listener unavailable. Use the Android notification trial build.';
+          'Native listener unavailable. Update the Android app and try again.';
       if (!_disposed) notifyListeners();
     }
   }

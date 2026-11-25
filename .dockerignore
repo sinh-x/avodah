@@ -13,6 +13,10 @@ result/
 .flutter-plugins-dependencies
 .packages
 
+# Local environment credentials must not enter the server build context.
+.env
+.env.*
+
 # Development / IDE
 *.iml
 *.log

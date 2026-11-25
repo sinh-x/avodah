@@ -1,10 +1,11 @@
-# Firebase-free native notification trial
+# Native Android notification listener
 
-This implements the d-3873d2 analyst follow-up: Avodah itself receives private
-notification references and generates Android alerts. It requires **no Firebase
-account/configuration and no additional ntfy app**. It is a feasibility trial,
-not a replacement approval for the FCM baseline. The shared inbox and its
-read/handled/remarks behavior are unchanged.
+Avodah itself receives private notification references and generates Android
+alerts. The main app now uses this native path, with **no Firebase SDK,
+account/configuration or additional ntfy app**. Sinh explicitly selected main-app
+native delivery. The isolated trial package is still available for synthetic
+checks. This selection is not evidence of overnight reliability or human device
+acceptance. The shared inbox and read/handled/remarks behavior are unchanged.
 
 ## Supported service model and limits
 
@@ -32,7 +33,13 @@ claim of overnight reliability, latency or acceptable battery use until measured
 on the actual phone. There is **no polling fallback** for background alerts.
 Foreground inbox refresh remains the existing five-second UI behavior.
 
-## Isolated build and configuration
+## Main app and isolated build
+
+The standard main build uses native alerts with the existing normal package ID,
+server settings and pairing. Follow [main-app build and opt-in](notification-inbox.md#native-android-alerts)
+for a compatible in-place update. Upgrades do not auto-start the listener or grant
+notification permission. The isolated build below remains a separate app and
+must not be used to overwrite or copy production app data.
 
 ```sh
 cd phone
@@ -48,12 +55,10 @@ install. It cannot replace the normal app ID or share its app-private data or
 pairing. Debug signing is not production signing. Subsequent standard builds
 reuse the output filename, so identify candidates by their hash and app ID.
 
-The trial ignores `google-services.json`, selects the native listener instead of
-the Flutter FCM client, and needs no FCM environment variables. The shared Flutter
-package still includes the optional Firebase SDK for the unchanged baseline;
-this is Firebase-free **delivery**, not a claim of an SDK-free binary. The trial
-does not enroll with or deliver through Firebase. Removing baseline dependencies
-is a separate release-packaging decision after trial acceptance.
+Both main and isolated builds use the native listener. Phone Firebase packages,
+Google Services plugin application and Firebase manifest entries have been
+removed. Neither build consumes `google-services.json` or needs provider
+environment variables; ignored local configuration files are left untouched.
 
 A fresh trial defaults to HTTPS loopback, **not the existing live Avodah server**.
 Before pairing, use Settings to select the separately authorized isolated test
@@ -150,8 +155,8 @@ or live-server operation is authorized merely by this implementation.
 
 If Android cannot sustain usable idle alerts under the agreed settings, stop
 and report that result. Do not hide it with polling, exemptions or SDK downgrades.
-Keep the FCM baseline, and revise the exact analyst package with fresh review
-before replacing it. Full Android/Linux inbox acceptance, private-route/security
+Main-app native selection does not waive the remaining reliability checks or
+authorize a fallback provider setup. Full Android/Linux inbox acceptance, private-route/security
 qualification and human acceptance remain separate gates; a prototype connection
 pass is insufficient.
 

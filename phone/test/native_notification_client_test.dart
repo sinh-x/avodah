@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:avodah_viewer/services/agent_api_client.dart';
 import 'package:avodah_viewer/services/native_notification_client.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,18 +14,22 @@ void main() {
   late NativeNotificationClient native;
   late List<MethodCall> calls;
   late List<String> opened;
-  late bool running, deny;
+  late bool running, deny, trial;
   Map<String, dynamic>? tap;
   setUp(() {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     calls = [];
     opened = [];
     running = false;
     deny = false;
+    trial = false;
     tap = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call);
           switch (call.method) {
+            case 'isTrial':
+              return trial;
             case 'status':
               return {
                 'enabled': running,
@@ -53,12 +58,38 @@ void main() {
     native = NativeNotificationClient(api: api, openItem: opened.add);
   });
   tearDown(() {
+    debugDefaultTargetPlatformOverride = null;
     native.dispose();
     api.dispose();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
 
+  test(
+    'main Android app supports native alerts without a trial package',
+    () async {
+      expect(NativeNotificationClient.supported, true);
+      expect(await NativeNotificationClient.isTrialBuild(), false);
+      expect(native.description, isNot(contains('trial')));
+      await native.enable();
+      expect(native.enabled, true);
+      expect(native.error, isNull);
+    },
+  );
+  test(
+    'isolated trial is identified independently from native support',
+    () async {
+      trial = true;
+      expect(NativeNotificationClient.supported, true);
+      expect(await NativeNotificationClient.isTrialBuild(), true);
+    },
+  );
+  test('desktop does not probe the Android method channel', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    expect(NativeNotificationClient.supported, false);
+    expect(await NativeNotificationClient.isTrialBuild(), false);
+    expect(calls, isEmpty);
+  });
   test(
     'restore observes only and never auto-starts or enrolls with Firebase',
     () async {

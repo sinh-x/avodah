@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Host networking has no port mapping; pass the selected listener port.
+    command: ["/app/sync_server", "--port", "${SYNC_PORT:-9847}"]
     network_mode: host
     volumes:
       # Config dir (read-write — config.json is mutated by chip save API)
@@ -16,6 +18,11 @@ services:
       - SYNC_HOST=${SYNC_HOST:-127.0.0.1}
       - SYNC_PORT=${SYNC_PORT:-9847}
       - JIRA_ENABLED=${JIRA_ENABLED:-false}
+      # Explicit send-only producer credential; empty leaves sending disabled.
+      # Load privately in the operator/sender environment, never in the image.
+      - AVODAH_NOTIFICATION_SEND_TOKEN=${AVODAH_NOTIFICATION_SEND_TOKEN:-}
+      # Native notification streaming uses this same server and /data volume.
+      # No external push-provider configuration is needed.
       # Agent API URL — proxied to pa serve (same host, port 9848)
       - AGENT_API_URL=http://localhost:${AGENT_PORT:-9848}
     restart: unless-stopped
