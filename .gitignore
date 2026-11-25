@@ -57,6 +57,9 @@ result-*
 # Compiled CLI binary
 mcp/bin/avo
 
+# Local environment secrets
+/.env
+
 # Docker
 docker-compose.override.yml
 
