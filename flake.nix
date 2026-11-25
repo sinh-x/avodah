@@ -45,6 +45,8 @@
           src = pkgs.lib.cleanSource ./.;
           sourceRoot = "source/mcp";
 
+          # After dependency changes, regenerate the Nix lock:
+          # cd mcp && dart pub get && dart run tool/update_nix_pubspec_lock.dart
           pubspecLock = pkgs.lib.importJSON ./mcp/pubspec.lock.json;
 
           # sqlite3 Dart package needs system sqlite — handled automatically
